@@ -1,0 +1,17 @@
+{
+  "name": "@rautfall/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "vue-tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@rautfall/game-config": "workspace:*",
+    "@rautfall/game-engine": "workspace:*",
+    "vue": "^3.5.39"
+  }
+}
