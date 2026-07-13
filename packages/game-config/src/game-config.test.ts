@@ -32,6 +32,7 @@ describe('parseGameConfig', () => {
 
   it('rejects a missing required property', () => {
     const { version: _, ...input } = validConfig;
+    void _;
 
     expectValidationIssue(input, 'version', 'REQUIRED');
   });
