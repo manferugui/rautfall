@@ -4,19 +4,19 @@
 
 Este archivo define las reglas permanentes para cualquier agente que trabaje en el repositorio de Rautfall.
 
-Las decisiones de producto y arquitectura viven en `docs/rautfall.md`. El alcance concreto de cada tarea vive en su documento correspondiente dentro de `docs/implementation/`.
+Las decisiones de producto y arquitectura viven en [docs/rautfall.md](docs/rautfall.md). La especificación de cada tarea vive en `docs/tasks/`; su informe de implementación vive en `docs/implementation/`.
 
 ## Orden de lectura
 
 Antes de modificar el repositorio, leer:
 
 1. `AGENTS.md`
-2. `docs/rautfall.md`
+2. [docs/rautfall.md](docs/rautfall.md)
 3. La especificación de la tarea activa
-4. `docs/project-status.md`
+4. [docs/project-status.md](docs/project-status.md)
 5. El código y las pruebas existentes
 
-La tarea activa determina el alcance concreto. `docs/rautfall.md` determina las decisiones globales. No asumir que una funcionalidad prevista para el futuro pertenece a la tarea actual.
+La tarea activa determina el alcance concreto. [docs/rautfall.md](docs/rautfall.md) determina las decisiones globales. No asumir que una funcionalidad prevista para el futuro pertenece a la tarea actual.
 
 ## Control de alcance
 
@@ -59,7 +59,7 @@ Reglas:
 
 ## Arquitectura
 
-Respetar las responsabilidades definidas en `docs/rautfall.md`.
+Respetar las responsabilidades definidas en [docs/rautfall.md](docs/rautfall.md).
 
 Principios permanentes:
 
@@ -185,9 +185,22 @@ Cada tarea debe actualizar, cuando corresponda:
 
 - `README.md`;
 - su informe en `docs/implementation/`;
-- `docs/project-status.md`.
+- [docs/project-status.md](docs/project-status.md).
 
 La especificación de una tarea y su informe de implementación son documentos distintos. No sustituir uno por otro.
+
+### Estructura de tareas e informes
+
+- Las especificaciones de tareas, inmutables, viven en `docs/tasks/`.
+- Los informes de implementación viven en `docs/implementation/`.
+- El directorio, no el nombre de archivo, determina si un documento es una especificación o un informe de implementación.
+- La especificación y su informe de implementación comparten número de tarea y slug:
+  - `docs/tasks/NNNN-slug-de-la-tarea.md`
+  - `docs/implementation/NNNN-slug-de-la-tarea.md`
+- Las especificaciones permanecen inmutables durante y después de la implementación, salvo correcciones de referencias de ruta estrictamente necesarias por una reorganización del repositorio.
+- Los informes de implementación se crean o se actualizan al completar la tarea correspondiente.
+- [docs/project-status.md](docs/project-status.md) debe referenciar el informe de implementación mediante su ruta vigente.
+- No crear copias duplicadas de especificaciones ni de informes en ubicaciones antiguas.
 
 El informe debe incluir:
 
@@ -252,3 +265,12 @@ La solución correcta es la más pequeña que:
 - queda probada de forma proporcionada al riesgo;
 - puede explicarse y mantenerse;
 - no anticipa trabajo futuro sin necesidad.
+
+## Idioma del código y de las pruebas
+
+- Los nombres de archivos, carpetas, variables, funciones, clases, tipos, propiedades, eventos, códigos de error y contratos públicos se escribirán en inglés.
+- Los comentarios explicativos se escribirán en castellano.
+- Las descripciones de `describe`, `it` y `test` se escribirán en castellano.
+- Los términos técnicos consolidados podrán mantenerse en inglés cuando su traducción reduzca la claridad, por ejemplo: `hard drop`, `spawn`, `snapshot`, `seven-bag`, `game over`, `wall kick` o `Fisher–Yates`.
+- No se añadirán comentarios que se limiten a repetir de forma obvia lo que expresa el código.
+- Al modificar pruebas existentes, se actualizarán sus descripciones para ajustarlas a esta convención cuando formen parte del alcance de la tarea.
