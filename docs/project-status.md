@@ -50,9 +50,18 @@ Ver [Informe de implementación](implementation/0002-motor-de-juego-determinista
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | 📋 Especificada |
-| **Siguiente** | Implementación pendiente |
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-15 |
+| **Resultado** | Super Rotation System completo: enum `Orientation`, rotación horaria y antihoraria, wall kicks oficiales SRS, tablas separadas JLSTZ e I (coordenadas del motor), comportamiento de la pieza O, cancelación sin mutación, evento `pieceRotated`, exposición de `orientation` en el snapshot, validación de entrada simultánea, 31 nuevas pruebas. Corregido además un defecto de integración web: la pieza activa no se renderizaba durante la caída. 126 tests pasan, lint y typecheck limpios, build exitoso. |
 
 ### Resumen
 
 Super Rotation System completo: orientaciones, rotación horaria y antihoraria, wall kicks oficiales, tablas separadas JLSTZ e I, comportamiento de la pieza O, cancelación sin mutación, evento `pieceRotated` y exposición de `orientation` en el snapshot.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0003-rotacion-srs.md).
+
+## Siguiente tarea
+
+`0004 — Integración con Phaser`

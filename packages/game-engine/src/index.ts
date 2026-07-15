@@ -10,6 +10,13 @@ export type MoveReason = 'horizontal' | 'gravity' | 'hardDrop';
 
 export type GameOverReason = 'spawnBlocked';
 
+export enum Orientation {
+  Spawn = 0,
+  Right = 1,
+  Reverse = 2,
+  Left = 3,
+}
+
 export type GameEvent =
   | { type: 'engineStarted'; step: number }
   | { type: 'engineReset'; step: number }
@@ -22,12 +29,14 @@ export type GameEvent =
       lines: number;
       lineIndices: readonly number[];
     }
-  | { type: 'gameOver'; step: number; reason: GameOverReason };
+  | { type: 'gameOver'; step: number; reason: GameOverReason }
+  | { type: 'pieceRotated'; step: number; orientation: Orientation };
 
 export type ActivePieceSnapshot = Readonly<{
   type: PieceType;
   x: number;
   y: number;
+  orientation: Orientation;
   cells: ReadonlyArray<Readonly<{ x: number; y: number }>>;
 }>;
 
@@ -46,6 +55,8 @@ export type EngineSnapshot = Readonly<{
 export type StepInput = {
   horizontal: -1 | 0 | 1;
   hardDrop: boolean;
+  rotateClockwise?: boolean;
+  rotateCounterclockwise?: boolean;
 };
 
 export type EngineOptions = {
@@ -92,14 +103,50 @@ const HIDDEN_ROWS = 4;
 
 type Cell = { x: number; y: number };
 
-const PIECE_CELLS: Record<PieceType, readonly Cell[]> = {
-  I: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }]),
-  O: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
-  T: Object.freeze([{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
-  S: Object.freeze([{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
-  Z: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
-  J: Object.freeze([{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
-  L: Object.freeze([{ x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
+// Celdas relativas por pieza y orientación (coordenadas del motor: x→derecha, y→abajo)
+const PIECE_ORIENTATION_CELLS: Record<PieceType, Record<Orientation, readonly Cell[]>> = {
+  I: {
+    [Orientation.Spawn]: Object.freeze([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 2, y: 0 }, { x: 2, y: 1 }, { x: 2, y: 2 }, { x: 2, y: 3 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 0, y: 2 }, { x: 1, y: 2 }, { x: 2, y: 2 }, { x: 3, y: 2 }]),
+    [Orientation.Left]: Object.freeze([{ x: 1, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 1, y: 3 }]),
+  },
+  O: {
+    [Orientation.Spawn]: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
+    [Orientation.Left]: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
+  },
+  T: {
+    [Orientation.Spawn]: Object.freeze([{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 1, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 2 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 2 }]),
+    [Orientation.Left]: Object.freeze([{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 2 }]),
+  },
+  S: {
+    [Orientation.Spawn]: Object.freeze([{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 1, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 0, y: 2 }, { x: 1, y: 2 }]),
+    [Orientation.Left]: Object.freeze([{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 2 }]),
+  },
+  Z: {
+    [Orientation.Spawn]: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 2, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 2 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }]),
+    [Orientation.Left]: Object.freeze([{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 0, y: 2 }]),
+  },
+  J: {
+    [Orientation.Spawn]: Object.freeze([{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 2 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }]),
+    [Orientation.Left]: Object.freeze([{ x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 2 }, { x: 1, y: 2 }]),
+  },
+  L: {
+    [Orientation.Spawn]: Object.freeze([{ x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }]),
+    [Orientation.Right]: Object.freeze([{ x: 1, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }]),
+    [Orientation.Reverse]: Object.freeze([{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 0, y: 2 }]),
+    [Orientation.Left]: Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 2 }]),
+  },
 };
 
 const PIECE_WIDTH: Record<PieceType, number> = {
@@ -111,6 +158,38 @@ const PIECE_HEIGHT: Record<PieceType, number> = {
 };
 
 const ALL_TYPES: readonly PieceType[] = Object.freeze(['I', 'O', 'T', 'S', 'Z', 'J', 'L']);
+
+// ── Tablas SRS de wall kicks ────────────────────────────────────────────
+// Coordenadas del motor: x→derecha, y→abajo.
+// Los valores están convertidos del sistema SRS (y↑) al sistema del motor (y↓):
+//   engineX = srsX
+//   engineY = -srsY
+
+type KickTable = Record<string, readonly Cell[]>;
+
+// Tabla JLSTZ
+const JLSTZ_KICKS: KickTable = {
+  '0>1': Object.freeze([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: -1, y: 1 }, { x: 0, y: -2 }, { x: -1, y: -2 }]),
+  '1>0': Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: -1 }, { x: 0, y: 2 }, { x: 1, y: 2 }]),
+  '1>2': Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: -2 }, { x: 1, y: -2 }]),
+  '2>1': Object.freeze([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: -1, y: -1 }, { x: 0, y: 2 }, { x: -1, y: 2 }]),
+  '2>3': Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: -1 }, { x: 0, y: 2 }, { x: 1, y: 2 }]),
+  '3>2': Object.freeze([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: -1, y: 1 }, { x: 0, y: -2 }, { x: -1, y: -2 }]),
+  '3>0': Object.freeze([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: -1, y: -1 }, { x: 0, y: 2 }, { x: -1, y: 2 }]),
+  '0>3': Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: -2 }, { x: 1, y: -2 }]),
+};
+
+// Tabla I
+const I_KICKS: KickTable = {
+  '0>1': Object.freeze([{ x: 0, y: 0 }, { x: -2, y: 0 }, { x: 1, y: 0 }, { x: -2, y: -1 }, { x: 1, y: 2 }]),
+  '1>0': Object.freeze([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: -1, y: 0 }, { x: 2, y: 1 }, { x: -1, y: -2 }]),
+  '1>2': Object.freeze([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: 2, y: 0 }, { x: -1, y: 2 }, { x: 2, y: -1 }]),
+  '2>1': Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: -2, y: 0 }, { x: 1, y: -2 }, { x: -2, y: 1 }]),
+  '2>3': Object.freeze([{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: -1, y: 0 }, { x: 2, y: 1 }, { x: -1, y: -2 }]),
+  '3>2': Object.freeze([{ x: 0, y: 0 }, { x: -2, y: 0 }, { x: 1, y: 0 }, { x: -2, y: -1 }, { x: 1, y: 2 }]),
+  '3>0': Object.freeze([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: -2, y: 0 }, { x: 1, y: -2 }, { x: -2, y: 1 }]),
+  '0>3': Object.freeze([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: 2, y: 0 }, { x: -1, y: 2 }, { x: 2, y: -1 }]),
+};
 
 // ── PRNG: mulberry32 ────────────────────────────────────────────────────
 
@@ -178,9 +257,8 @@ function isCollision(
   return false;
 }
 
-
-function computeAbsoluteCells(pieceType: PieceType, originX: number, originY: number): Cell[] {
-  return PIECE_CELLS[pieceType].map((c) => ({ x: originX + c.x, y: originY + c.y }));
+function computeAbsoluteCells(pieceType: PieceType, originX: number, originY: number, orientation: Orientation): Cell[] {
+  return PIECE_ORIENTATION_CELLS[pieceType][orientation].map((c) => ({ x: originX + c.x, y: originY + c.y }));
 }
 
 // ── Tipo de pieza activa ────────────────────────────────────────────────
@@ -189,10 +267,11 @@ type ActivePiece = {
   type: PieceType;
   x: number;
   y: number;
+  orientation: Orientation;
 };
 
 function activePieceCells(piece: ActivePiece): Cell[] {
-  return computeAbsoluteCells(piece.type, piece.x, piece.y);
+  return computeAbsoluteCells(piece.type, piece.x, piece.y, piece.orientation);
 }
 
 // ── Cálculo del spawn ───────────────────────────────────────────────────
@@ -211,7 +290,6 @@ function msPerCellFromConfig(config: GameConfig): number {
   return 1000 / config.gravityCellsPerSecond;
 }
 
-
 function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): number {
   const cells = activePieceCells(piece);
   let distance = 0;
@@ -221,6 +299,75 @@ function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): nu
     distance++;
   }
   return distance;
+}
+
+// ── Rotación SRS ────────────────────────────────────────────────────────
+
+function getKickTable(pieceType: PieceType): KickTable {
+  if (pieceType === 'I') return I_KICKS;
+  // O usa una tabla vacía
+  if (pieceType === 'O') return {};
+  return JLSTZ_KICKS;
+}
+
+function getTransitionKey(from: Orientation, to: Orientation): string {
+  return `${from}>${to}`;
+}
+
+/**
+ * Intenta rotar la pieza activa. Si tiene éxito, actualiza la pieza in situ y devuelve true.
+ * Si falla, no muta nada y devuelve false.
+ */
+function tryRotate(
+  board: (PieceType | null)[][],
+  activePiece: ActivePiece,
+  clockwise: boolean,
+): boolean {
+  const pieceType = activePiece.type;
+
+  // Determinar orientación destino
+  let targetOrientation: Orientation;
+  if (clockwise) {
+    targetOrientation = ((activePiece.orientation + 1) % 4) as Orientation;
+  } else {
+    targetOrientation = ((activePiece.orientation + 3) % 4) as Orientation;
+  }
+
+  // Para pieza O: solo actualizar orientación, no hay desplazamiento
+  if (pieceType === 'O') {
+    const targetCells = computeAbsoluteCells(pieceType, activePiece.x, activePiece.y, targetOrientation);
+    if (!isCollision(board, targetCells)) {
+      activePiece.orientation = targetOrientation;
+      return true;
+    }
+    return false;
+  }
+
+  // Obtener la secuencia de kicks para esta transición
+  const transitionKey = getTransitionKey(activePiece.orientation, targetOrientation);
+  const kickTable = getKickTable(pieceType);
+  const kicks = kickTable[transitionKey];
+
+  // Si no hay tabla de kicks definida para esta transición (no debería ocurrir), fallar
+  if (!kicks) return false;
+
+  // Probar cada kick en orden
+  for (const kick of kicks) {
+    const candidateX = activePiece.x + kick.x;
+    const candidateY = activePiece.y + kick.y;
+    const candidateCells = computeAbsoluteCells(pieceType, candidateX, candidateY, targetOrientation);
+
+    if (!isCollision(board, candidateCells)) {
+      // Aplicar la rotación
+      activePiece.x = candidateX;
+      activePiece.y = candidateY;
+      activePiece.orientation = targetOrientation;
+      return true;
+    }
+  }
+
+  // Ningún kick válido: no mutar
+  return false;
 }
 
 // ── Creación del motor ──────────────────────────────────────────────────
@@ -248,7 +395,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     const secondType = nextFromBag(bagState, prng);
     const spawnX = calculateSpawnX(firstType);
     const spawnY = calculateSpawnY(firstType);
-    const cells = computeAbsoluteCells(firstType, spawnX, spawnY);
+    const cells = computeAbsoluteCells(firstType, spawnX, spawnY, Orientation.Spawn);
 
     // Si el spawn inicial está bloqueado (no debería ocurrir con el tablero vacío), fin de partida
     if (isCollision(board, cells)) {
@@ -259,7 +406,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       return;
     }
 
-    activePiece = { type: firstType, x: spawnX, y: spawnY };
+    activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     nextPieceType = secondType;
     gravityAccumulatorMs = 0;
   }
@@ -303,7 +450,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     const pieceType = nextPieceType;
     const spawnX = calculateSpawnX(pieceType);
     const spawnY = calculateSpawnY(pieceType);
-    const cells = computeAbsoluteCells(pieceType, spawnX, spawnY);
+    const cells = computeAbsoluteCells(pieceType, spawnX, spawnY, Orientation.Spawn);
 
     const nextNext = nextFromBag(bagState, prng);
 
@@ -317,24 +464,38 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
     nextPieceType = nextNext;
 
-    activePiece = { type: pieceType, x: spawnX, y: spawnY };
+    activePiece = { type: pieceType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     gravityAccumulatorMs = 0;
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: pieceType });
   }
 
-  // Procesamiento interno del paso (pasos 5-10 del orden lógico, §14)
+  // Procesamiento interno del paso (pasos 5-12 del orden lógico, §14 de 0002 + §13 de 0003)
   function processStep(input: StepInput): void {
     // 5. Movimiento horizontal
     if (input.horizontal !== 0 && activePiece) {
       const newX = activePiece.x + input.horizontal;
-      const cells = computeAbsoluteCells(activePiece.type, newX, activePiece.y);
+      const cells = computeAbsoluteCells(activePiece.type, newX, activePiece.y, activePiece.orientation);
       if (!isCollision(board, cells)) {
         activePiece.x = newX;
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'horizontal' });
       }
     }
 
-    // 6. Hard drop
+    // 6. Rotación
+    if (activePiece) {
+      const rotateCW = input.rotateClockwise === true;
+      const rotateCCW = input.rotateCounterclockwise === true;
+
+      if (rotateCW || rotateCCW) {
+        // rotateClockwise tiene prioridad si ambos son true (nunca debería ocurrir tras la validación)
+        const rotated = tryRotate(board, activePiece, rotateCW);
+        if (rotated) {
+          eventQueue.push({ type: 'pieceRotated', step: currentStep, orientation: activePiece.orientation });
+        }
+      }
+    }
+
+    // 7. Hard drop
     if (input.hardDrop && activePiece) {
       const distance = hardDropDistance(board, activePiece);
       if (distance >= 1) {
@@ -358,14 +519,14 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       return; // El hard drop completa el procesamiento del paso; se omite la gravedad
     }
 
-    // 7. Gravedad (solo si hardDrop es false)
+    // 8. Gravedad (solo si hardDrop es false)
     if (activePiece) {
       const msPerCell = msPerCellFromConfig(config);
       gravityAccumulatorMs += config.fixedStepMs;
 
       while (gravityAccumulatorMs >= msPerCell) {
         const nextY = activePiece.y + 1;
-        const cells = computeAbsoluteCells(activePiece.type, activePiece.x, nextY);
+        const cells = computeAbsoluteCells(activePiece.type, activePiece.x, nextY, activePiece.orientation);
         if (!isCollision(board, cells)) {
           activePiece.y = nextY;
           gravityAccumulatorMs -= msPerCell;
@@ -423,6 +584,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
             type: activePiece.type,
             x: activePiece.x,
             y: activePiece.y,
+            orientation: activePiece.orientation,
             cells: Object.freeze(
               activePieceCells(activePiece).map((c) => Object.freeze({ x: c.x, y: c.y })),
             ),
@@ -470,7 +632,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       const secondType = nextFromBag(bagState, prng);
       const spawnX = calculateSpawnX(firstType);
       const spawnY = calculateSpawnY(firstType);
-      const cells = computeAbsoluteCells(firstType, spawnX, spawnY);
+      const cells = computeAbsoluteCells(firstType, spawnX, spawnY, Orientation.Spawn);
 
       if (isCollision(board, cells)) {
         status = 'gameOver';
@@ -478,7 +640,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         activePiece = null;
         nextPieceType = null;
       } else {
-        activePiece = { type: firstType, x: spawnX, y: spawnY };
+        activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
         nextPieceType = secondType;
         gravityAccumulatorMs = 0;
       }
@@ -501,7 +663,7 @@ function validateInput(input: unknown): asserts input is StepInput {
   const obj = input as Record<string, unknown>;
 
   // Comprobar propiedades desconocidas
-  const allowedKeys = ['horizontal', 'hardDrop'];
+  const allowedKeys = ['horizontal', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise'];
   for (const key of Object.keys(obj)) {
     if (!allowedKeys.includes(key)) {
       throw new EngineStepError(
@@ -538,6 +700,30 @@ function validateInput(input: unknown): asserts input is StepInput {
     throw new EngineStepError(
       'INVALID_GAME_INPUT',
       `hardDrop must be boolean, got ${typeof obj.hardDrop}`,
+    );
+  }
+
+  // Comprobar rotateClockwise si está presente
+  if ('rotateClockwise' in obj && typeof obj.rotateClockwise !== 'boolean') {
+    throw new EngineStepError(
+      'INVALID_GAME_INPUT',
+      `rotateClockwise must be boolean, got ${typeof obj.rotateClockwise}`,
+    );
+  }
+
+  // Comprobar rotateCounterclockwise si está presente
+  if ('rotateCounterclockwise' in obj && typeof obj.rotateCounterclockwise !== 'boolean') {
+    throw new EngineStepError(
+      'INVALID_GAME_INPUT',
+      `rotateCounterclockwise must be boolean, got ${typeof obj.rotateCounterclockwise}`,
+    );
+  }
+
+  // Comprobar simultaneidad
+  if (obj.rotateClockwise === true && obj.rotateCounterclockwise === true) {
+    throw new EngineStepError(
+      'INVALID_GAME_INPUT',
+      'Cannot rotate both clockwise and counterclockwise simultaneously',
     );
   }
 }

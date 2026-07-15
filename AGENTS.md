@@ -274,3 +274,38 @@ La solución correcta es la más pequeña que:
 - Los términos técnicos consolidados podrán mantenerse en inglés cuando su traducción reduzca la claridad, por ejemplo: `hard drop`, `spawn`, `snapshot`, `seven-bag`, `game over`, `wall kick` o `Fisher–Yates`.
 - No se añadirán comentarios que se limiten a repetir de forma obvia lo que expresa el código.
 - Al modificar pruebas existentes, se actualizarán sus descripciones para ajustarlas a esta convención cuando formen parte del alcance de la tarea.
+
+### Comentarios de documentación
+
+- Las APIs públicas exportadas llevarán un comentario de documentación cuando su contrato, precondiciones, errores, efectos secundarios o invariantes no sean obvios.
+- Las funciones internas complejas llevarán comentarios cuando sea necesario explicar decisiones de diseño, invariantes, convenciones de coordenadas, determinismo o algoritmos no evidentes.
+- Los comentarios de documentación y explicativos se escriben en castellano.
+- Los identificadores y los términos técnicos consolidados se mantienen en inglés.
+- Los comentarios explican el porqué, el contrato o el invariante, no repiten lo que el código ya expresa.
+- Las funciones triviales y autoexplicativas no requieren comentario.
+
+### Depuración y scripts ad hoc
+
+- No crear ni ejecutar scripts temporales de depuración mediante `cat`, heredocs, archivos en `/tmp`, `node -e`, `tsx`, `ts-node`, Python inline ni comandos equivalentes.
+- No inspeccionar el comportamiento del motor mediante programas auxiliares fuera de la estructura normal del proyecto.
+- Para reproducir o investigar un caso:
+  - usar primero las pruebas existentes;
+  - añadir una prueba focalizada en el archivo de tests correspondiente cuando sea necesario;
+  - ejecutar Vitest con filtros por archivo o nombre de prueba.
+- Las pruebas temporales deben integrarse correctamente o eliminarse antes de finalizar la tarea.
+- No introducir `console.log` de depuración en código de producción ni dejar instrumentación residual.
+- Cualquier excepción requiere autorización explícita del usuario.
+
+### Validación de aplicaciones
+
+- Cuando una tarea modifique una aplicación ejecutable o su integración con contratos compartidos, validar también su arranque real.
+- Para la aplicación web, ejecutar `pnpm dev`, comprobar que carga sin errores de consola y detener el servidor al finalizar.
+- No dejar procesos de desarrollo activos después de completar la tarea.
+- La validación manual complementa, pero no sustituye, `test`, `lint`, `typecheck` y `build`.
+
+
+### Calidad de lint
+
+- Las tareas deben finalizar con `pnpm lint` sin errores ni warnings en los archivos modificados.
+- No se deben ignorar warnings alegando que son preexistentes cuando afectan a archivos tocados por la tarea.
+- No se deben desactivar reglas ni añadir excepciones para evitar corregir el problema.

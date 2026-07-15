@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { createGameEngine, type GameEngine, type EngineSnapshot, type GameEvent, EngineOptionsError } from '@rautfall/game-engine';
+import { ref, computed, onMounted } from 'vue';
+import { createGameEngine, type GameEngine, type EngineSnapshot, type GameEvent, EngineOptionsError, Orientation } from '@rautfall/game-engine';
 import { prototypeConfig } from '@rautfall/game-config';
+import { composeBoardForRendering } from './board-composition';
 
 const engine = ref<GameEngine | null>(null);
 const snapshot = ref<EngineSnapshot | null>(null);
@@ -65,6 +66,28 @@ function doHardDrop(): void {
   }
 }
 
+function doRotateCW(): void {
+  if (!engine.value) return;
+  try {
+    engine.value.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+    snapshot.value = engine.value.getSnapshot();
+    events.value = engine.value.drainEvents();
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+function doRotateCCW(): void {
+  if (!engine.value) return;
+  try {
+    engine.value.step({ horizontal: 0, hardDrop: false, rotateCounterclockwise: true });
+    snapshot.value = engine.value.getSnapshot();
+    events.value = engine.value.drainEvents();
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
 function doReset(): void {
   if (!engine.value) return;
   try {
@@ -75,6 +98,17 @@ function doReset(): void {
     error.value = String(e);
   }
 }
+
+const renderedBoard = computed(() =>
+  snapshot.value ? composeBoardForRendering(snapshot.value.board, snapshot.value.activePiece) : [],
+);
+
+const orientationLabel: Record<number, string> = {
+  [Orientation.Spawn]: 'Spawn',
+  [Orientation.Right]: 'Right',
+  [Orientation.Reverse]: 'Reverse',
+  [Orientation.Left]: 'Left',
+};
 </script>
 
 <template>
@@ -113,7 +147,7 @@ function doReset(): void {
         </div>
       </div>
 
-      <div class="piece-info" v-if="snapshot.activePiece">
+      <div v-if="snapshot.activePiece" class="piece-info">
         <h2>Active piece</h2>
         <div class="piece-details">
           <div class="info-item">
@@ -123,6 +157,10 @@ function doReset(): void {
           <div class="info-item">
             <span class="label">Position</span>
             <span class="value">({{ snapshot.activePiece.x }}, {{ snapshot.activePiece.y }})</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Orientation</span>
+            <span class="value">{{ orientationLabel[snapshot.activePiece.orientation] ?? snapshot.activePiece.orientation }}</span>
           </div>
           <div class="info-item">
             <span class="label">Cells</span>
@@ -135,7 +173,7 @@ function doReset(): void {
         </div>
       </div>
 
-      <div class="piece-info" v-if="snapshot.nextPiece">
+      <div v-if="snapshot.nextPiece" class="piece-info">
         <h2>Next piece</h2>
         <div class="piece-details">
           <div class="info-item">
@@ -148,7 +186,7 @@ function doReset(): void {
       <div class="board-section">
         <h2>Board (24 rows, hidden: 0-3, visible: 4-23)</h2>
         <div class="board-grid">
-          <div v-for="(row, yi) in snapshot.board" :key="yi" class="board-row" :class="{ 'hidden-row': yi < 4 }">
+          <div v-for="(row, yi) in renderedBoard" :key="yi" class="board-row" :class="{ 'hidden-row': yi < 4 }">
             <div class="row-label">{{ yi }}</div>
             <div
               v-for="(cell, xi) in row"
@@ -171,7 +209,9 @@ function doReset(): void {
 
       <div class="actions">
         <button type="button" @click="doLeft">Left</button>
+        <button type="button" @click="doRotateCCW">Rotate CCW</button>
         <button type="button" @click="doStep">Step</button>
+        <button type="button" @click="doRotateCW">Rotate CW</button>
         <button type="button" @click="doRight">Right</button>
         <button type="button" @click="doHardDrop">Hard drop</button>
         <button type="button" @click="doReset">Reset</button>
@@ -188,7 +228,7 @@ function doReset(): void {
       </div>
     </div>
 
-    <p class="footnote">Technical prototype — 0002</p>
+    <p class="footnote">Technical prototype — 0003</p>
   </div>
 </template>
 
@@ -263,6 +303,7 @@ h1 {
 .actions {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 button {
