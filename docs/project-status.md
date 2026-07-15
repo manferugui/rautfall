@@ -22,7 +22,7 @@
 |-------|-------|
 | **Estado** | ✅ Completada |
 | **Fecha de finalización** | 2026-07-14 |
-| **Resultado** | Motor determinista completo: PRNG mulberry32, bolsa de siete, tablero 10×24 (4 filas ocultas + 20 visibles), movimiento, gravedad, hard drop, colisiones, fijación, clear de líneas, game over, eventos, snapshot, validación de entrada y reset. 87 tests pasan, typecheck y lint limpios, build exitoso. |
+| **Resultado** | Motor determinista completo: PRNG mulberry32, bolsa de siete, tablero 10×24 (4 filas ocultas + 20 visibles), movimiento, gravedad, hard drop, colisiones, fijación, clear de líneas, game over, eventos, snapshot, validación de entrada y reset. 88 tests pasan, typecheck y lint limpios, build exitoso. |
 
 ### Resumen
 
@@ -46,8 +46,13 @@
 
 Ver [Informe de implementación](implementation/0002-motor-de-juego-determinista.md).
 
-### Siguiente tarea
+## Task [0003 — Rotación SRS](tasks/0003-rotacion-srs.md)
 
-`0003 — Rotación SRS`
+| Campo | Valor |
+|-------|-------|
+| **Estado** | 📋 Especificada |
+| **Siguiente** | Implementación pendiente |
 
-Implementación del Super Rotation System: orientaciones, rotación horaria y antihoraria, wall kicks, tabla específica de la pieza `I`, comportamiento de la pieza `O`, y cancelación de la rotación.
+### Resumen
+
+Super Rotation System completo: orientaciones, rotación horaria y antihoraria, wall kicks oficiales, tablas separadas JLSTZ e I, comportamiento de la pieza O, cancelación sin mutación, evento `pieceRotated` y exposición de `orientation` en el snapshot.
