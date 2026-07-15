@@ -70,7 +70,7 @@ No se introdujo una clase CSS ni un color distintos para la pieza activa: al reu
 ### Validación manual
 
 - `pnpm dev` arrancó sin errores en el log del servidor y la petición HTTP a la aplicación respondió `200`.
-- No se dispuso de un navegador interactivo en este entorno para pulsar los controles (Step, Rotate CW/CCW, movimiento horizontal, hard drop, reset) y observar el resultado visualmente. Esa parte de la validación **no** se realizó; queda pendiente de una verificación manual en un navegador real.
+- Se verificaron manualmente en un navegador real la rotación (horaria y antihoraria), el movimiento horizontal, el hard drop y el reset; la pieza activa se renderiza correctamente durante la caída, sin quedar oculta hasta la fijación.
 - El servidor de desarrollo se detuvo al finalizar.
 
 ## Cambios en contratos públicos

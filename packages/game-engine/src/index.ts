@@ -10,6 +10,12 @@ export type MoveReason = 'horizontal' | 'gravity' | 'hardDrop';
 
 export type GameOverReason = 'spawnBlocked';
 
+/**
+ * Orientación de rotación SRS de la pieza activa (los cuatro estados 0/R/2/L
+ * del Super Rotation System). El valor determina qué entrada de
+ * `PIECE_ORIENTATION_CELLS` y qué transición de las tablas de wall kicks se
+ * aplica en una rotación.
+ */
 export enum Orientation {
   Spawn = 0,
   Right = 1,
@@ -32,6 +38,14 @@ export type GameEvent =
   | { type: 'gameOver'; step: number; reason: GameOverReason }
   | { type: 'pieceRotated'; step: number; orientation: Orientation };
 
+/**
+ * Estado inmutable de la pieza activa en un instante dado.
+ *
+ * `x` e `y` son el origen de su bounding box en coordenadas del motor
+ * (x→derecha, y→abajo). `cells` son las celdas que ocupa ya resueltas a
+ * coordenadas absolutas del tablero (no relativas al origen), listas para
+ * componerse directamente sobre `EngineSnapshot['board']`.
+ */
 export type ActivePieceSnapshot = Readonly<{
   type: PieceType;
   x: number;
@@ -52,6 +66,14 @@ export type EngineSnapshot = Readonly<{
   clearedLines: number;
 }>;
 
+/**
+ * Entrada de un paso lógico del motor.
+ *
+ * `rotateClockwise` y `rotateCounterclockwise` son opcionales (por defecto
+ * `false`) y no pueden ser `true` a la vez: esa combinación es entrada
+ * inválida y `step()` la rechaza con `EngineStepError`
+ * (`code: 'INVALID_GAME_INPUT'`) sin mutar el estado del motor.
+ */
 export type StepInput = {
   horizontal: -1 | 0 | 1;
   hardDrop: boolean;
@@ -65,14 +87,44 @@ export type EngineOptions = {
 };
 
 export type GameEngine = {
+  /**
+   * Procesa un paso lógico fijo (horizontal → rotación → hard drop/gravedad,
+   * fijación, clear de líneas y spawn de la siguiente pieza). Muta el estado
+   * interno del motor y encola los eventos resultantes, recuperables con
+   * `drainEvents`.
+   *
+   * @throws {EngineStepError} con `code: 'ENGINE_NOT_RUNNING'` si el motor ya
+   *   está en game over, o `code: 'INVALID_GAME_INPUT'` si `input` no cumple
+   *   el contrato de `StepInput`. En ambos casos no se muta el estado ni se
+   *   emite ningún evento.
+   */
   step(input: StepInput): void;
+  /**
+   * Devuelve una fotografía inmutable (`Object.freeze` profundo) del estado
+   * actual. No muta el motor ni comparte estructuras mutables con su estado
+   * interno.
+   */
   getSnapshot(): EngineSnapshot;
+  /**
+   * Vacía la cola interna de eventos y devuelve los emitidos desde la última
+   * llamada (o desde la creación o el último `reset()`). Cada llamada
+   * consume la cola: una llamada inmediatamente posterior devuelve vacío.
+   */
   drainEvents(): readonly GameEvent[];
+  /**
+   * Reinicia el motor a un estado limpio (tablero vacío, contador de paso a
+   * 0, nueva bolsa) con la semilla y configuración indicadas. Válido incluso
+   * si el motor estaba en game over.
+   *
+   * @throws {EngineOptionsError} si `options.seed` o `options.config` no
+   *   cumplen su contrato.
+   */
   reset(options: EngineOptions): void;
 };
 
 // ── Tipos de error ──────────────────────────────────────────────────────
 
+/** Error de opciones inválidas al crear o reiniciar el motor (semilla o configuración fuera de contrato). */
 export class EngineOptionsError extends Error {
   readonly code = 'INVALID_ENGINE_OPTIONS';
 
@@ -82,6 +134,14 @@ export class EngineOptionsError extends Error {
   }
 }
 
+/**
+ * Error al procesar un paso del motor.
+ *
+ * `code` es `'ENGINE_NOT_RUNNING'` si el motor ya terminó (game over), o
+ * `'INVALID_GAME_INPUT'` si `input` no cumple el contrato de `StepInput`
+ * (propiedad desconocida, tipo incorrecto o rotación simultánea en ambos
+ * sentidos).
+ */
 export class EngineStepError extends Error {
   readonly code: 'INVALID_GAME_INPUT' | 'ENGINE_NOT_RUNNING';
 
@@ -193,6 +253,11 @@ const I_KICKS: KickTable = {
 
 // ── PRNG: mulberry32 ────────────────────────────────────────────────────
 
+/**
+ * PRNG mulberry32: determinista y reproducible a partir de una semilla
+ * uint32. La misma semilla produce siempre la misma secuencia de valores en
+ * [0, 1), lo que sostiene el determinismo de la bolsa de siete piezas.
+ */
 function createPrng(seed: number): () => number {
   let state = seed | 0;
   return () => {
@@ -245,6 +310,11 @@ function boardToReadonly(board: (PieceType | null)[][]): ReadonlyArray<ReadonlyA
 
 // ── Comprobación de colisiones ──────────────────────────────────────────
 
+/**
+ * Indica si alguna celda de `cells` es inválida: fuera de los límites del
+ * tablero (x fuera de [0, BOARD_COLS) o y fuera de [0, BOARD_ROWS)), o
+ * superpuesta a una celda ya ocupada en `board`. No muta `board`.
+ */
 function isCollision(
   board: (PieceType | null)[][],
   cells: Cell[],
@@ -257,6 +327,11 @@ function isCollision(
   return false;
 }
 
+/**
+ * Convierte las celdas relativas de una pieza y orientación (definidas en
+ * `PIECE_ORIENTATION_CELLS`) a coordenadas absolutas del tablero, sumando el
+ * origen (`originX`, `originY`) de la pieza a cada celda relativa.
+ */
 function computeAbsoluteCells(pieceType: PieceType, originX: number, originY: number, orientation: Orientation): Cell[] {
   return PIECE_ORIENTATION_CELLS[pieceType][orientation].map((c) => ({ x: originX + c.x, y: originY + c.y }));
 }
@@ -290,6 +365,10 @@ function msPerCellFromConfig(config: GameConfig): number {
   return 1000 / config.gravityCellsPerSecond;
 }
 
+/**
+ * Distancia máxima (número de celdas) que `piece` puede caer verticalmente
+ * antes de colisionar. No muta `board` ni `piece`.
+ */
 function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): number {
   const cells = activePieceCells(piece);
   let distance = 0;
@@ -315,8 +394,18 @@ function getTransitionKey(from: Orientation, to: Orientation): string {
 }
 
 /**
- * Intenta rotar la pieza activa. Si tiene éxito, actualiza la pieza in situ y devuelve true.
- * Si falla, no muta nada y devuelve false.
+ * Intenta rotar `activePiece` en el sentido indicado siguiendo el algoritmo
+ * SRS: calcula la orientación destino, obtiene la tabla de wall kicks de la
+ * pieza y prueba cada kick en el orden oficial, aplicando el primero cuyas
+ * celdas resultantes no colisionen (`isCollision`). La pieza O no usa kicks:
+ * solo se comprueba el desplazamiento (0, 0).
+ *
+ * Si algún candidato es válido, muta `activePiece` (x, y, orientation) in
+ * situ y devuelve `true`. Si ninguno lo es, no muta nada y devuelve `false`.
+ *
+ * @param board celdas fijas del tablero, usadas solo para comprobar colisiones.
+ * @param activePiece pieza a rotar; se muta directamente solo si la rotación tiene éxito.
+ * @param clockwise `true` para rotación horaria, `false` para antihoraria.
  */
 function tryRotate(
   board: (PieceType | null)[][],
@@ -372,6 +461,19 @@ function tryRotate(
 
 // ── Creación del motor ──────────────────────────────────────────────────
 
+/**
+ * Crea una instancia del motor determinista. Valida `options.seed` (entero
+ * en [0, UINT32_MAX]) y `options.config` antes de inicializar el estado, y
+ * genera la pieza activa inicial y la siguiente a partir del PRNG sembrado
+ * con `options.seed`.
+ *
+ * Dada la misma semilla, configuración y secuencia de llamadas a `step()`,
+ * el motor produce siempre el mismo snapshot y la misma secuencia de
+ * eventos.
+ *
+ * @throws {EngineOptionsError} si `options.seed` o `options.config` no
+ *   cumplen su contrato.
+ */
 export function createGameEngine(options: EngineOptions): GameEngine {
   validateSeed(options.seed);
   parseGameConfig(options.config);
@@ -420,6 +522,12 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     eventQueue.push({ type: 'pieceLocked', step: currentStep, piece: activePiece.type });
   }
 
+  /**
+   * Elimina las filas completas del tablero, desplaza hacia abajo las filas
+   * restantes y añade filas vacías en la parte superior. Devuelve los
+   * índices (previos al desplazamiento) de las filas eliminadas; vacío si
+   * ninguna fila estaba completa.
+   */
   function clearLines(): number[] {
     const completeLineIndices: number[] = [];
     for (let y = 0; y < BOARD_ROWS; y++) {
@@ -652,6 +760,15 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
 // ── Validación de entrada ───────────────────────────────────────────────
 
+/**
+ * Valida la forma de `input` contra el contrato de `StepInput`: rechaza
+ * propiedades desconocidas, campos ausentes o de tipo incorrecto, y la
+ * combinación simultánea de `rotateClockwise` y `rotateCounterclockwise`.
+ * No muta `input` ni el estado del motor.
+ *
+ * @throws {EngineStepError} con `code: 'INVALID_GAME_INPUT'` ante cualquier
+ *   incumplimiento del contrato.
+ */
 function validateInput(input: unknown): asserts input is StepInput {
   if (typeof input !== 'object' || input === null) {
     throw new EngineStepError(
