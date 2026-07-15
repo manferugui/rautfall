@@ -62,6 +62,29 @@ Super Rotation System completo: orientaciones, rotación horaria y antihoraria, 
 
 Ver [Informe de implementación](implementation/0003-rotacion-srs.md).
 
+## Task [0004 — Integración de Phaser](tasks/0004-integracion-phaser.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-15 |
+| **Resultado** | Integración de Phaser 3.80.1 como motor de renderizado y entrada. Vue mantiene el contenedor (estado, controles, ayuda). Una única escena Phaser renderiza tablero y pieza activa desde snapshots, captura teclado, adapta tiempo real a pasos lógicos fijos (límite 250 ms, 25 pasos/frame). Eliminado el tablero interactivo Vue (board-composition.ts). 149 tests pasan, lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Phaser 3.80.1 añadido exclusivamente a `apps/web`.
+- `GameCanvas.vue` monta/destruye una única instancia Phaser.
+- `GameScene.ts`: escena única con teclado, adaptación temporal y renderizado desde `getSnapshot()`.
+- Lógica pura extraída a `computeSteps` (tiempo) y `buildStepInput` (entrada).
+- Controles: flechas, Z, Space, R. Sin DAS/ARR/soft drop.
+- Comunicación Phaser→Vue mediante `GamePresentationState` (status, step, elapsedMs).
+- Eliminado `board-composition.ts` y sus 7 tests.
+- 23 tests nuevos, 149 total en el monorepo.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0004-integracion-phaser.md).
+
 ## Siguiente tarea
 
-`0004 — Integración con Phaser`
+`0005 — Prototipo vertical Tactical` (alcance a definir en su propia especificación).
