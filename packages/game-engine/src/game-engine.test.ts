@@ -973,7 +973,7 @@ describe('game over', () => {
     expect(engine.getSnapshot().status).toBe('gameOver');
   });
 
-  it('tras spawnBlocked, el snapshot tiene status gameOver, activePiece null y nextPiece null', () => {
+  it('tras spawnBlocked, el snapshot tiene status gameOver, activePiece null y nextPieces con longitud 3', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -991,7 +991,7 @@ describe('game over', () => {
     const snap = engine.getSnapshot();
     expect(snap.status).toBe('gameOver');
     expect(snap.activePiece).toBeNull();
-    expect(snap.nextPiece).toBeNull();
+    expect(snap.nextPieces).toHaveLength(3);
   });
 
   it('los bloques en filas ocultas no provocan game over mientras el siguiente spawn sea válido', () => {
@@ -1226,7 +1226,7 @@ describe('snapshot', () => {
     expect(snap0.step).toBe(0);
     expect(snap0.status).toBe('running');
     expect(snap0.activePiece).not.toBeNull();
-    expect(snap0.nextPiece).not.toBeNull();
+    expect(snap0.nextPieces).toHaveLength(3);
     expect(snap0.clearedLines).toBe(0);
 
     stepStationary(engine);
@@ -1273,16 +1273,16 @@ describe('snapshot', () => {
     }
   });
 
-  it('nextPiece es del tipo correcto', () => {
+  it('nextPieces contiene tres piezas de tipos válidos', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
     const snap = engine.getSnapshot();
-    expect(snap.nextPiece).not.toBeNull();
+    expect(snap.nextPieces).toHaveLength(3);
 
     const validTypes: PieceType[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
-    if (snap.nextPiece) {
-      expect(validTypes).toContain(snap.nextPiece);
+    for (const piece of snap.nextPieces) {
+      expect(validTypes).toContain(piece);
     }
   });
 });
@@ -1406,7 +1406,7 @@ describe('reset', () => {
     const snap = engine.getSnapshot();
 
     expect(snap.activePiece).not.toBeNull();
-    expect(snap.nextPiece).not.toBeNull();
+    expect(snap.nextPieces).toHaveLength(3);
   });
 
   it('reset no emite pieceSpawned ni engineStarted', () => {
@@ -1618,7 +1618,7 @@ describe('validación de entrada — nuevo contrato', () => {
     expect(snapAfter.activePiece?.type).toBe(snap0.activePiece?.type);
     expect(snapAfter.activePiece?.x).toBe(snap0.activePiece?.x);
     expect(snapAfter.activePiece?.y).toBe(snap0.activePiece?.y);
-    expect(snapAfter.nextPiece).toBe(snap0.nextPiece);
+    expect(snapAfter.nextPieces).toEqual(snap0.nextPieces);
     expect(snapAfter.status).toBe(snap0.status);
     // El tablero no debe cambiar
     for (let y = 0; y < 24; y++) {
@@ -3050,7 +3050,7 @@ describe('rotación SRS', () => {
       const yBefore = snapBefore.activePiece!.y;
       const typeBefore = snapBefore.activePiece!.type;
       const boardBefore = snapBefore.board.map(r => [...r]);
-      const nextBefore = snapBefore.nextPiece;
+      const nextBefore = snapBefore.nextPieces;
       const seedBefore = snapBefore.seed;
 
       engine.step({
@@ -3067,7 +3067,7 @@ describe('rotación SRS', () => {
         expect(snapAfter.activePiece!.x).toBe(xBefore);
         expect(snapAfter.activePiece!.y).toBe(yBefore);
         expect(snapAfter.activePiece!.type).toBe(typeBefore);
-        expect(snapAfter.nextPiece).toBe(nextBefore);
+        expect(snapAfter.nextPieces).toEqual(nextBefore);
         expect(snapAfter.status).toBe(snapBefore.status);
         expect(snapAfter.seed).toBe(seedBefore);
         for (let y = 0; y < 24; y++) {
@@ -3109,7 +3109,7 @@ describe('rotación SRS', () => {
           expect(snapAfter.activePiece!.y).toBe(snapBefore.activePiece!.y);
           expect(snapAfter.activePiece!.type).toBe(snapBefore.activePiece!.type);
           expect(snapAfter.activePiece!.orientation).toBe(snapBefore.activePiece!.orientation);
-          expect(snapAfter.nextPiece).toBe(snapBefore.nextPiece);
+          expect(snapAfter.nextPieces).toEqual(snapBefore.nextPieces);
           expect(snapAfter.status).toBe(snapBefore.status);
           expect(snapAfter.seed).toBe(snapBefore.seed);
           for (let y = 0; y < 24; y++) {
@@ -3404,7 +3404,7 @@ describe('rotación SRS', () => {
       const snapA = engineA.getSnapshot();
       const snapB = engineB.getSnapshot();
 
-      expect(snapA.nextPiece).toBe(snapB.nextPiece);
+      expect(snapA.nextPieces).toEqual(snapB.nextPieces);
     });
   });
 
@@ -3449,7 +3449,7 @@ describe('rotación SRS', () => {
       const xBefore = snapBefore.activePiece!.x;
       const yBefore = snapBefore.activePiece!.y;
       const typeBefore = snapBefore.activePiece!.type;
-      const nextBefore = snapBefore.nextPiece;
+      const nextBefore = snapBefore.nextPieces;
       const boardBefore = snapBefore.board.map(r => [...r]);
 
       try {
@@ -3473,7 +3473,7 @@ describe('rotación SRS', () => {
       expect(snapAfter.activePiece!.x).toBe(xBefore);
       expect(snapAfter.activePiece!.y).toBe(yBefore);
       expect(snapAfter.activePiece!.type).toBe(typeBefore);
-      expect(snapAfter.nextPiece).toBe(nextBefore);
+      expect(snapAfter.nextPieces).toEqual(nextBefore);
       for (let y = 0; y < 24; y++) {
         expect(snapAfter.board[y]).toEqual(boardBefore[y]);
       }

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import GameCanvas from './components/GameCanvas.vue';
+import NextPiecesPreview from './components/NextPiecesPreview.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0 });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'] });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -54,6 +55,8 @@ function doReset(): void {
           </div>
         </div>
 
+        <NextPiecesPreview :next-pieces="gameState.nextPieces" />
+
         <div class="actions">
           <button type="button" @click="doReset">Reset</button>
         </div>
@@ -75,7 +78,7 @@ function doReset(): void {
       </div>
     </div>
 
-    <p class="footnote">Technical prototype — 0004</p>
+    <p class="footnote">Technical prototype — 0007</p>
   </div>
 </template>
 

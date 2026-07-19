@@ -62,6 +62,16 @@ export type ActivePieceSnapshot = Readonly<{
   lockResetsUsed: number;
 }>;
 
+/**
+ * Geometría pública de una pieza en su orientación inicial (Spawn).
+ * Celdas normalizadas (mínimo x e y son 0) y bounding box.
+ */
+export type PieceShape = Readonly<{
+  cells: ReadonlyArray<Readonly<{ x: number; y: number }>>;
+  width: number;
+  height: number;
+}>;
+
 export type EngineSnapshot = Readonly<{
   step: number;
   elapsedMs: number;
@@ -70,7 +80,7 @@ export type EngineSnapshot = Readonly<{
   configVersion: string;
   board: ReadonlyArray<ReadonlyArray<PieceType | null>>;
   activePiece: ActivePieceSnapshot | null;
-  nextPiece: PieceType | null;
+  nextPieces: readonly PieceType[];
   clearedLines: number;
 }>;
 
@@ -474,6 +484,24 @@ function tryRotate(
   return false;
 }
 
+// ── Función pública de geometría ────────────────────────────────────────
+
+/**
+ * Devuelve la geometría de una pieza en su orientación inicial (Spawn),
+ * con celdas normalizadas a partir de (0, 0).
+ */
+export function getPieceShape(type: PieceType): PieceShape {
+  const rawCells = PIECE_ORIENTATION_CELLS[type][Orientation.Spawn];
+  const minX = Math.min(...rawCells.map((c) => c.x));
+  const minY = Math.min(...rawCells.map((c) => c.y));
+  const cells = rawCells.map((c) => Object.freeze({ x: c.x - minX, y: c.y - minY }));
+  return Object.freeze({
+    cells: Object.freeze(cells),
+    width: PIECE_WIDTH[type],
+    height: PIECE_HEIGHT[type],
+  });
+}
+
 // ── Creación del motor ──────────────────────────────────────────────────
 
 export function createGameEngine(options: EngineOptions): GameEngine {
@@ -489,7 +517,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   let prng = createPrng(currentSeed);
   let bagState = createBag(prng);
   let activePiece: ActivePiece | null = null;
-  let nextPieceType: PieceType | null = null;
+  /** Cola mutable interna de próximas piezas (longitud siempre 3 tras la creación). */
+  let nextPiecesQueue: PieceType[] = [];
   let verticalProgress = 0;
   let clearedLines = 0;
   let lockDelayElapsedMs = 0;
@@ -499,9 +528,15 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   // Estado de temporización horizontal
   const horizontalState = createHorizontalState();
 
+  /** Genera la pieza activa y rellena la cola con tres próximas piezas. */
   function spawnInitialPieces(): void {
     const firstType = nextFromBag(bagState, prng);
-    const secondType = nextFromBag(bagState, prng);
+    // Consumir tres piezas adicionales para la cola
+    const queuePieces = [
+      nextFromBag(bagState, prng),
+      nextFromBag(bagState, prng),
+      nextFromBag(bagState, prng),
+    ];
     const spawnX = calculateSpawnX(firstType);
     const spawnY = calculateSpawnY(firstType);
     const cells = computeAbsoluteCells(firstType, spawnX, spawnY, Orientation.Spawn);
@@ -510,12 +545,12 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       status = 'gameOver';
       eventQueue.push({ type: 'gameOver', step: currentStep, reason: 'spawnBlocked' });
       activePiece = null;
-      nextPieceType = null;
+      nextPiecesQueue = queuePieces;
       return;
     }
 
     activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
-    nextPieceType = secondType;
+    nextPiecesQueue = queuePieces;
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
     lockDelayElapsedMs = 0;
@@ -578,31 +613,39 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     return completeLineIndices;
   }
 
+  /**
+   * Extrae la candidata del frente de la cola, repone la cola con una nueva
+   * pieza de la bolsa e intenta el spawn. Si el spawn es válido, activa la
+   * pieza; si está bloqueado, establece game over.
+   *
+   * Orden: extraer candidata, reponer cola, intentar spawn, activar o finalizar.
+   */
   function spawnNextPiece(): void {
-    if (!nextPieceType) return;
-    const pieceType = nextPieceType;
-    const spawnX = calculateSpawnX(pieceType);
-    const spawnY = calculateSpawnY(pieceType);
-    const cells = computeAbsoluteCells(pieceType, spawnX, spawnY, Orientation.Spawn);
+    // 1. Extraer candidata del frente
+    const candidate = nextPiecesQueue.shift()!;
 
-    const nextNext = nextFromBag(bagState, prng);
+    // 2. Reponer cola con una nueva pieza de la bolsa
+    nextPiecesQueue.push(nextFromBag(bagState, prng));
 
+    // 3. Intentar spawn
+    const spawnX = calculateSpawnX(candidate);
+    const spawnY = calculateSpawnY(candidate);
+    const cells = computeAbsoluteCells(candidate, spawnX, spawnY, Orientation.Spawn);
+
+    // 4. Activar o finalizar
     if (isCollision(board, cells)) {
       status = 'gameOver';
       activePiece = null;
-      nextPieceType = null;
       eventQueue.push({ type: 'gameOver', step: currentStep, reason: 'spawnBlocked' });
       return;
     }
 
-    nextPieceType = nextNext;
-
-    activePiece = { type: pieceType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
+    activePiece = { type: candidate, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
     lockDelayElapsedMs = 0;
     lockResetsUsed = 0;
-    eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: pieceType });
+    eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: candidate });
   }
 
   /**
@@ -931,7 +974,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         configVersion: config.version,
         board: boardReadonly,
         activePiece: activePieceSnap,
-        nextPiece: nextPieceType,
+        nextPieces: Object.freeze([...nextPiecesQueue]),
         clearedLines,
       });
     },
@@ -954,7 +997,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       prng = createPrng(currentSeed);
       bagState = createBag(prng);
       activePiece = null;
-      nextPieceType = null;
+      nextPiecesQueue = [];
       verticalProgress = 0;
       clearedLines = 0;
       lockDelayElapsedMs = 0;
@@ -964,6 +1007,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
       const firstType = nextFromBag(bagState, prng);
       const secondType = nextFromBag(bagState, prng);
+      const thirdType = nextFromBag(bagState, prng);
+      const fourthType = nextFromBag(bagState, prng);
       const spawnX = calculateSpawnX(firstType);
       const spawnY = calculateSpawnY(firstType);
       const cells = computeAbsoluteCells(firstType, spawnX, spawnY, Orientation.Spawn);
@@ -972,10 +1017,10 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         status = 'gameOver';
         eventQueue.push({ type: 'gameOver', step: currentStep, reason: 'spawnBlocked' });
         activePiece = null;
-        nextPieceType = null;
+        nextPiecesQueue = [secondType, thirdType, fourthType];
       } else {
         activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
-        nextPieceType = secondType;
+        nextPiecesQueue = [secondType, thirdType, fourthType];
         resetHorizontalState(horizontalState);
         verticalProgress = 0;
         lockDelayElapsedMs = 0;

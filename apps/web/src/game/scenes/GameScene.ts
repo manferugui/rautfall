@@ -422,13 +422,16 @@ export class GameScene extends Phaser.Scene {
       status: snap.status,
       step: snap.step,
       elapsedMs: snap.elapsedMs,
+      nextPieces: [...snap.nextPieces],
     };
 
     if (
       this.lastState &&
       this.lastState.status === newState.status &&
       this.lastState.step === newState.step &&
-      this.lastState.elapsedMs === newState.elapsedMs
+      this.lastState.elapsedMs === newState.elapsedMs &&
+      this.lastState.nextPieces.length === newState.nextPieces.length &&
+      this.lastState.nextPieces.every((p, i) => p === newState.nextPieces[i])
     ) {
       return;
     }

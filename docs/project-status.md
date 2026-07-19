@@ -131,6 +131,31 @@ Ver [Informe de implementación](implementation/0005-das-arr-soft-drop.md).
 
 Ver [Informe de implementación](implementation/0006-lock-delay-fijacion-diferida.md).
 
+## Task [0007 — Cola determinista de tres próximas piezas y preview técnico provisional](tasks/0007-cola-proximas-piezas-preview-tecnico.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-19 |
+| **Resultado** | Contrato `nextPiece` sustituido por cola determinista de 3 piezas. Nueva API pública `getPieceShape(type)` con geometría normalizada. Preview técnica provisional en Vue+CSS integrada en el panel de información. 276 tests pasan, lint, typecheck y build exitosos (aviso de chunk de Phaser no bloqueante). |
+
+### Resumen
+
+- `EngineSnapshot.nextPiece: PieceType | null` → `nextPieces: readonly PieceType[]` (longitud 3).
+- Cola interna `nextPiecesQueue` alimentada por la misma bolsa de siete y PRNG.
+- `spawnInitialPieces`: 4 consumos (1 activa + 3 cola).
+- `spawnNextPiece`: extrae candidata, repone cola, intenta spawn, activa o game over.
+- Game over: candidata consumida, cola repuesta a 3, `activePiece = null`.
+- `getPieceShape(type)`: función pura, celdas normalizadas (minY=0 para I), congelada.
+- `GamePresentationState` ampliado con `nextPieces`.
+- `NextPiecesPreview.vue`: tres slots con orden numérico, tipo textual y geometría CSS.
+- Phaser no mantiene la cola (solo la copia al estado de presentación).
+- 276 tests (11 nuevos sobre 265).
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0007-cola-proximas-piezas-preview-tecnico.md).
+
 ## Siguiente tarea
 
-La tarea 0007 se definirá tras revisar la implementación de 0006 y validar manualmente la sensación de control. Candidatas razonables mencionadas en `docs/rautfall.md`: pieza fantasma, hold, indicador visual de lock delay, puntuación. Ninguna se asume automáticamente como alcance de la siguiente tarea hasta que se redacte su propia especificación.
+La tarea 0008 se definirá tras revisar la implementación de 0007, validar manualmente la preview técnica y recorrer el roadmap. Candidatas razonables mencionadas en `docs/rautfall.md`: hold, pieza fantasma, pausa, indicador visual de lock delay, consolidación visual del HUD. Ninguna se asume automáticamente como alcance de la siguiente tarea hasta que se redacte su propia especificación.
