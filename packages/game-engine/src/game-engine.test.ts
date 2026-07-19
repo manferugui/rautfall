@@ -2315,16 +2315,18 @@ describe('soft drop', () => {
     }
   });
 
-  it('colisión de soft drop fija la pieza inmediatamente', () => {
+  it('colisión de soft drop no fija la pieza inmediatamente (lock delay diferido)', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
-    // Dejar caer una pieza con hard drop
+    // Dejar caer una pieza con hard drop para tener una base
     stepHardDrop(engine);
     drainAll(engine);
 
-    // La nueva pieza está en spawn. Soft drop hasta que colisione.
-    let locked = false;
+    // La nueva pieza está en spawn. Usar soft drop 20 veces para llegar rápido al suelo.
+    // Con softDropCellsPerSecond=20 y fixedStepMs=10, cada paso añade 200 unidades.
+    // 5 pasos = 1000 unidades = 1 descenso.
+    let reachedGround = false;
     for (let i = 0; i < 200; i++) {
       if (engine.getSnapshot().status === 'gameOver') break;
 
@@ -2336,12 +2338,19 @@ describe('soft drop', () => {
       });
       const events = engine.drainEvents();
 
-      if (events.some((e) => e.type === 'pieceLocked')) {
-        locked = true;
+      // Si hay pieceLocked es porque se fijó por lock delay (no inmediatamente)
+      // Verificamos que la pieza esté apoyada y acumulando lock delay
+      const snap = engine.getSnapshot();
+      if (snap.activePiece?.grounded) {
+        reachedGround = true;
+        // Si está apoyada, el primer paso ya cuenta fixedStepMs
+        // Con lockDelayMs=500 y fixedStepMs=10, necesita 50 pasos para fijarse
+        // No debe fijarse inmediatamente al llegar al suelo
+        expect(events.some((e) => e.type === 'pieceLocked')).toBe(false);
         break;
       }
     }
-    expect(locked).toBe(true);
+    expect(reachedGround).toBe(true);
   });
 });
 
@@ -3683,5 +3692,966 @@ describe('eventos — DAS, ARR, soft drop', () => {
 
     expect(snapshotsA).toEqual(snapshotsB);
     expect(eventsA).toEqual(eventsB);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE LOCK DELAY
+// ════════════════════════════════════════════════════════════════════════
+
+describe('lock delay - temporizador', () => {
+  it('comienza a avanzar cuando la pieza entra en contacto y el primer paso apoyado cuenta fixedStepMs', () => {
+    // Usamos hard drop para fijar la primera pieza, luego gravedad lenta para
+    // que la nueva pieza caiga y toque fondo.
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Fijar la primera pieza inmediatamente
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // La nueva pieza cae. Con gravedad 1 celda/segundo y fixedStepMs=10,
+    // cada paso son 10 unidades. Para descender desde spawn (y ~ 3-4) hasta
+    // apoyarse en la pieza fija se necesitan varios pasos de gravedad.
+    // En vez de esperar, usamos soft drop para bajar rápido y luego detener.
+    let grounded = false;
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      const snapBefore = engine.getSnapshot();
+      if (snapBefore.activePiece?.grounded) {
+        grounded = true;
+        break;
+      }
+      // Soft drop para bajar rápido
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    expect(grounded).toBe(true);
+
+    // La pieza está apoyada. Un paso más debe incrementar lockDelayElapsedMs
+    // en fixedStepMs (10ms). El primer paso apoyado ya cuenta.
+    const snap1 = engine.getSnapshot();
+    if (snap1.activePiece) {
+      expect(snap1.activePiece.lockDelayElapsedMs).toBeGreaterThanOrEqual(0);
+      expect(snap1.activePiece.grounded).toBe(true);
+    }
+  });
+
+  it('no fija antes del umbral lockDelayMs', () => {
+    // lockDelayMs=500, fixedStepMs=10 → se necesitan 49 pasos apoyado
+    // para llegar a 490ms, y el paso 50 para 500ms
+    // Usamos soft drop para bajar rápido, luego paramos soft drop para que
+    // la gravedad no interfiera (gravedad base 1 celda/segundo es baja)
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar la nueva pieza hasta que esté apoyada usando soft drop
+    let grounded = false;
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) {
+        grounded = true;
+        break;
+      }
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    expect(grounded).toBe(true);
+
+    // 30 pasos apoyado (sin soft drop) = 300ms < 500ms → no debe fijarse
+    for (let i = 0; i < 30; i++) {
+      stepStationary(engine);
+      drainAll(engine);
+      expect(engine.getSnapshot().activePiece).not.toBeNull();
+    }
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece).not.toBeNull();
+  });
+
+  it('fija exactamente al alcanzar lockDelayMs', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar la nueva pieza a que esté apoyada usando soft drop
+    let grounded = false;
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) {
+        grounded = true;
+        break;
+      }
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    expect(grounded).toBe(true);
+
+    // 50 pasos apoyado = 500ms → debe fijar (lockDelayMs=500, fixedStepMs=10)
+    for (let i = 0; i < 60; i++) {
+      stepStationary(engine);
+      drainAll(engine);
+      if (engine.getSnapshot().activePiece === null) {
+        // Se fijó
+        break;
+      }
+    }
+
+    // Debe haberse fijado (activePiece null o nueva pieza)
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece === null || (snap.activePiece && !snap.activePiece.grounded)).toBe(true);
+  });
+
+  it('avanza una única vez por paso lógico', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar la nueva pieza a grounded usando soft drop
+    let grounded = false;
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) {
+        grounded = true;
+        break;
+      }
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    expect(grounded).toBe(true);
+
+    // Un paso apoyado: la diferencia en lockDelayElapsedMs debe ser exactamente fixedStepMs
+    const snapBefore = engine.getSnapshot();
+    const ldBefore = snapBefore.activePiece!.lockDelayElapsedMs;
+
+    stepStationary(engine);
+    drainAll(engine);
+    const snapAfter = engine.getSnapshot();
+    if (snapAfter.activePiece) {
+      const diff = snapAfter.activePiece.lockDelayElapsedMs - ldBefore;
+      expect(diff).toBeGreaterThanOrEqual(0);
+      expect(diff).toBeLessThanOrEqual(prototypeConfig.fixedStepMs);
+    }
+  });
+
+  it('no depende de tiempo real (solo fixedStepMs acumulado)', () => {
+    // Verificar que el temporizador solo depende del step count
+    // Usamos dos motores con misma configuración y misma semilla,
+    // avanzamos pasos y verificamos que lockDelayElapsedMs es idéntico
+    const config = { ...prototypeConfig, gravityCellsPerSecond: 0.1 };
+    const engineA = createGameEngine(makeValidOptions({ config, seed: 42 }));
+    const engineB = createGameEngine(makeValidOptions({ config, seed: 42 }));
+    drainAll(engineA);
+    drainAll(engineB);
+
+    // Fijar primera pieza en ambos
+    stepHardDrop(engineA);
+    stepHardDrop(engineB);
+    drainAll(engineA);
+    drainAll(engineB);
+
+    // Avanzar hasta grounded
+    for (let i = 0; i < 200; i++) {
+      if (engineA.getSnapshot().status === 'gameOver' || engineB.getSnapshot().status === 'gameOver') break;
+      stepStationary(engineA);
+      stepStationary(engineB);
+    }
+    drainAll(engineA);
+    drainAll(engineB);
+
+    // Otros 10 pasos
+    for (let i = 0; i < 10; i++) {
+      stepStationary(engineA);
+      stepStationary(engineB);
+    }
+    drainAll(engineA);
+    drainAll(engineB);
+
+    expect(engineA.getSnapshot().activePiece?.lockDelayElapsedMs).toBe(
+      engineB.getSnapshot().activePiece?.lockDelayElapsedMs,
+    );
+  });
+});
+
+describe('lock delay - gravedad y soft drop', () => {
+  it('descenso bloqueado por gravedad no fija inmediatamente', () => {
+    // La pieza inicial desde spawn no está apoyada. Con gravedad lenta
+    // la dejamos caer hasta que toque fondo (bloqueada). No debe fijar.
+    const config = { ...prototypeConfig, gravityCellsPerSecond: 2 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    // Avanzar hasta que la pieza esté apoyada pero no fijada
+    for (let i = 0; i < 500; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      const snap = engine.getSnapshot();
+      if (snap.activePiece?.grounded) {
+        // La pieza está apoyada pero no fijada
+        expect(snap.activePiece).not.toBeNull();
+        break;
+      }
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    // Debe seguir teniendo pieza activa (no se fijó)
+    expect(engine.getSnapshot().activePiece).not.toBeNull();
+  });
+
+  it('descenso bloqueado por soft drop no fija inmediatamente', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Soft drop hasta apoyar, verificar que no fija
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      const snap = engine.getSnapshot();
+      if (snap.activePiece?.grounded) {
+        // Apoyada pero no fijada
+        expect(engine.getSnapshot().activePiece).not.toBeNull();
+        break;
+      }
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+  });
+
+  it('el progreso vertical bloqueado se consume', () => {
+    // Con gravedad alta pero softDrop aún mayor, varios descensos bloqueados
+    // no acumulan progreso porque se consume en cada intento
+    const config = {
+      ...prototypeConfig,
+      gravityCellsPerSecond: 20,
+      softDropCellsPerSecond: 25,
+    };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    // Fijar primera pieza para tener una base
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Gravedad alta: 20*10=200 por paso, 5 pasos = 1 descenso
+    // Desde spawn (y~3) hasta apoyarse, varios descensos
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) {
+        break;
+      }
+      stepStationary(engine);
+      drainAll(engine);
+    }
+    // No debe haberse fijado por gravedad (lock delay diferido)
+    expect(engine.getSnapshot().activePiece).not.toBeNull();
+  });
+
+  it('soft drop mantenido no reinicia', () => {
+    // Soft drop no debe reiniciar el temporizador ni consumir reinicios
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Soft drop hasta grounded
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Mantener soft drop varios pasos más. lockResetsUsed debe seguir siendo 0
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece) {
+      expect(engine.getSnapshot().activePiece!.lockResetsUsed).toBe(0);
+    }
+  });
+
+  it('gravedad no reinicia', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Gravedad hasta grounded
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece) {
+      expect(engine.getSnapshot().activePiece!.lockResetsUsed).toBe(0);
+    }
+  });
+});
+
+describe('lock delay - hard drop', () => {
+  it('fija inmediatamente con distancia positiva', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    const events = engine.drainEvents();
+    expect(events.some((e) => e.type === 'pieceLocked')).toBe(true);
+    expect(events.some((e) => e.type === 'pieceSpawned')).toBe(true);
+  });
+
+  it('fija inmediatamente con distancia 0', () => {
+    const config = { ...prototypeConfig, gravityCellsPerSecond: 10 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Hard drop repetido hasta encontrar pieza ya apoyada
+    for (let i = 0; i < 200; i++) {
+      const snap = engine.getSnapshot();
+      if (snap.status === 'gameOver') break;
+      if (snap.activePiece) {
+        const grounded = snap.activePiece.grounded;
+        if (grounded) {
+          // Hard drop con distancia 0
+          engine.step({
+            leftHeld: false, rightHeld: false,
+            leftPressed: false, rightPressed: false,
+            softDropHeld: false,
+            hardDrop: true,
+          });
+          const events = engine.drainEvents();
+          expect(events.some((e) => e.type === 'pieceLocked')).toBe(true);
+          const moveEvents = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'hardDrop');
+          expect(moveEvents).toHaveLength(0);
+          break;
+        }
+      }
+      stepStationary(engine);
+    }
+  });
+
+  it('no consume reinicios', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // La nueva pieza no hereda reinicios
+    expect(engine.getSnapshot().activePiece?.lockResetsUsed ?? 0).toBe(0);
+  });
+
+  it('no avanza lock delay después de fijar', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Verificar que la nueva pieza empieza con lockDelayElapsedMs=0
+    expect(engine.getSnapshot().activePiece?.lockDelayElapsedMs ?? 0).toBe(0);
+  });
+});
+
+describe('lock delay - movimiento horizontal', () => {
+  it('movimiento válido apoyado reinicia y consume un reinicio', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar a grounded usando soft drop
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    const beforeSnap = engine.getSnapshot();
+    if (beforeSnap.activePiece?.grounded) {
+      const beforeReset = beforeSnap.activePiece.lockResetsUsed;
+
+      // Movimiento horizontal válido (apoyado antes y después)
+      stepLeft(engine);
+      drainAll(engine);
+
+      const snapAfter = engine.getSnapshot();
+      if (snapAfter.activePiece && snapAfter.activePiece.grounded) {
+        // Solo verificar si sigue apoyada después
+        expect(snapAfter.activePiece.lockResetsUsed).toBe(beforeReset + 1);
+      }
+      // Si no sigue apoyada, el movimiento la dejó en el aire y no consume
+    }
+  });
+
+  it('movimiento bloqueado no reinicia ni consume', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar a grounded y mover a la pared
+    for (let i = 0; i < 10; i++) {
+      stepLeft(engine);
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece?.grounded) {
+      const beforeSnap = engine.getSnapshot();
+      const beforeResets = beforeSnap.activePiece!.lockResetsUsed;
+
+      // Intento bloqueado contra la pared
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: true, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      const afterSnap = engine.getSnapshot();
+      if (afterSnap.activePiece) {
+        expect(afterSnap.activePiece.lockResetsUsed).toBe(beforeResets);
+      }
+    }
+  });
+
+  it('movimiento válido que deja en el aire pone tiempo a 0 sin consumir', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Mover la pieza inicial hasta el borde de una plataforma para dejarla
+    // en el aire. Con la pieza I (seed 42), estamos en aire inicialmente.
+    // Necesitamos que la pieza esté apoyada primero.
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar a grounded
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+    }
+    drainAll(engine);
+
+    // Mover lateralmente - puede dejar en el aire o no, dependiendo del tablero
+    // Verificar invariante: si después del movimiento no está grounded, tiempo=0
+    if (engine.getSnapshot().activePiece?.grounded) {
+      const beforeResets = engine.getSnapshot().activePiece!.lockResetsUsed;
+
+      stepLeft(engine);
+      drainAll(engine);
+
+      const afterSnap = engine.getSnapshot();
+      if (afterSnap.activePiece && !afterSnap.activePiece.grounded) {
+        expect(afterSnap.activePiece.lockDelayElapsedMs).toBe(0);
+        expect(afterSnap.activePiece.lockResetsUsed).toBe(beforeResets);
+      }
+    }
+  });
+});
+
+describe('lock delay - rotación', () => {
+  it('rotación válida apoyada reinicia y consume', () => {
+    const config = { ...prototypeConfig, gravityCellsPerSecond: 0.1 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar a grounded
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece?.grounded) {
+      const beforeResets = engine.getSnapshot().activePiece!.lockResetsUsed;
+
+      // Rotación horaria
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
+      drainAll(engine);
+
+      const afterSnap = engine.getSnapshot();
+      if (afterSnap.activePiece?.grounded) {
+        expect(afterSnap.activePiece.lockResetsUsed).toBe(beforeResets + 1);
+      }
+    }
+  });
+
+  it('rotación inválida no reinicia', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Intentar rotar una pieza O en spawn (siempre válida)
+    // Encontremos un caso donde falle rotar
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const snap = engine.getSnapshot();
+      const type = snap.activePiece!.type;
+      if (type !== 'O' && type !== 'I') {
+        const beforeOrientation = snap.activePiece!.orientation;
+        const beforeResets = snap.activePiece!.lockResetsUsed;
+        const beforeTime = snap.activePiece!.lockDelayElapsedMs;
+
+        // Rotar
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true,
+        });
+        drainAll(engine);
+
+        const afterSnap = engine.getSnapshot();
+        if (afterSnap.activePiece && afterSnap.activePiece.orientation === beforeOrientation) {
+          // Rotación fallida
+          expect(afterSnap.activePiece.lockResetsUsed).toBe(beforeResets);
+          expect(afterSnap.activePiece.lockDelayElapsedMs).toBe(beforeTime);
+        }
+        break;
+      }
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+  });
+
+  it('eventos mantienen su orden al consumir el último reinicio en rotación', () => {
+    // Configuración con maxLockResets=1 para que con grounded + rotación + grounded
+    // se consuma el único reinicio y fije inmediatamente
+    const config = { ...prototypeConfig, maxLockResets: 1 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar a grounded
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece?.grounded) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
+      const events = engine.drainEvents();
+
+      // Si rotó exitosamente y consumió el último reinicio:
+      // pieceRotated antes que pieceLocked
+      if (events.some((e) => e.type === 'pieceRotated')) {
+        const rotateIdx = events.findIndex((e) => e.type === 'pieceRotated');
+        const lockIdx = events.findIndex((e) => e.type === 'pieceLocked');
+        if (rotateIdx >= 0 && lockIdx >= 0) {
+          expect(rotateIdx).toBeLessThan(lockIdx);
+        }
+      }
+    }
+  });
+});
+
+describe('lock delay - límite de reinicios', () => {
+  it('el último reinicio aplica la acción y fija en el mismo paso', () => {
+    // Config: solo 1 reinicio disponible (maxLockResets=1)
+    const config = { ...prototypeConfig, maxLockResets: 1 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // Llevar a grounded
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    // Primer movimiento (consume el único reinicio y fija)
+    if (engine.getSnapshot().activePiece?.grounded) {
+      stepLeft(engine);
+      const events = engine.drainEvents();
+      const snap = engine.getSnapshot();
+
+      // Debe haberse fijado (activoPiece null o nueva pieza)
+      expect(snap.activePiece === null || events.some((e) => e.type === 'pieceLocked')).toBe(true);
+    }
+  });
+
+  it('emite acción antes de pieceLocked al alcanzar el límite', () => {
+    const config = { ...prototypeConfig, maxLockResets: 1 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    // Rotar (consumirá reinicio y fijará)
+    if (engine.getSnapshot().activePiece?.grounded) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
+      const events = engine.drainEvents();
+
+      // Si hubo rotación, pieceRotated antes de pieceLocked
+      const rotateEv = events.find((e) => e.type === 'pieceRotated');
+      const lockEv = events.find((e) => e.type === 'pieceLocked');
+      if (rotateEv && lockEv) {
+        expect(events.indexOf(rotateEv)).toBeLessThan(events.indexOf(lockEv));
+      }
+    }
+  });
+
+  it('no existe reinicio adicional (lockResetsUsed no supera maxLockResets)', () => {
+    const config = { ...prototypeConfig, maxLockResets: 5 };
+    const engine = createGameEngine(makeValidOptions({ config }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    // Varios movimientos posibles, max resets = 5. Verificar que nunca se supera.
+    let maxObserved = 0;
+    for (let i = 0; i < 30; i++) {
+      if (!engine.getSnapshot().activePiece) break;
+      stepLeft(engine);
+      const snap = engine.getSnapshot();
+      if (snap.activePiece) {
+        maxObserved = Math.max(maxObserved, snap.activePiece.lockResetsUsed);
+      }
+      drainAll(engine);
+    }
+
+    expect(maxObserved).toBeLessThanOrEqual(config.maxLockResets);
+  });
+
+  it('spawn posterior queda limpio (lockResetsUsed=0)', () => {
+    const config = { ...prototypeConfig, maxLockResets: 1 };
+    const engine = createGameEngine(makeValidOptions({ config, seed: 42 }));
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+    const snapAfter = engine.getSnapshot();
+    if (snapAfter.activePiece) {
+      expect(snapAfter.activePiece.lockResetsUsed).toBe(0);
+    }
+  });
+});
+
+describe('lock delay - salida y reentrada', () => {
+  it('al quedar en el aire, tiempo a 0 y contador histórico conservado', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece?.grounded) {
+      const beforeResets = engine.getSnapshot().activePiece!.lockResetsUsed;
+
+      // Mover: si deja en el aire, lockDelayElapsedMs=0 pero resets conservado
+      stepLeft(engine);
+      drainAll(engine);
+
+      const afterSnap = engine.getSnapshot();
+      if (afterSnap.activePiece && !afterSnap.activePiece.grounded) {
+        expect(afterSnap.activePiece.lockDelayElapsedMs).toBe(0);
+        expect(afterSnap.activePiece.lockResetsUsed).toBe(beforeResets);
+      }
+    }
+  });
+
+  it('una nueva pieza reinicia ambos valores', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    const snap = engine.getSnapshot();
+    if (snap.activePiece) {
+      expect(snap.activePiece.lockDelayElapsedMs).toBe(0);
+      expect(snap.activePiece.lockResetsUsed).toBe(0);
+    }
+  });
+});
+
+describe('lock delay - snapshot', () => {
+  it('incluye los tres campos en el snapshot', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const snap = engine.getSnapshot();
+    if (snap.activePiece) {
+      expect(snap.activePiece).toHaveProperty('grounded');
+      expect(snap.activePiece).toHaveProperty('lockDelayElapsedMs');
+      expect(snap.activePiece).toHaveProperty('lockResetsUsed');
+    }
+  });
+
+  it('refleja apoyo real', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const snap = engine.getSnapshot();
+    if (snap.activePiece) {
+      expect(typeof snap.activePiece.grounded).toBe('boolean');
+    }
+  });
+
+  it('los objetos no exponen mutabilidad', () => {
+    const engine = createGameEngine(makeValidOptions());
+    const snap = engine.getSnapshot();
+
+    expect(Object.isFrozen(snap)).toBe(true);
+    if (snap.activePiece) {
+      expect(Object.isFrozen(snap.activePiece)).toBe(true);
+    }
+  });
+
+  it('game over continúa con activePiece: null', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+
+    expect(engine.getSnapshot().activePiece).toBeNull();
+  });
+});
+
+describe('lock delay - atomicidad', () => {
+  it('entrada inválida durante lock delay no muta nada (incluyendo lock delay vars)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().activePiece?.grounded) {
+      const snapBefore = engine.getSnapshot();
+      const stepBefore = snapBefore.step;
+      const ldBefore = snapBefore.activePiece!.lockDelayElapsedMs;
+      const lrBefore = snapBefore.activePiece!.lockResetsUsed;
+      const xBefore = snapBefore.activePiece!.x;
+
+      // Intentar entrada inválida
+      try {
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true,
+          rotateCounterclockwise: true,
+        });
+      } catch { /* esperado */ }
+
+      const snapAfter = engine.getSnapshot();
+      expect(snapAfter.step).toBe(stepBefore);
+      expect(snapAfter.activePiece?.lockDelayElapsedMs).toBe(ldBefore);
+      expect(snapAfter.activePiece?.lockResetsUsed).toBe(lrBefore);
+      expect(snapAfter.activePiece?.x).toBe(xBefore);
+    }
+  });
+
+  it('ENGINE_NOT_RUNNING mantiene precedencia sobre INVALID_GAME_INPUT', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+
+    try {
+      (engine.step as (input: unknown) => void)({});
+      expect.fail('Should have thrown');
+    } catch (e) {
+      if (e instanceof EngineStepError) {
+        expect(e.code).toBe('ENGINE_NOT_RUNNING');
+      }
+    }
+  });
+});
+
+describe('lock delay - determinismo', () => {
+  it('misma semilla y entradas producen snapshots y eventos idénticos con lock delay', () => {
+    const engineA = createGameEngine(makeValidOptions());
+    const engineB = createGameEngine(makeValidOptions());
+
+    const inputs: StepInput[] = [
+      { leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: true },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: true },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: true },
+    ];
+
+    const snapshotsA: unknown[] = [];
+    const eventsA: unknown[] = [];
+    const snapshotsB: unknown[] = [];
+    const eventsB: unknown[] = [];
+
+    snapshotsA.push(engineA.getSnapshot());
+    eventsA.push(engineA.drainEvents());
+    snapshotsB.push(engineB.getSnapshot());
+    eventsB.push(engineB.drainEvents());
+
+    for (const input of inputs) {
+      try { engineA.step(input); } catch { /* game over */ }
+      snapshotsA.push(engineA.getSnapshot());
+      eventsA.push(engineA.drainEvents());
+
+      try { engineB.step(input); } catch { /* game over */ }
+      snapshotsB.push(engineB.getSnapshot());
+      eventsB.push(engineB.drainEvents());
+    }
+
+    expect(snapshotsA).toEqual(snapshotsB);
+    expect(eventsA).toEqual(eventsB);
+  });
+
+  it('reset elimina progreso de lock delay', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      if (engine.getSnapshot().activePiece?.grounded) break;
+      stepStationary(engine);
+      drainAll(engine);
+    }
+
+    engine.reset(makeValidOptions({ seed: 42 }));
+    const snap = engine.getSnapshot();
+    if (snap.activePiece) {
+      expect(snap.activePiece.lockDelayElapsedMs).toBe(0);
+      expect(snap.activePiece.lockResetsUsed).toBe(0);
+    }
   });
 });

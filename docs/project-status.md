@@ -107,6 +107,30 @@ Ver [Informe de implementación](implementation/0004-integracion-phaser.md).
 
 Ver [Informe de implementación](implementation/0005-das-arr-soft-drop.md).
 
+## Task [0006 — Lock delay y fijación diferida](tasks/0006-lock-delay-fijacion-diferida.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-19 |
+| **Resultado** | Lock delay determinista gobernado por `config.lockDelayMs` (500 ms) y `config.maxLockResets` (15). Gravedad y soft drop ya no fijan inmediatamente: la pieza pasa a estado apoyado y acumula tiempo lógico. Movimiento horizontal y rotación válidos reinician el temporizador y consumen un reinicio cuando la pieza está apoyada antes y después. Hard drop conserva fijación inmediata. `ActivePieceSnapshot` ampliado con `grounded`, `lockDelayElapsedMs` y `lockResetsUsed`. 265 tests pasan, lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Fijación diferida: gravedad y soft drop bloqueados inician el temporizador de lock delay en vez de fijar inmediatamente.
+- `isGrounded`: función pura derivada del tablero y posición, sin estado redundante.
+- Reinicios por movimiento horizontal (DAS/ARR incluidos) y rotación: solo cuando apoyada antes y después.
+- Límite de reinicios: al alcanzar `maxLockResets`, la pieza se fija en el mismo paso tras aplicar la acción.
+- Hard drop: mismo comportamiento inmediato, sin interacción con lock delay.
+- Temporizador exclusivamente lógico (`fixedStepMs` acumulado), sin `Date.now()` ni `setTimeout`.
+- `ActivePieceSnapshot` ampliado con 3 campos de solo lectura.
+- Phaser no implementa temporización de lock delay.
+- 34 nuevas pruebas sobre las 231 existentes (265 totales).
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0006-lock-delay-fijacion-diferida.md).
+
 ## Siguiente tarea
 
-Pendiente de definir en su propia especificación.
+La tarea 0007 se definirá tras revisar la implementación de 0006 y validar manualmente la sensación de control. Candidatas razonables mencionadas en `docs/rautfall.md`: pieza fantasma, hold, indicador visual de lock delay, puntuación. Ninguna se asume automáticamente como alcance de la siguiente tarea hasta que se redacte su propia especificación.

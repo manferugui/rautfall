@@ -45,6 +45,11 @@ export type GameEvent =
  * (x→derecha, y→abajo). `cells` son las celdas que ocupa ya resueltas a
  * coordenadas absolutas del tablero (no relativas al origen), listas para
  * componerse directamente sobre `EngineSnapshot['board']`.
+ *
+ * `grounded` indica si la pieza no puede descender una fila en el estado
+ * actual. `lockDelayElapsedMs` es el tiempo lógico acumulado en que la pieza
+ * ha estado apoyada. `lockResetsUsed` es el número de reinicios de lock delay
+ * consumidos por acciones válidas desde que esta pieza se generó.
  */
 export type ActivePieceSnapshot = Readonly<{
   type: PieceType;
@@ -52,6 +57,9 @@ export type ActivePieceSnapshot = Readonly<{
   y: number;
   orientation: Orientation;
   cells: ReadonlyArray<Readonly<{ x: number; y: number }>>;
+  grounded: boolean;
+  lockDelayElapsedMs: number;
+  lockResetsUsed: number;
 }>;
 
 export type EngineSnapshot = Readonly<{
@@ -346,6 +354,26 @@ function activePieceCells(piece: ActivePiece): Cell[] {
   return computeAbsoluteCells(piece.type, piece.x, piece.y, piece.orientation);
 }
 
+/**
+ * Determina si la pieza activa está apoyada: no puede descender una fila
+ * en su posición y orientación actuales.
+ * Función pura: deriva el resultado del tablero y la posición/orientación
+ * actuales, sin efectos secundarios.
+ */
+function isGrounded(
+  board: (PieceType | null)[][],
+  activePiece: ActivePiece | null,
+): boolean {
+  if (!activePiece) return false;
+  const candidateCells = computeAbsoluteCells(
+    activePiece.type,
+    activePiece.x,
+    activePiece.y + 1,
+    activePiece.orientation,
+  );
+  return isCollision(board, candidateCells);
+}
+
 // ── Estado de temporización horizontal ──────────────────────────────────
 
 type HorizontalPriority = 'left' | 'right' | null;
@@ -464,6 +492,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   let nextPieceType: PieceType | null = null;
   let verticalProgress = 0;
   let clearedLines = 0;
+  let lockDelayElapsedMs = 0;
+  let lockResetsUsed = 0;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
@@ -488,6 +518,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     nextPieceType = secondType;
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
+    lockDelayElapsedMs = 0;
+    lockResetsUsed = 0;
   }
 
   function lockActivePiece(): void {
@@ -497,6 +529,29 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       board[cell.y]![cell.x] = activePiece.type;
     }
     eventQueue.push({ type: 'pieceLocked', step: currentStep, piece: activePiece.type });
+  }
+
+  /**
+   * Secuencia completa de fijación: escribe la pieza en el tablero, emite
+   * `pieceLocked`, elimina líneas, spawn de la siguiente pieza o game over.
+   * Reinicia los contadores de lock delay para la nueva pieza.
+   */
+  function lockAndProcess(): void {
+    lockActivePiece();
+
+    // Eliminación de líneas
+    const lineIndices = clearLines();
+    if (lineIndices.length > 0) {
+      eventQueue.push({
+        type: 'linesCleared',
+        step: currentStep,
+        lines: lineIndices.length,
+        lineIndices: Object.freeze([...lineIndices]),
+      });
+    }
+
+    // Spawn de la siguiente pieza
+    spawnNextPiece();
   }
 
   function clearLines(): number[] {
@@ -545,23 +600,54 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     activePiece = { type: pieceType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
+    lockDelayElapsedMs = 0;
+    lockResetsUsed = 0;
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: pieceType });
   }
 
   /**
    * Intenta mover la pieza activa una celda en la dirección `dir` (-1 = izquierda, +1 = derecha).
-   * Si el movimiento es válido, lo aplica y emite `pieceMoved` con motivo `'horizontal'`.
+   * Si el movimiento es válido, lo aplica, emite `pieceMoved` con motivo `'horizontal'`,
+   * y evalúa el reinicio de lock delay.
    * Devuelve `true` si el movimiento tuvo éxito, `false` si fue bloqueado.
    */
   function tryMoveHorizontal(dir: -1 | 1): boolean {
     if (!activePiece) return false;
+
+    // Evaluar apoyo antes del movimiento (para reinicio de lock delay)
+    const groundedBefore = isGrounded(board, activePiece);
+
     const newX = activePiece.x + dir;
     const cells = computeAbsoluteCells(activePiece.type, newX, activePiece.y, activePiece.orientation);
     if (!isCollision(board, cells)) {
       activePiece.x = newX;
       eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'horizontal' });
+
+      // Evaluar reinicio de lock delay tras el movimiento
+      if (groundedBefore) {
+        const groundedAfter = isGrounded(board, activePiece);
+        if (groundedAfter) {
+          // Reinicia temporizador y consume un reinicio
+          lockDelayElapsedMs = 0;
+          lockResetsUsed += 1;
+
+          // Verificar límite de reinicios
+          if (lockResetsUsed >= config.maxLockResets) {
+            // Fijar inmediatamente (la pieza ya está en su nueva posición)
+            lockAndProcess();
+            // Detener el paso (quien llama debe comprobar si activePiece es null)
+            return true;
+          }
+        } else {
+          // Movimiento válido que deja la pieza en el aire: tiempo a 0, sin consumir reinicio
+          lockDelayElapsedMs = 0;
+        }
+      }
+      // Si !groundedBefore, no hay interacción con lock delay (lockDelayElapsedMs ya es 0)
       return true;
     }
+
+    // Movimiento bloqueado: no muta nada
     return false;
   }
 
@@ -575,6 +661,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     horizontalState.hasReachedDas = false;
     // Movimiento inmediato
     tryMoveHorizontal(dir === 'left' ? -1 : 1);
+    // Si el movimiento consumió el último reinicio y fijó, detenemos la propagación
+    // — el resto del motor comprueba activePiece
   }
 
   /**
@@ -584,6 +672,14 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     horizontalState.priority = null;
     horizontalState.accumulatorMs = 0;
     horizontalState.hasReachedDas = false;
+  }
+
+  /**
+   * Comprueba si la pieza activa sigue existiendo tras una posible fijación
+   * por límite de reinicios. Si se fijó, detiene el procesamiento del paso.
+   */
+  function continueIfActive(): boolean {
+    return activePiece !== null && status !== 'gameOver';
   }
 
   /**
@@ -650,12 +746,15 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         horizontalState.accumulatorMs -= config.dasMs;
         horizontalState.hasReachedDas = true;
         tryMoveHorizontal(dir);
+        // Si el movimiento fijó por límite de reinicios, no continuar con ARR
+        // (activePiece es null, el bucle while no se ejecuta)
       }
 
-      if (horizontalState.hasReachedDas) {
+      if (horizontalState.hasReachedDas && activePiece) {
         while (horizontalState.accumulatorMs >= config.arrMs) {
           horizontalState.accumulatorMs -= config.arrMs;
           tryMoveHorizontal(dir);
+          if (!activePiece) break; // Fijado por límite de reinicios, detener
         }
       }
     }
@@ -663,6 +762,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
   /**
    * Procesa el descenso vertical (gravedad o soft drop). Paso 8 del orden lógico.
+   * Un intento de descenso bloqueado ya no fija la pieza: consume la unidad de
+   * progreso y continúa, para que el lock delay posterior decida la fijación.
    */
   function processVertical(input: StepInput): void {
     if (!activePiece) return;
@@ -678,36 +779,24 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       const nextY = activePiece.y + 1;
       const cells = computeAbsoluteCells(activePiece.type, activePiece.x, nextY, activePiece.orientation);
 
+      // Restar la unidad de progreso antes de comprobar colisión, para que
+      // incluso un intento bloqueado consuma la unidad (evita acumulación infinita)
+      verticalProgress -= VERTICAL_CELL_UNIT;
+
       if (!isCollision(board, cells)) {
         activePiece.y = nextY;
-        verticalProgress -= VERTICAL_CELL_UNIT;
         const reason = input.softDropHeld ? 'softDrop' : 'gravity';
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason });
-      } else {
-        // Colisión: fijar la pieza inmediatamente
-        lockActivePiece();
-
-        // 9. Eliminación de líneas
-        const lineIndices = clearLines();
-        if (lineIndices.length > 0) {
-          eventQueue.push({
-            type: 'linesCleared',
-            step: currentStep,
-            lines: lineIndices.length,
-            lineIndices: Object.freeze([...lineIndices]),
-          });
-        }
-
-        // 10. Spawn de la siguiente pieza
-        spawnNextPiece();
-        break; // Detener procesamiento vertical
       }
+      // Colisión: no fijar, no emitir evento. La unidad de progreso ya se consumió.
+      // El lock delay determinará la fijación al final del paso.
     }
   }
 
   function processStep(input: StepInput): void {
     // 5. Movimiento horizontal
     processHorizontal(input);
+    if (!continueIfActive()) return;
 
     // 6. Rotación
     if (activePiece) {
@@ -715,12 +804,38 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       const rotateCCW = input.rotateCounterclockwise === true;
 
       if (rotateCW || rotateCCW) {
+        // Evaluar apoyo antes de la rotación
+        const groundedBefore = isGrounded(board, activePiece);
+
         const rotated = tryRotate(board, activePiece, rotateCW);
         if (rotated) {
           eventQueue.push({ type: 'pieceRotated', step: currentStep, orientation: activePiece.orientation });
+
+          // Evaluar reinicio de lock delay tras la rotación
+          if (groundedBefore) {
+            const groundedAfter = isGrounded(board, activePiece);
+            if (groundedAfter) {
+              // Reinicia temporizador y consume un reinicio
+              lockDelayElapsedMs = 0;
+              lockResetsUsed += 1;
+
+              // Verificar límite de reinicios
+              if (lockResetsUsed >= config.maxLockResets) {
+                // Fijar inmediatamente (la pieza ya está en su nueva posición/orientación)
+                lockAndProcess();
+                return; // Detener el paso
+              }
+            } else {
+              // Rotación que deja la pieza en el aire: tiempo a 0, sin consumir reinicio
+              lockDelayElapsedMs = 0;
+            }
+          }
+          // Si !groundedBefore, no hay interacción con lock delay
         }
+        // Rotación inválida: no muta nada, no interactúa con lock delay
       }
     }
+    if (!continueIfActive()) return;
 
     // 7. Hard drop
     if (input.hardDrop && activePiece) {
@@ -745,6 +860,25 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
     // 8. Gravedad o soft drop (solo si no hubo hard drop)
     processVertical(input);
+    if (!continueIfActive()) return;
+
+    // 9. Detección final de apoyo y avance del lock delay
+    if (activePiece) {
+      const groundedAtEndOfStep = isGrounded(board, activePiece);
+
+      if (groundedAtEndOfStep) {
+        lockDelayElapsedMs += config.fixedStepMs;
+
+        if (lockDelayElapsedMs >= config.lockDelayMs) {
+          // Fijar por expiración del temporizador
+          lockAndProcess();
+          return;
+        }
+      } else {
+        lockDelayElapsedMs = 0;
+        // lockResetsUsed se conserva (no se reinicia al salir del contacto)
+      }
+    }
   }
 
   spawnInitialPieces();
@@ -773,6 +907,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
     getSnapshot(): EngineSnapshot {
       const boardReadonly = boardToReadonly(board);
+      const grounded = isGrounded(board, activePiece);
       const activePieceSnap: ActivePieceSnapshot | null = activePiece
         ? Object.freeze({
             type: activePiece.type,
@@ -782,6 +917,9 @@ export function createGameEngine(options: EngineOptions): GameEngine {
             cells: Object.freeze(
               activePieceCells(activePiece).map((c) => Object.freeze({ x: c.x, y: c.y })),
             ),
+            grounded,
+            lockDelayElapsedMs,
+            lockResetsUsed,
           })
         : null;
 
@@ -819,6 +957,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       nextPieceType = null;
       verticalProgress = 0;
       clearedLines = 0;
+      lockDelayElapsedMs = 0;
+      lockResetsUsed = 0;
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 
@@ -838,6 +978,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         nextPieceType = secondType;
         resetHorizontalState(horizontalState);
         verticalProgress = 0;
+        lockDelayElapsedMs = 0;
+        lockResetsUsed = 0;
       }
 
       eventQueue.push({ type: 'engineReset', step: 0 });
