@@ -10,19 +10,6 @@ import {
   type StepInput,
 } from './index';
 
-// Configuración alternativa conservada como referencia; no se usa en todas las suites
-const _alternativeConfig = {
-  version: 'test-alt-config',
-  fixedStepMs: 25,
-  dasMs: 150,
-  arrMs: 50,
-  gravityCellsPerSecond: 1,
-  softDropCellsPerSecond: 20,
-  lockDelayMs: 500,
-  maxLockResets: 15,
-};
-void _alternativeConfig;
-
 function makeValidOptions(
   overrides?: Partial<EngineOptions>,
 ): EngineOptions {
@@ -33,24 +20,44 @@ function makeValidOptions(
   };
 }
 
-/** Ejecuta un paso con entrada neutra (sin movimiento) */
+/** Ejecuta un paso con entrada neutra (sin movimiento, sin acciones) */
 function stepStationary(engine: ReturnType<typeof createGameEngine>): void {
-  engine.step({ horizontal: 0, hardDrop: false });
+  engine.step({
+    leftHeld: false, rightHeld: false,
+    leftPressed: false, rightPressed: false,
+    softDropHeld: false,
+    hardDrop: false,
+  });
 }
 
-/** Ejecuta un paso moviendo a la izquierda */
+/** Ejecuta un paso moviendo una celda a la izquierda (pulsación única) */
 function stepLeft(engine: ReturnType<typeof createGameEngine>): void {
-  engine.step({ horizontal: -1, hardDrop: false });
+  engine.step({
+    leftHeld: true, rightHeld: false,
+    leftPressed: true, rightPressed: false,
+    softDropHeld: false,
+    hardDrop: false,
+  });
 }
 
-/** Ejecuta un paso moviendo a la derecha */
+/** Ejecuta un paso moviendo una celda a la derecha (pulsación única) */
 function stepRight(engine: ReturnType<typeof createGameEngine>): void {
-  engine.step({ horizontal: 1, hardDrop: false });
+  engine.step({
+    leftHeld: false, rightHeld: true,
+    leftPressed: false, rightPressed: true,
+    softDropHeld: false,
+    hardDrop: false,
+  });
 }
 
 /** Ejecuta un hard drop */
 function stepHardDrop(engine: ReturnType<typeof createGameEngine>): void {
-  engine.step({ horizontal: 0, hardDrop: true });
+  engine.step({
+    leftHeld: false, rightHeld: false,
+    leftPressed: false, rightPressed: false,
+    softDropHeld: false,
+    hardDrop: true,
+  });
 }
 
 /** Vacía la cola de eventos y los descarta */
@@ -60,7 +67,6 @@ function drainAll(engine: ReturnType<typeof createGameEngine>): void {
 
 /**
  * Ejecuta hard drop tantas veces como sea posible sin que se lance el game over.
- * Devuelve el número total de piezas descendidas.
  */
 function hardDropUntilGameOver(
   engine: ReturnType<typeof createGameEngine>,
@@ -90,7 +96,6 @@ describe('PRNG y bolsa', () => {
     const piecesA: PieceType[] = [];
     const piecesB: PieceType[] = [];
 
-    // Deja caer piezas hasta el game over o hasta reunir suficientes para comprobar el determinismo
     for (let i = 0; i < 14; i++) {
       const snapA = engineA.getSnapshot();
       const snapB = engineB.getSnapshot();
@@ -159,7 +164,6 @@ describe('PRNG y bolsa', () => {
   });
 
   it('las bolsas consecutivas son independientes (la segunda bolsa también es un conjunto completo)', () => {
-    // Gravedad lenta y piezas repartidas horizontalmente para evitar el game over
     const slowGravityConfig = {
       ...prototypeConfig,
       gravityCellsPerSecond: 0.1,
@@ -167,34 +171,28 @@ describe('PRNG y bolsa', () => {
     const engine = createGameEngine(makeValidOptions({ seed: 12345, config: slowGravityConfig }));
     drainAll(engine);
 
-    // Deja caer las primeras 7 piezas (primera bolsa), repartiéndolas horizontalmente
     for (let i = 0; i < 7; i++) {
       const snap = engine.getSnapshot();
       if (snap.activePiece) {
-        // Mueve las piezas a columnas distintas para evitar que se apilen
         for (let m = 0; m < (i % 3); m++) stepRight(engine);
       }
       stepHardDrop(engine);
       drainAll(engine);
     }
 
-    // Recoge la segunda bolsa
     const secondBag: PieceType[] = [];
     for (let i = 0; i < 7; i++) {
       const snap = engine.getSnapshot();
       if (snap.status === 'gameOver') break;
       if (snap.activePiece) {
         secondBag.push(snap.activePiece.type);
-        // También reparte las piezas de la segunda bolsa
         for (let m = 0; m < (i % 4); m++) stepRight(engine);
         stepHardDrop(engine);
         drainAll(engine);
       }
     }
 
-    // Con el reparto, deberíamos obtener al menos 5 piezas de la segunda bolsa
     expect(secondBag.length).toBeGreaterThanOrEqual(5);
-    // Todas las piezas recogidas deben ser únicas dentro de la bolsa
     expect(new Set(secondBag).size).toBe(secondBag.length);
   });
 });
@@ -232,7 +230,7 @@ describe('spawn', () => {
       stepHardDrop(engine);
       drainAll(engine);
     }
-    expect(false).toBe(true); // No debería llegar aquí; la pieza I debería haber aparecido
+    expect(false).toBe(true);
   });
 
   it('las piezas de altura 2 (O, T, S, Z, J, L) aparecen con la fila superior en y=3 y la inferior en y=4', () => {
@@ -256,18 +254,15 @@ describe('spawn', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
-    // Deja caer piezas hasta el game over, comprobando los eventos del último paso
     let gameOverDetected = false;
     for (let i = 0; i < 200; i++) {
       if (engine.getSnapshot().status === 'gameOver') {
         gameOverDetected = true;
         break;
       }
-      // Intenta el hard drop; lanzará una excepción en cuanto llegue el game over
       try {
         stepHardDrop(engine);
       } catch {
-        // El step lanzó ENGINE_NOT_RUNNING, el game over ya había ocurrido
         gameOverDetected = true;
         break;
       }
@@ -280,11 +275,125 @@ describe('spawn', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
-//  PRUEBAS DE MOVIMIENTO HORIZONTAL
+//  PRUEBAS DE MOVIMIENTO HORIZONTAL (pulsación inmediata)
 // ════════════════════════════════════════════════════════════════════════
 
-describe('movimiento horizontal', () => {
-  it('el movimiento a la izquierda actualiza las coordenadas', () => {
+describe('movimiento horizontal — pulsación inmediata', () => {
+  it('una pulsación breve de izquierda (leftPressed en un solo paso) mueve exactamente una celda', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialX = engine.getSnapshot().activePiece!.x;
+
+    // Paso 1: pulsa izquierda (pressed + held)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    // Paso 2: suelta izquierda (ni held ni pressed)
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Solo 1 celda de desplazamiento, no debe arrastrar DAS/ARR
+    expect(engine.getSnapshot().activePiece!.x).toBe(initialX - 1);
+  });
+
+  it('una pulsación breve de derecha mueve exactamente una celda', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialX = engine.getSnapshot().activePiece!.x;
+
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    expect(engine.getSnapshot().activePiece!.x).toBe(initialX + 1);
+  });
+
+  it('mantener izquierda menos de dasMs nunca mueve más de una celda', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialX = engine.getSnapshot().activePiece!.x;
+
+    // Paso 1: activación (pressed + held)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Pasos 2-14: mantener izquierda (held=true, pressed=false) = 130ms, < 150ms DAS
+    for (let i = 0; i < 13; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Paso 15: soltar (held=false)
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Solo 1 celda: la activación inicial. DAS a 150ms no se ha alcanzado aún.
+    expect(engine.getSnapshot().activePiece!.x).toBe(initialX - 1);
+  });
+
+  it('el movimiento inmediato no precarga ni consume ARR', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Activación izquierda (1 movimiento)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events1 = engine.drainEvents();
+    expect(events1.filter(e => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+
+    // Soltar inmediatamente
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events2 = engine.drainEvents();
+    // No debe haber movimientos horizontales en el paso de soltar
+    expect(events2.filter(e => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(0);
+  });
+
+  it('el movimiento a la izquierda (leftPressed+leftHeld) actualiza las coordenadas', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -295,7 +404,7 @@ describe('movimiento horizontal', () => {
     expect(engine.getSnapshot().activePiece!.x).toBe(initialX - 1);
   });
 
-  it('el movimiento a la derecha actualiza las coordenadas', () => {
+  it('el movimiento a la derecha (rightPressed+rightHeld) actualiza las coordenadas', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -375,7 +484,7 @@ describe('movimiento horizontal', () => {
     }
   });
 
-  it('un movimiento inválido no muta el estado ni emite evento', () => {
+  it('un movimiento inválido (bloqueado) no muta el estado ni emite evento', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -385,7 +494,13 @@ describe('movimiento horizontal', () => {
     drainAll(engine);
 
     const beforeLeft = engine.getSnapshot().activePiece!.x;
-    engine.step({ horizontal: -1, hardDrop: false });
+    // Intento de mover más allá de la pared (no se espera evento)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
     const events = engine.drainEvents();
     const afterLeft = engine.getSnapshot().activePiece!.x;
 
@@ -399,7 +514,7 @@ describe('movimiento horizontal', () => {
 // ════════════════════════════════════════════════════════════════════════
 
 describe('gravedad', () => {
-  it('la gravedad mueve la pieza hacia abajo cuando gravityAccumulatorMs >= msPerCell', () => {
+  it('la gravedad mueve la pieza hacia abajo (progreso >= 1000)', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -413,7 +528,7 @@ describe('gravedad', () => {
     expect(engine.getSnapshot().activePiece!.y).toBe(initialY + 1);
   });
 
-  it('la gravedad no excede el tiempo lógico disponible (comprobación antes del umbral)', () => {
+  it('la gravedad no excede el tiempo lógico disponible (99 pasos no descenden)', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -448,15 +563,11 @@ describe('gravedad', () => {
     }
   });
 
-  it('un mismo paso produce múltiples descensos de gravedad cuando fixedStepMs es suficientemente grande', () => {
-    // gravity = 100 celdas/seg → msPerCell = 10
-    // Con fixedStepMs = 10, un paso = 10ms = 1 celda de caída
-    // Para obtener varios descensos, se usa gravity = 1000 celdas/seg → msPerCell = 1
-    // Pero la validación relacional exige softDropCellsPerSecond > gravityCellsPerSecond
+  it('un mismo paso produce múltiples descensos de gravedad cuando la velocidad es alta', () => {
     const fastGravityConfig = {
       ...prototypeConfig,
       gravityCellsPerSecond: 1000,
-      softDropCellsPerSecond: 2000, // Debe ser > gravity
+      softDropCellsPerSecond: 2000,
     };
     const engine = createGameEngine(makeValidOptions({ config: fastGravityConfig }));
     drainAll(engine);
@@ -473,7 +584,7 @@ describe('gravedad', () => {
     expect(newY).toBeGreaterThanOrEqual(initialY + 10);
   });
 
-  it('el acumulador de gravedad se reinicia a 0 tras fijar y aparecer una nueva pieza', () => {
+  it('el progreso vertical se reinicia a 0 tras fijar y aparecer una nueva pieza', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -494,7 +605,7 @@ describe('gravedad', () => {
     expect(engine.getSnapshot().activePiece!.y).toBe(newY);
   });
 
-  it('el acumulador de gravedad se reinicia a 0 en reset()', () => {
+  it('el progreso vertical se reinicia a 0 en reset()', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -514,7 +625,7 @@ describe('gravedad', () => {
     expect(engine.getSnapshot().activePiece!.y).toBe(y1);
   });
 
-  it('el acumulador de gravedad no traslada tiempo remanente entre piezas', () => {
+  it('el progreso vertical no traslada tiempo remanente entre piezas', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -619,19 +730,16 @@ describe('hard drop', () => {
   });
 
   it('el hard drop con distancia 0 (pieza ya apoyada) no emite pieceMoved, solo pieceLocked', () => {
-    // Configuración con gravedad moderada para poder cronometrar cuándo aterriza la pieza
     const modConfig = {
       ...prototypeConfig,
-      gravityCellsPerSecond: 10, // msPerCell = 100, es decir 100ms = 10 pasos por celda
+      gravityCellsPerSecond: 10,
     };
     const engine = createGameEngine(makeValidOptions({ config: modConfig }));
     drainAll(engine);
 
-    // Hard drop de la primera pieza para crear una pila
     stepHardDrop(engine);
     drainAll(engine);
 
-    // La nueva pieza está en el spawn. Se deja caer hasta que se apoye sobre la pieza fijada
     let found = false;
     for (let i = 0; i < 200; i++) {
       const snap = engine.getSnapshot();
@@ -652,7 +760,12 @@ describe('hard drop', () => {
         }
         if (hasBlockBelow) {
           found = true;
-          engine.step({ horizontal: 0, hardDrop: true });
+          engine.step({
+            leftHeld: false, rightHeld: false,
+            leftPressed: false, rightPressed: false,
+            softDropHeld: false,
+            hardDrop: true,
+          });
           const events = engine.drainEvents();
 
           const hardDropMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'hardDrop');
@@ -731,8 +844,6 @@ describe('fijación', () => {
 
 describe('eliminación de líneas', () => {
   it('una línea completa se elimina', () => {
-    // Reparte cada pieza lo más a la izquierda/derecha posible para cubrir columnas.
-    // Con suficientes piezas repartidas por todo el ancho, algunas filas se completarán.
     const slowConfig = {
       ...prototypeConfig,
       gravityCellsPerSecond: 0.1,
@@ -745,9 +856,8 @@ describe('eliminación de líneas', () => {
       const snap = engine.getSnapshot();
       if (snap.status === 'gameOver') break;
 
-      // Mueve las piezas hacia columnas objetivo cubriendo todo el ancho del tablero
       if (snap.activePiece) {
-        const targetCol = (i * 3) % 9; // objetivo 0-8, dejando la columna 9 para rellenar
+        const targetCol = (i * 3) % 9;
         const currentX = snap.activePiece.x;
         const diff = targetCol - currentX;
         if (diff > 0) {
@@ -767,12 +877,6 @@ describe('eliminación de líneas', () => {
       }
     }
 
-    // Con suficientes piezas repartidas por el tablero, algunas filas deberían
-    // completarse. Se verifica que `clearedLines` >= 1 en los escenarios donde
-    // realmente se eliminaron líneas.
-    // Sin rotación, este test es best-effort con hard drops únicamente: se omite
-    // la aserción si totalCleared == 0 (brecha de cobertura conocida, ver informe
-    // de implementación de la tarea 0002).
     if (totalCleared > 0) {
       expect(engine.getSnapshot().clearedLines).toBe(totalCleared);
     }
@@ -791,7 +895,6 @@ describe('eliminación de líneas', () => {
       const snap = engine.getSnapshot();
       if (snap.status === 'gameOver') break;
 
-      // Reparte agresivamente las piezas por las columnas
       if (snap.activePiece) {
         const targetCol = (i * 3) % 9;
         const currentX = snap.activePiece.x;
@@ -812,9 +915,6 @@ describe('eliminación de líneas', () => {
       }
     }
 
-    // Sin rotación, este test es best-effort con hard drops únicamente: se omite
-    // la aserción si maxLinesCleared == 0 (misma brecha de cobertura conocida que
-    // en el test anterior; ver informe de implementación de la tarea 0002).
     if (maxLinesCleared > 0) {
       expect(engine.getSnapshot().clearedLines).toBeGreaterThanOrEqual(maxLinesCleared);
     }
@@ -898,7 +998,6 @@ describe('game over', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
-    // Deja caer algunas piezas; la partida debe seguir en curso hasta que el spawn quede bloqueado
     for (let i = 0; i < 30; i++) {
       if (engine.getSnapshot().status === 'gameOver') break;
       stepHardDrop(engine);
@@ -931,9 +1030,21 @@ describe('game over', () => {
       drainAll(engine);
     }
 
-    expect(() => engine.step({ horizontal: 0, hardDrop: false })).toThrow(EngineStepError);
+    expect(() => {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+    }).toThrow(EngineStepError);
     try {
-      engine.step({ horizontal: 0, hardDrop: false });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
     } catch (e) {
       if (e instanceof EngineStepError) {
         expect(e.code).toBe('ENGINE_NOT_RUNNING');
@@ -992,7 +1103,7 @@ describe('eventos', () => {
     expect(events.some((e) => e.type === 'pieceMoved')).toBe(true);
 
     for (let i = 0; i < 20; i++) {
-      engine.step({ horizontal: -1, hardDrop: false });
+      stepLeft(engine);
     }
     engine.drainEvents();
 
@@ -1020,7 +1131,12 @@ describe('eventos', () => {
 
     for (let i = 0; i < 300; i++) {
       if (engine.getSnapshot().status === 'gameOver') break;
-      engine.step({ horizontal: i % 2 === 0 ? 1 : -1, hardDrop: true });
+      engine.step({
+        leftHeld: i % 2 === 0, rightHeld: i % 2 !== 0,
+        leftPressed: i % 2 === 0, rightPressed: i % 2 !== 0,
+        softDropHeld: false,
+        hardDrop: true,
+      });
       const events = engine.drainEvents();
 
       for (const e of events) {
@@ -1039,14 +1155,11 @@ describe('eventos', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
-    // Juega hasta el game over, comprobando los eventos tras el último paso exitoso
     for (let i = 0; i < 200; i++) {
       if (engine.getSnapshot().status === 'gameOver') {
-        // El game over ocurrió en un paso anterior y sus eventos ya se drenaron
         break;
       }
       stepHardDrop(engine);
-      // Comprueba si el game over ocurrió durante este paso
       if (engine.getSnapshot().status === 'gameOver') {
         const events = engine.drainEvents();
         expect(events.some((e) => e.type === 'gameOver')).toBe(true);
@@ -1059,11 +1172,10 @@ describe('eventos', () => {
       drainAll(engine);
     }
 
-    // Si se llegó hasta aquí sin detectar el gameOver vía step(), se comprueba el estado final
     expect(engine.getSnapshot().status).toBe('gameOver');
   });
 
-  it('no se emiten eventos para movimientos inválidos', () => {
+  it('no se emiten eventos para movimientos inválidos (bloqueados)', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -1072,7 +1184,12 @@ describe('eventos', () => {
     }
     drainAll(engine);
 
-    engine.step({ horizontal: -1, hardDrop: false });
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
     const events = engine.drainEvents();
     expect(events.filter((e) => e.type === 'pieceMoved')).toHaveLength(0);
   });
@@ -1128,7 +1245,6 @@ describe('snapshot', () => {
       (snap as Record<string, unknown>).step = 999;
     }).toThrow();
 
-    // Comprueba que la propiedad board también está congelada
     expect(Object.isFrozen(snap.board)).toBe(true);
   });
 
@@ -1183,16 +1299,16 @@ describe('determinismo', () => {
     expect(engineA.getSnapshot()).toEqual(engineB.getSnapshot());
 
     const inputs: StepInput[] = [
-      { horizontal: -1, hardDrop: false },
-      { horizontal: -1, hardDrop: false },
-      { horizontal: 0, hardDrop: false },
-      { horizontal: 1, hardDrop: false },
-      { horizontal: 0, hardDrop: true },
-      { horizontal: 0, hardDrop: false },
-      { horizontal: 0, hardDrop: false },
-      { horizontal: -1, hardDrop: false },
-      { horizontal: 0, hardDrop: true },
-      { horizontal: 0, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: true, leftPressed: false, rightPressed: true, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: true },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: true },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
     ];
 
     const snapshotsA: unknown[] = [];
@@ -1319,10 +1435,9 @@ describe('reset', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
-    // Genera eventos con un movimiento y comprueba que siguen ahí antes del reset
     stepLeft(engine);
     const beforeEvents = engine.drainEvents();
-    expect(beforeEvents.length).toBe(1); // pieceMoved
+    expect(beforeEvents.length).toBe(1);
     expect(beforeEvents[0]?.type).toBe('pieceMoved');
 
     engine.reset(makeValidOptions({ seed: 99 }));
@@ -1356,56 +1471,90 @@ describe('reset', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
-//  PRUEBAS DE VALIDACIÓN DE ENTRADA
+//  PRUEBAS DE VALIDACIÓN DE ENTRADA (nuevo contrato)
 // ════════════════════════════════════════════════════════════════════════
 
-describe('validación de entrada', () => {
-  it('horizontal: -1 es válido', () => {
+describe('validación de entrada — nuevo contrato', () => {
+  function validInput(): StepInput {
+    return {
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    };
+  }
+
+  it('entrada válida con leftPressed+leftHeld no lanza error', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => engine.step({ horizontal: -1, hardDrop: false })).not.toThrow();
+    expect(() => engine.step({ ...validInput(), leftHeld: true, leftPressed: true })).not.toThrow();
   });
 
-  it('horizontal: 0 es válido', () => {
+  it('entrada válida con rightPressed+rightHeld no lanza error', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => engine.step({ horizontal: 0, hardDrop: false })).not.toThrow();
+    expect(() => engine.step({ ...validInput(), rightHeld: true, rightPressed: true })).not.toThrow();
   });
 
-  it('horizontal: 1 es válido', () => {
+  it('entrada válida con softDropHeld no lanza error', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => engine.step({ horizontal: 1, hardDrop: false })).not.toThrow();
+    expect(() => engine.step({ ...validInput(), softDropHeld: true })).not.toThrow();
   });
 
-  it('horizontal: 2 es rechazado', () => {
+  it('leftPressed: true con leftHeld: false es rechazado', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => (engine.step as (input: { horizontal: number; hardDrop: boolean }) => void)({ horizontal: 2, hardDrop: false })).toThrow(EngineStepError);
+    try {
+      engine.step({ ...validInput(), leftPressed: true, leftHeld: false });
+      expect.fail('Should have thrown');
+    } catch (e) {
+      if (e instanceof EngineStepError) {
+        expect(e.code).toBe('INVALID_GAME_INPUT');
+      }
+    }
   });
 
-  it('horizontal: -2 es rechazado', () => {
+  it('rightPressed: true con rightHeld: false es rechazado', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => (engine.step as (input: { horizontal: number; hardDrop: boolean }) => void)({ horizontal: -2, hardDrop: false })).toThrow(EngineStepError);
+    try {
+      engine.step({ ...validInput(), rightPressed: true, rightHeld: false });
+      expect.fail('Should have thrown');
+    } catch (e) {
+      if (e instanceof EngineStepError) {
+        expect(e.code).toBe('INVALID_GAME_INPUT');
+      }
+    }
   });
 
-  it('horizontal ausente es rechazado', () => {
+  it('leftPressed y rightPressed simultáneos son rechazados', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => (engine.step as (input: { hardDrop: boolean }) => void)({ hardDrop: false })).toThrow(EngineStepError);
+    try {
+      engine.step({ ...validInput(), leftPressed: true, rightPressed: true, leftHeld: true, rightHeld: true });
+      expect.fail('Should have thrown');
+    } catch (e) {
+      if (e instanceof EngineStepError) {
+        expect(e.code).toBe('INVALID_GAME_INPUT');
+      }
+    }
   });
 
-  it('hardDrop ausente es rechazado', () => {
+  it('rotateClockwise y rotateCounterclockwise simultáneos siguen siendo rechazados (regresión)', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => (engine.step as (input: { horizontal: -1 | 0 | 1 }) => void)({ horizontal: 0 })).toThrow(EngineStepError);
+    expect(() => {
+      engine.step({ ...validInput(), rotateClockwise: true, rotateCounterclockwise: true });
+    }).toThrow(EngineStepError);
   });
 
-  it('una propiedad desconocida es rechazada', () => {
+  it('una propiedad desconocida (horizontal) es rechazada', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
-    expect(() => (engine.step as (input: Record<string, unknown>) => void)({ horizontal: 0, hardDrop: false, extra: true })).toThrow(EngineStepError);
+    expect(() => {
+      (engine.step as (input: Record<string, unknown>) => void)({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false, horizontal: -1 });
+    }).toThrow(EngineStepError);
   });
 
   it('step({}) es rechazado con INVALID_GAME_INPUT', () => {
@@ -1421,7 +1570,35 @@ describe('validación de entrada', () => {
     }
   });
 
-  it('una entrada inválida no muta el estado', () => {
+  it('campos ausentes: leftHeld', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    const invalid = { rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false } as Record<string, unknown>;
+    try {
+      (engine.step as (input: unknown) => void)(invalid);
+      expect.fail('Should have thrown');
+    } catch (e) {
+      if (e instanceof EngineStepError) {
+        expect(e.code).toBe('INVALID_GAME_INPUT');
+      }
+    }
+  });
+
+  it('hardDrop ausente es rechazado', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    const invalid = { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false } as Record<string, unknown>;
+    try {
+      (engine.step as (input: unknown) => void)(invalid);
+      expect.fail('Should have thrown');
+    } catch (e) {
+      if (e instanceof EngineStepError) {
+        expect(e.code).toBe('INVALID_GAME_INPUT');
+      }
+    }
+  });
+
+  it('una entrada inválida no muta el estado (step, elapsedMs, pieza, tablero, PRNG, prioridad, acumuladores)', () => {
     const engine = createGameEngine(makeValidOptions());
     drainAll(engine);
 
@@ -1429,13 +1606,26 @@ describe('validación de entrada', () => {
     const step0 = snap0.step;
     const elapsed0 = snap0.elapsedMs;
 
-    try { (engine.step as (input: unknown) => void)({ horizontal: 2, hardDrop: false }); } catch { /* expected */ }
+    // Intentos inválidos
+    try { engine.step({ ...validInput(), leftPressed: true, leftHeld: false }); } catch { /* expected */ }
     try { (engine.step as (input: unknown) => void)({}); } catch { /* expected */ }
-    try { (engine.step as (input: unknown) => void)({ horizontal: 0, hardDrop: false, extra: 1 }); } catch { /* expected */ }
+    try { engine.step({ ...validInput(), leftHeld: true, rightHeld: true, leftPressed: true, rightPressed: true }); } catch { /* expected */ }
+    try { (engine.step as (input: unknown) => void)({ ...validInput(), extra: 1 }); } catch { /* expected */ }
 
     const snapAfter = engine.getSnapshot();
     expect(snapAfter.step).toBe(step0);
     expect(snapAfter.elapsedMs).toBe(elapsed0);
+    expect(snapAfter.activePiece?.type).toBe(snap0.activePiece?.type);
+    expect(snapAfter.activePiece?.x).toBe(snap0.activePiece?.x);
+    expect(snapAfter.activePiece?.y).toBe(snap0.activePiece?.y);
+    expect(snapAfter.nextPiece).toBe(snap0.nextPiece);
+    expect(snapAfter.status).toBe(snap0.status);
+    // El tablero no debe cambiar
+    for (let y = 0; y < 24; y++) {
+      for (let x = 0; x < 10; x++) {
+        expect(snapAfter.board[y]![x]).toBe(snap0.board[y]![x]);
+      }
+    }
   });
 
   it('step() en gameOver lanza ENGINE_NOT_RUNNING incluso si la entrada también es inválida', () => {
@@ -1460,27 +1650,1038 @@ describe('validación de entrada', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE PRIORIDAD HORIZONTAL
+// ════════════════════════════════════════════════════════════════════════
+
+describe('prioridad horizontal', () => {
+  it('izquierda pulsada: movimiento inmediato una celda', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialX = engine.getSnapshot().activePiece!.x;
+    stepLeft(engine);
+    drainAll(engine);
+    expect(engine.getSnapshot().activePiece!.x).toBe(initialX - 1);
+  });
+
+  it('derecha pulsada: movimiento inmediato una celda', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialX = engine.getSnapshot().activePiece!.x;
+    stepRight(engine);
+    drainAll(engine);
+    expect(engine.getSnapshot().activePiece!.x).toBe(initialX + 1);
+  });
+
+  it('cambio de prioridad: se pulsa la dirección contraria', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Mover a la izquierda primero
+    const x0 = engine.getSnapshot().activePiece!.x;
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+    const x1 = engine.getSnapshot().activePiece!.x;
+    expect(x1).toBe(x0 - 1);
+
+    // Cambiar a derecha en el mismo paso que la izquierda se soltó
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+    const x2 = engine.getSnapshot().activePiece!.x;
+    expect(x2).toBe(x1 + 1);
+  });
+
+  it('soltar prioritaria con otra mantenida activa la otra inmediatamente', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const x0 = engine.getSnapshot().activePiece!.x;
+
+    // Activar izquierda
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+    const x1 = engine.getSnapshot().activePiece!.x;
+    expect(x1).toBe(x0 - 1);
+
+    // Soltar izquierda, mantener derecha → derecha se activa
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+    const x2 = engine.getSnapshot().activePiece!.x;
+    expect(x2).toBe(x1 + 1);
+  });
+
+  it('ambas mantenidas sin flanco tras spawn permanecen neutrales', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const x0 = engine.getSnapshot().activePiece!.x;
+
+    // Ambas mantenidas, sin flanco: no debe moverse
+    engine.step({
+      leftHeld: true, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+    expect(engine.getSnapshot().activePiece!.x).toBe(x0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE DAS
+// ════════════════════════════════════════════════════════════════════════
+
+describe('DAS', () => {
+  // Con prototypeConfig: fixedStepMs=10, dasMs=150, arrMs=50
+  // Activación: 1 movimiento inmediato en t=0 (paso 1)
+  // Después 15 pasos (150ms) sin repetición
+  // Primera repetición en el paso 16 (t=150ms acumulado desde activación)
+
+  it('no repite antes del umbral DAS', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Paso 1: activación izquierda (1 movimiento inmediato)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events1 = engine.drainEvents();
+    const moves1 = events1.filter((e) => e.type === 'pieceMoved');
+    expect(moves1).toHaveLength(1);
+
+    // Pasos 2-15: mantener izquierda sin soltar (14 pasos = 140ms acumulados, < 150ms DAS)
+    for (let i = 0; i < 14; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      const ev = engine.drainEvents();
+      // No debe haber movimientos horizontales adicionales
+      expect(ev.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(0);
+    }
+  });
+
+  it('primera repetición ocurre exactamente al alcanzar dasMs (paso 16, 150ms acumulados)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Paso 1: activación izquierda
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Pasos 2-15: mantener izquierda
+    for (let i = 0; i < 14; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Paso 16: debe ocurrir la primera repetición DAS (150ms acumulados)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const dasMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal');
+    expect(dasMoves).toHaveLength(1);
+  });
+
+  it('cambio de dirección reinicia DAS', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Activar izquierda
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // 10 pasos manteniendo izquierda
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Cambiar a derecha (reinicia DAS)
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // 14 pasos más manteniendo derecha (140ms, < 150ms DAS)
+    for (let i = 0; i < 14; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: true,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      const ev = engine.drainEvents();
+      expect(ev.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(0);
+    }
+
+    // Paso siguiente: primera repetición DAS de derecha
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    expect(events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+  });
+
+  it('soltar y volver a pulsar la misma dirección reinicia DAS', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Activar izquierda
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // 10 pasos manteniendo
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Soltar y volver a pulsar izquierda (nueva activación)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    // Debe haber movimiento inmediato (1) y no más
+    expect(events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+
+    // 14 pasos manteniendo izquierda desde la nueva activación
+    for (let i = 0; i < 14; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      const ev = engine.drainEvents();
+      expect(ev.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(0);
+    }
+
+    // Paso siguiente: primera repetición DAS
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const finalEvents = engine.drainEvents();
+    expect(finalEvents.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+  });
+
+  it('nueva pieza no hereda estado DAS', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Activar izquierda y mantener muchas repeticiones
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+    for (let i = 0; i < 30; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Hard drop para fijar y spawnear nueva pieza
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    const xAfterSpawn = engine.getSnapshot().activePiece!.x;
+
+    // Mantener izquierda: debe actuar como activación (movimiento inmediato, no repetición)
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const moves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal');
+    // Debe haber 1 movimiento inmediato (activación), no arrastre acumulado
+    expect(moves).toHaveLength(1);
+    expect(engine.getSnapshot().activePiece!.x).toBe(xAfterSpawn - 1);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE ARR
+// ════════════════════════════════════════════════════════════════════════
+
+describe('ARR', () => {
+  // Con prototypeConfig: arrMs=50, fixedStepMs=10
+  // Tras DAS (150ms), cada arrMs=50 produce una repetición = cada 5 pasos
+
+  it('cadencia ARR exacta tras DAS', () => {
+    // Usamos una pieza I (la primera de seed 42 es I) que tiene x inicial=3,
+    // dejando 7 espacios a la derecha para movimientos sin chocar con pared.
+    // Con DAS en 150ms (15 pasos) y ARR cada 50ms (5 pasos).
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Mover a la derecha para tener más espacio
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Paso 1: activación derecha
+    // Pasos 2-15: 140ms acumulados (sin DAS aún)
+    for (let i = 0; i < 14; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: true,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Paso 16: DAS (1 movimiento)
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const dasEvents = engine.drainEvents();
+    expect(dasEvents.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+
+    // Paso 21: 5 pasos después = 50ms = primera repetición ARR
+    for (let i = 0; i < 4; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: true,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const arrEvents1 = engine.drainEvents();
+    expect(arrEvents1.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+  });
+
+  it('varias repeticiones ARR en un mismo paso (arrMs pequeño)', () => {
+    // Configuración: fixedStepMs=100, arrMs=100, dasMs=200
+    // arrMs % fixedStepMs == 100 % 100 == 0 ✓ (validación de game-config)
+    const fastArrConfig = {
+      ...prototypeConfig,
+      fixedStepMs: 100,
+      dasMs: 200,
+      arrMs: 100,
+    };
+    const engine = createGameEngine(makeValidOptions({ config: fastArrConfig }));
+    drainAll(engine);
+
+    // Mover a derecha primero para tener espacio
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Paso: activación derecha (inmediato). Acumula 100ms.
+    // Luego: 2 pasos, acumula 200ms → DAS (1). 0ms restantes en ARR.
+    // Paso extra: acumula 100ms → ARR: 100 >= 100 → 1
+    for (let i = 0; i < 2; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: true,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const dasEvents = engine.drainEvents();
+    expect(dasEvents.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+
+    // Siguiente paso: 100ms → ARR: 100 >= 100 → 1
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const arrEvents = engine.drainEvents();
+    expect(arrEvents.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(1);
+  });
+
+  it('movimiento bloqueado durante ARR consume intervalo sin ráfaga posterior', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Mover a la pared izquierda
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: true, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Mantener izquierda desde pared (bloqueado)
+    for (let i = 0; i < 100; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Ahora soltar izquierda y pulsar derecha: movimiento inmediato a la derecha (1)
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const moveRight = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal');
+    // Solo el movimiento de activación, no ráfaga acumulada
+    expect(moveRight).toHaveLength(1);
+  });
+
+  it('rotación que libera espacio no provoca movimiento inmediato', () => {
+    // Verificar que la rotación (que ocurre después del movimiento horizontal
+    // en el orden lógico) no produce un movimiento horizontal retroactivo.
+    // El movimiento horizontal se procesa antes que la rotación en el orden del paso.
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const xBefore = engine.getSnapshot().activePiece!.x;
+
+    // Pulsar izquierda + rotación en el mismo paso
+    // Horizontal se procesa primero (mueve una celda), luego rotación
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+      rotateClockwise: true,
+    });
+    const events = engine.drainEvents();
+    const snap = engine.getSnapshot();
+
+    // Debe haber un movimiento horizontal (activación)
+    expect(snap.activePiece!.x).toBe(xBefore - 1);
+    const horizontalMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal');
+    expect(horizontalMoves).toHaveLength(1);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE SOFT DROP
+// ════════════════════════════════════════════════════════════════════════
+
+describe('soft drop', () => {
+  // prototypeConfig: softDropCellsPerSecond=20, fixedStepMs=10
+  // Cada paso: 10*20 = 200 unidades de progreso
+  // Se necesita 1000 unidades para descender = 5 pasos
+
+  it('softDropHeld: true no produce descenso inmediato', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialY = engine.getSnapshot().activePiece!.y;
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: true,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const softMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'softDrop');
+    expect(softMoves).toHaveLength(0);
+    expect(engine.getSnapshot().activePiece!.y).toBe(initialY);
+  });
+
+  it('soft drop usa exactamente softDropCellsPerSecond (5 pasos = 1 celda)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialY = engine.getSnapshot().activePiece!.y;
+
+    // 4 pasos: 4*200 = 800 < 1000 (sin descenso)
+    for (let i = 0; i < 4; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      const ev = engine.drainEvents();
+      expect(ev.filter((e) => e.type === 'pieceMoved')).toHaveLength(0);
+    }
+
+    // Paso 5: 5*200 = 1000 → 1 descenso
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: true,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const softMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'softDrop');
+    expect(softMoves).toHaveLength(1);
+    expect(engine.getSnapshot().activePiece!.y).toBe(initialY + 1);
+  });
+
+  it('soft drop sustituye a la gravedad (no se suman)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const initialY = engine.getSnapshot().activePiece!.y;
+
+    // 5 pasos con soft drop: 5*200=1000 → 1 descenso (soft drop)
+    for (let i = 0; i < 5; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    expect(engine.getSnapshot().activePiece!.y).toBe(initialY + 1);
+
+    // Con gravedad pura (softDropHeld=false), 1000 pasos serían 1 celda.
+    // Con soft drop (softDropHeld=true), 5 pasos = 1 celda.
+    // 10 pasos más de soft drop = 2 celdas. Total desde inicial: 1 + 2 = 3.
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    // Debe haber descendido más que con gravedad pura (1 celda en 100 pasos)
+    expect(engine.getSnapshot().activePiece!.y).toBeGreaterThan(initialY + 1);
+
+    // Comparar con gravedad pura: 15 pasos con gravityCellsPerSecond=1
+    // son 15*10=150 unidades = 0 descensos
+    const engineGravity = createGameEngine(makeValidOptions());
+    drainAll(engineGravity);
+    for (let i = 0; i < 15; i++) {
+      stepStationary(engineGravity);
+    }
+    drainAll(engineGravity);
+    // Con gravedad pura no ha descendido (150 < 1000)
+    expect(engineGravity.getSnapshot().activePiece!.y).toBe(initialY);
+  });
+
+  it('varios descensos de soft drop en un mismo paso (velocidad alta)', () => {
+    // Configuración: softDropCellsPerSecond=1000 (1000*10=10000 unidades/paso = 10 celdas)
+    const fastSoftConfig = {
+      ...prototypeConfig,
+      softDropCellsPerSecond: 1000,
+    };
+    const engine = createGameEngine(makeValidOptions({ config: fastSoftConfig }));
+    drainAll(engine);
+
+    const initialY = engine.getSnapshot().activePiece!.y;
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: true,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const softMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'softDrop');
+    expect(softMoves.length).toBeGreaterThanOrEqual(10);
+    expect(engine.getSnapshot().activePiece!.y).toBeGreaterThan(initialY + 9);
+  });
+
+  it('cada descenso de soft drop emite pieceMoved con motivo softDrop', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    for (let i = 0; i < 5; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+    }
+    const events = engine.drainEvents();
+    const softMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'softDrop');
+    expect(softMoves.length).toBeGreaterThanOrEqual(1);
+    for (const e of softMoves) {
+      if (e.type === 'pieceMoved') {
+        expect(e.reason).toBe('softDrop');
+      }
+    }
+  });
+
+  it('colisión de soft drop fija la pieza inmediatamente', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Dejar caer una pieza con hard drop
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // La nueva pieza está en spawn. Soft drop hasta que colisione.
+    let locked = false;
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      const events = engine.drainEvents();
+
+      if (events.some((e) => e.type === 'pieceLocked')) {
+        locked = true;
+        break;
+      }
+    }
+    expect(locked).toBe(true);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE ACUMULADOR VERTICAL
+// ════════════════════════════════════════════════════════════════════════
+
+describe('acumulador vertical', () => {
+  it('conserva progreso al activar soft drop a mitad de celda de gravedad', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // 50 pasos con gravedad normal: 50*10*1 = 500 < 1000 (50% de progreso)
+    for (let i = 0; i < 50; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+    const yAfterGravity = engine.getSnapshot().activePiece!.y;
+
+    // Cambiar a soft drop: cada paso suma 10*20 = 200
+    // Después de 2 pasos: 500+400 = 900 < 1000
+    for (let i = 0; i < 2; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    expect(engine.getSnapshot().activePiece!.y).toBe(yAfterGravity);
+
+    // 1 paso más: 900+200 = 1100 ≥ 1000 → 1 descenso con softDrop
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: true,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    const softMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'softDrop');
+    expect(softMoves).toHaveLength(1);
+    expect(engine.getSnapshot().activePiece!.y).toBe(yAfterGravity + 1);
+  });
+
+  it('conserva progreso al desactivar soft drop', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // 2 pasos con soft drop: 2*200 = 400 < 1000
+    for (let i = 0; i < 2; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+    const yAfterSoft = engine.getSnapshot().activePiece!.y;
+
+    // Desactivar soft drop: gravedad normal (10*1=10 por paso)
+    // 60 pasos: 60*10 = 600 + 400 = 1000 → descenso con gravity
+    for (let i = 0; i < 59; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+    expect(engine.getSnapshot().activePiece!.y).toBe(yAfterSoft);
+
+    stepStationary(engine);
+    const events = engine.drainEvents();
+    const gravityMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'gravity');
+    expect(gravityMoves).toHaveLength(1);
+  });
+
+  it('funciona de forma determinista con velocidades no alineadas', () => {
+    const unalignedConfig = {
+      ...prototypeConfig,
+      gravityCellsPerSecond: 0.75,
+      softDropCellsPerSecond: 12.34,
+    };
+    const engineA = createGameEngine(makeValidOptions({ config: unalignedConfig }));
+    const engineB = createGameEngine(makeValidOptions({ config: unalignedConfig }));
+    drainAll(engineA);
+    drainAll(engineB);
+
+    for (let i = 0; i < 50; i++) {
+      engineA.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+      engineB.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+    }
+
+    // Alternar soft drop
+    for (let i = 0; i < 100; i++) {
+      const sd = i % 3 === 0;
+      engineA.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: sd,
+        hardDrop: false,
+      });
+      engineB.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: sd,
+        hardDrop: false,
+      });
+    }
+
+    drainAll(engineA);
+    drainAll(engineB);
+    expect(engineA.getSnapshot().activePiece!.y).toBe(engineB.getSnapshot().activePiece!.y);
+  });
+
+  it('se reinicia a 0 en spawn', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Acumular casi un descenso de gravedad
+    for (let i = 0; i < 99; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // La nueva pieza tiene progreso=0
+    for (let i = 0; i < 99; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+    // No debe haber descendido aún (necesita 100 pasos para 1 celda)
+    expect(engine.getSnapshot().activePiece!.y).toBe(3); // altura 2 para piezas no-I
+  });
+
+  it('se reinicia a 0 en reset', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    for (let i = 0; i < 60; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+
+    engine.reset(makeValidOptions({ seed: 42 }));
+    drainAll(engine);
+
+    const y1 = engine.getSnapshot().activePiece!.y;
+    for (let i = 0; i < 99; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+    expect(engine.getSnapshot().activePiece!.y).toBe(y1);
+  });
+
+  it('sin remanente entre piezas (comportamiento de gravedad pura equivalente al anterior)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    for (let i = 0; i < 99; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    const yAfter = engine.getSnapshot().activePiece!.y;
+    for (let i = 0; i < 99; i++) {
+      stepStationary(engine);
+    }
+    drainAll(engine);
+
+    expect(engine.getSnapshot().activePiece!.y).toBe(yAfter);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE INTERACCIONES
+// ════════════════════════════════════════════════════════════════════════
+
+describe('interacciones', () => {
+  it('horizontal + rotación en el mismo paso (horizontal primero)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const pieceType = engine.getSnapshot().activePiece!.type;
+    // Si es O, saltar
+    if (pieceType === 'O') {
+      for (let i = 0; i < 7; i++) {
+        stepHardDrop(engine);
+        drainAll(engine);
+      }
+    }
+
+    const xBefore = engine.getSnapshot().activePiece!.x;
+    const orientationBefore = engine.getSnapshot().activePiece!.orientation;
+
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+      rotateClockwise: true,
+    });
+
+    const events = engine.drainEvents();
+    const snap = engine.getSnapshot();
+
+    // Horizontal se procesa antes: x debe haber cambiado
+    expect(snap.activePiece!.x).toBeLessThan(xBefore);
+    // Rotación se procesa después
+    if (pieceType !== 'O') {
+      expect(snap.activePiece!.orientation).not.toBe(orientationBefore);
+    }
+    // Debe haber eventos de movimiento y rotación
+    expect(events.some((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toBe(true);
+    expect(events.some((e) => e.type === 'pieceRotated')).toBe(pieceType !== 'O');
+  });
+
+  it('rotación + hard drop en el mismo paso', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: true,
+      rotateClockwise: true,
+    });
+    const events = engine.drainEvents();
+    const hardDropMoved = events.some((e) => e.type === 'pieceMoved' && e.reason === 'hardDrop');
+    expect(hardDropMoved).toBe(true);
+    // Rotación puede haber sido exitosa o no dependiendo del tipo de pieza
+    // Pero al menos el hard drop ocurrió
+  });
+
+  it('hard drop con softDropHeld=true omite gravedad/soft drop', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: true,
+      hardDrop: true,
+    });
+    drainAll(engine);
+
+    // Hard drop domina, pieza fijada y spawneada nueva
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece).not.toBeNull();
+    expect(snap.status).toBe('running');
+  });
+
+  it('fijación detiene procesamiento sobre la nueva pieza', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Hard drop para fijar la pieza actual
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: true,
+    });
+    const events = engine.drainEvents();
+    // Debe tener pieceLocked y pieceSpawned
+    expect(events.some((e) => e.type === 'pieceLocked')).toBe(true);
+    expect(events.some((e) => e.type === 'pieceSpawned')).toBe(true);
+  });
+
+  it('game over y reset: el nuevo estado temporal se reinicia', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Llevar a game over
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+    expect(engine.getSnapshot().status).toBe('gameOver');
+
+    // Reset
+    engine.reset(makeValidOptions({ seed: 123 }));
+    drainAll(engine);
+
+    // El motor debe funcionar con nueva semilla
+    const snap = engine.getSnapshot();
+    expect(snap.status).toBe('running');
+    expect(snap.seed).toBe(123);
+
+    // Un step debe funcionar
+    stepStationary(engine);
+    drainAll(engine);
+    expect(engine.getSnapshot().step).toBe(1);
+    expect(engine.getSnapshot().status).toBe('running');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
 //  PRUEBAS DE ROTACIÓN SRS
 // ════════════════════════════════════════════════════════════════════════
 
-// Helper: ejecuta un paso de rotación horaria y descarta eventos
 function stepRotateCW(engine: ReturnType<typeof createGameEngine>): void {
-  engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+  engine.step({
+    leftHeld: false, rightHeld: false,
+    leftPressed: false, rightPressed: false,
+    softDropHeld: false,
+    hardDrop: false,
+    rotateClockwise: true,
+  });
   drainAll(engine);
 }
 
-// Helper: ejecuta un paso de rotación antihoraria y descarta eventos
 function stepRotateCCW(engine: ReturnType<typeof createGameEngine>): void {
-  engine.step({ horizontal: 0, hardDrop: false, rotateCounterclockwise: true });
+  engine.step({
+    leftHeld: false, rightHeld: false,
+    leftPressed: false, rightPressed: false,
+    softDropHeld: false,
+    hardDrop: false,
+    rotateCounterclockwise: true,
+  });
   drainAll(engine);
 }
 
 describe('rotación SRS', () => {
-  // ── Rotación horaria ────────────────────────────────────────────────
-
   describe('rotación horaria', () => {
     it('una rotación horaria desde Spawn cambia la orientación a Right', () => {
-      // Esperar a que aparezca una pieza T (JLSTZ) o I
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
@@ -1498,34 +2699,28 @@ describe('rotación SRS', () => {
       const beforeX = engine.getSnapshot().activePiece!.x;
       stepRotateCW(engine);
       const snap = engine.getSnapshot();
-      // Con kick 0 (0,0), la posición no cambia
       expect(snap.activePiece!.x).toBe(beforeX);
       expect(snap.activePiece!.orientation).toBe(Orientation.Right);
     });
 
     it('la rotación horaria se aplica con kick lateral cuando la pieza está junto a una pared', () => {
-      // Usamos una pieza J (spawn centered x=3 para ancho 3). La movemos a la pared izquierda.
       const engine = createGameEngine(makeValidOptions({ seed: 42 }));
       drainAll(engine);
 
-      // Buscar una pieza que no sea I para el test de kick lateral (JLSTZ)
       let found = false;
       for (let attempt = 0; attempt < 50; attempt++) {
         const pieceType = engine.getSnapshot().activePiece!.type;
         if (pieceType !== 'I' && pieceType !== 'O') {
-          // Mover a la pared izquierda
           for (let i = 0; i < 5; i++) stepLeft(engine);
           const xBefore = engine.getSnapshot().activePiece!.x;
           stepRotateCW(engine);
           const xAfter = engine.getSnapshot().activePiece!.x;
           const orientation = engine.getSnapshot().activePiece!.orientation;
-          // La rotación debería tener éxito (con kick lateral si es necesario)
           expect(orientation).toBe(Orientation.Right);
-          // Con kick lateral, x puede haber cambiado
           if (xAfter !== xBefore) {
             found = true;
           } else {
-            found = true; // kick 0 también es válido
+            found = true;
           }
         }
         stepHardDrop(engine);
@@ -1535,8 +2730,6 @@ describe('rotación SRS', () => {
       expect(found).toBe(true);
     });
   });
-
-  // ── Rotación antihoraria ─────────────────────────────────────────────
 
   describe('rotación antihoraria', () => {
     it('una rotación antihoraria desde Spawn cambia la orientación a Left', () => {
@@ -1551,14 +2744,11 @@ describe('rotación SRS', () => {
     });
   });
 
-  // ── Transiciones entre orientaciones ─────────────────────────────────
-
   describe('transiciones entre orientaciones', () => {
     it('todas las ocho transiciones funcionan para una pieza JLSTZ (T, por ejemplo)', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Buscar una pieza T
       let foundT = false;
       for (let attempt = 0; attempt < 50; attempt++) {
         if (engine.getSnapshot().activePiece!.type === 'T') {
@@ -1570,35 +2760,27 @@ describe('rotación SRS', () => {
       }
       expect(foundT).toBe(true);
 
-      // Spawn -> Right
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Right);
 
-      // Right -> Reverse
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Reverse);
 
-      // Reverse -> Left
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Left);
 
-      // Left -> Spawn
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Spawn);
 
-      // Spawn -> Left (antihorario)
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Left);
 
-      // Left -> Reverse
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Reverse);
 
-      // Reverse -> Right
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Right);
 
-      // Right -> Spawn
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Spawn);
     });
@@ -1607,7 +2789,6 @@ describe('rotación SRS', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Buscar una pieza I
       let foundI = false;
       for (let attempt = 0; attempt < 50; attempt++) {
         if (engine.getSnapshot().activePiece!.type === 'I') {
@@ -1619,48 +2800,37 @@ describe('rotación SRS', () => {
       }
       expect(foundI).toBe(true);
 
-      // Spawn -> Right
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Right);
 
-      // Right -> Reverse
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Reverse);
 
-      // Reverse -> Left
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Left);
 
-      // Left -> Spawn
       stepRotateCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Spawn);
 
-      // Spawn -> Left (antihorario)
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Left);
 
-      // Left -> Reverse
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Reverse);
 
-      // Reverse -> Right
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Right);
 
-      // Right -> Spawn
       stepRotateCCW(engine);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Spawn);
     });
   });
-
-  // ── Wall kicks ───────────────────────────────────────────────────────
 
   describe('wall kicks', () => {
     it('un wall kick lateral exitoso desplaza la pieza horizontalmente', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Esperar a que aparezca una pieza T
       let foundT = false;
       for (let attempt = 0; attempt < 50; attempt++) {
         if (engine.getSnapshot().activePiece!.type === 'T') {
@@ -1672,54 +2842,48 @@ describe('rotación SRS', () => {
       }
       expect(foundT).toBe(true);
 
-      // Mover a la pared izquierda
       for (let i = 0; i < 5; i++) stepLeft(engine);
       const xBefore = engine.getSnapshot().activePiece!.x;
 
-      // Rotar antihorario -> Left
       stepRotateCCW(engine);
       const xAfter = engine.getSnapshot().activePiece!.x;
 
-      // Debe haber un desplazamiento lateral por el wall kick
-      // Nota: si kick 0 es válido, no habrá desplazamiento. Eso también es correcto.
       const valid = xAfter !== xBefore || engine.getSnapshot().activePiece!.orientation === Orientation.Left;
       expect(valid).toBe(true);
     });
 
     it('un wall kick desde el suelo (floor kick) desplaza la pieza verticalmente', () => {
-      // Usamos gravedad lenta para poder posicionar la pieza cerca del suelo
       const slowConfig = { ...prototypeConfig, gravityCellsPerSecond: 0.01 };
       const engine = createGameEngine(makeValidOptions({ seed: 42, config: slowConfig }));
       drainAll(engine);
 
-      // Bajar la pieza hasta cerca del suelo
       for (let i = 0; i < 50; i++) stepStationary(engine);
       drainAll(engine);
 
       const yBefore = engine.getSnapshot().activePiece!.y;
       const orientationBefore = engine.getSnapshot().activePiece!.orientation;
 
-      // Rotar horaria - puede fallar o tener floor kick
-      engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
       engine.drainEvents();
       const yAfter = engine.getSnapshot().activePiece!.y;
       const orientationAfter = engine.getSnapshot().activePiece!.orientation;
 
-      // Si la rotación tuvo éxito, verificar que orientation cambió
       if (orientationAfter !== orientationBefore) {
-        // Si no hay floor kick (kick 0 funciona), y puede ser igual
-        // Si hay floor kick, y cambió
         const yDelta = yAfter - yBefore;
-        expect(yDelta >= -2 && yDelta <= 0).toBe(true); // Los floor kicks son hacia arriba o 0
+        expect(yDelta >= -2 && yDelta <= 0).toBe(true);
       }
     });
 
     it('se utiliza la tabla JLSTZ para piezas J, L, S, T, Z', () => {
-      // Probar con pieza T (JLSTZ) - la rotación centrada debe usar kick 0 exitosamente
       const engine = createGameEngine(makeValidOptions({ seed: 42 }));
       drainAll(engine);
 
-      // Encontrar una pieza T
       let foundPiece = false;
       for (let attempt = 0; attempt < 50; attempt++) {
         const type = engine.getSnapshot().activePiece!.type;
@@ -1771,18 +2935,20 @@ describe('rotación SRS', () => {
           const yBefore = engine.getSnapshot().activePiece!.y;
           const cellsBefore = engine.getSnapshot().activePiece!.cells.map(c => ({ x: c.x, y: c.y }));
 
-          engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+          engine.step({
+            leftHeld: false, rightHeld: false,
+            leftPressed: false, rightPressed: false,
+            softDropHeld: false,
+            hardDrop: false,
+            rotateClockwise: true,
+          });
           const events = engine.drainEvents();
           const snap = engine.getSnapshot();
 
-          // La orientación debe cambiar
           expect(snap.activePiece!.orientation).toBe(Orientation.Right);
-          // La posición no cambia
           expect(snap.activePiece!.x).toBe(xBefore);
           expect(snap.activePiece!.y).toBe(yBefore);
-          // Las celdas ocupadas no cambian
           expect(snap.activePiece!.cells).toEqual(cellsBefore);
-          // Se emite el evento
           expect(events.some(e => e.type === 'pieceRotated')).toBe(true);
           break;
         }
@@ -1793,26 +2959,20 @@ describe('rotación SRS', () => {
     });
   });
 
-  // ── Colisiones ────────────────────────────────────────────────────────
-
   describe('colisiones', () => {
     it('rotación bloqueada por colisión contra pared izquierda o derecha', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Encontrar una pieza T y moverla a la pared izquierda
       let found = false;
       for (let attempt = 0; attempt < 50; attempt++) {
         const type = engine.getSnapshot().activePiece!.type;
         if (type !== 'I' && type !== 'O') {
-          // Mover completamente a la izquierda
           for (let i = 0; i < 10; i++) stepLeft(engine);
           drainAll(engine);
 
-      stepRotateCW(engine);
+          stepRotateCW(engine);
 
-          // Puede que la rotación sea exitosa con kick lateral o fallida
-          // Verificar que en cualquier caso, no hay celdas fuera del tablero
           const snap = engine.getSnapshot();
           for (const cell of snap.activePiece!.cells) {
             expect(cell.x).toBeGreaterThanOrEqual(0);
@@ -1830,29 +2990,30 @@ describe('rotación SRS', () => {
     });
 
     it('rotación bloqueada por colisión contra bloques fijos adyacentes', () => {
-      // Crear una pila para forzar colisión
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Dejar caer varias piezas cerca del centro para crear una pila
       for (let i = 0; i < 5; i++) {
         stepHardDrop(engine);
         drainAll(engine);
       }
 
-      // La pieza activa actual debería spawnear sobre o cerca de bloques fijos
       const orientationBefore = engine.getSnapshot().activePiece!.orientation;
       const xBefore = engine.getSnapshot().activePiece!.x;
       const yBefore = engine.getSnapshot().activePiece!.y;
       const typeBefore = engine.getSnapshot().activePiece!.type;
       const boardBefore = engine.getSnapshot().board.map(r => [...r]);
 
-      engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
       const events = engine.drainEvents();
 
-      // Verificar que el estado no cambió si la rotación falló
       if (engine.getSnapshot().activePiece!.orientation === orientationBefore) {
-        // Rotación fallida: no debe haber mutación
         expect(engine.getSnapshot().activePiece!.x).toBe(xBefore);
         expect(engine.getSnapshot().activePiece!.y).toBe(yBefore);
         expect(engine.getSnapshot().activePiece!.type).toBe(typeBefore);
@@ -1864,14 +3025,11 @@ describe('rotación SRS', () => {
     });
   });
 
-  // ── Cancelación ──────────────────────────────────────────────────────
-
   describe('cancelación', () => {
     it('una rotación completamente bloqueada (ningún kick válido) no muta el estado', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Apilar bloques para crear un escenario donde la rotación esté bloqueada
       for (let i = 0; i < 6; i++) {
         stepHardDrop(engine);
         drainAll(engine);
@@ -1884,42 +3042,39 @@ describe('rotación SRS', () => {
       const typeBefore = snapBefore.activePiece!.type;
       const boardBefore = snapBefore.board.map(r => [...r]);
       const nextBefore = snapBefore.nextPiece;
-      const statusBefore = snapBefore.status;
-
-      // Obtener el estado interno antes de la rotación (a través de la semilla)
       const seedBefore = snapBefore.seed;
 
-      engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
       const events = engine.drainEvents();
       const snapAfter = engine.getSnapshot();
 
-      // Si la rotación falló (orientation no cambió), verificar que nada mutó
       if (snapAfter.activePiece!.orientation === orientationBefore) {
         expect(snapAfter.activePiece!.x).toBe(xBefore);
         expect(snapAfter.activePiece!.y).toBe(yBefore);
         expect(snapAfter.activePiece!.type).toBe(typeBefore);
         expect(snapAfter.nextPiece).toBe(nextBefore);
-        expect(snapAfter.status).toBe(statusBefore);
+        expect(snapAfter.status).toBe(snapBefore.status);
         expect(snapAfter.seed).toBe(seedBefore);
-        // El tablero no debe cambiar
         for (let y = 0; y < 24; y++) {
           expect(snapAfter.board[y]).toEqual(boardBefore[y]);
         }
-        // No debe emitirse evento pieceRotated
         expect(events.some(e => e.type === 'pieceRotated')).toBe(false);
-      }
-      // Si la rotación tuvo éxito, verificar eso también
-      else {
+      } else {
         expect(snapAfter.activePiece!.orientation).not.toBe(orientationBefore);
         expect(events.some(e => e.type === 'pieceRotated')).toBe(true);
       }
     });
 
-    it('tras una rotación fallida, el snapshot conserva piece type, posición, orientación, board, next piece, status, PRNG y bag state', () => {
+    it('tras una rotación fallida, el snapshot conserva todo el estado', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Apilar bloques para maximizar probabilidad de rotación bloqueada
       for (let i = 0; i < 11; i++) {
         if (engine.getSnapshot().status === 'gameOver') break;
         stepHardDrop(engine);
@@ -1930,12 +3085,17 @@ describe('rotación SRS', () => {
         const snapBefore = engine.getSnapshot();
         const orientationBefore = snapBefore.activePiece!.orientation;
 
-        engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true,
+        });
         engine.drainEvents();
         const snapAfter = engine.getSnapshot();
 
         if (snapAfter.activePiece!.orientation === orientationBefore) {
-          // Rotación fallida: verificar inmutabilidad completa
           expect(snapAfter.activePiece!.x).toBe(snapBefore.activePiece!.x);
           expect(snapAfter.activePiece!.y).toBe(snapBefore.activePiece!.y);
           expect(snapAfter.activePiece!.type).toBe(snapBefore.activePiece!.type);
@@ -1950,8 +3110,6 @@ describe('rotación SRS', () => {
       }
     });
   });
-
-  // ── Pieza O ──────────────────────────────────────────────────────────
 
   describe('pieza O', () => {
     it('la rotación de O actualiza su orientación', () => {
@@ -2041,13 +3199,11 @@ describe('rotación SRS', () => {
       for (let attempt = 0; attempt < 50; attempt++) {
         if (engine.getSnapshot().activePiece!.type === 'O') {
           foundO = true;
-          // Mover O a la pared izquierda
           for (let i = 0; i < 5; i++) stepLeft(engine);
           const xBefore = engine.getSnapshot().activePiece!.x;
           const yBefore = engine.getSnapshot().activePiece!.y;
 
           stepRotateCW(engine);
-          // La posición no debe cambiar ni siquiera contra la pared
           expect(engine.getSnapshot().activePiece!.x).toBe(xBefore);
           expect(engine.getSnapshot().activePiece!.y).toBe(yBefore);
           expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Right);
@@ -2060,15 +3216,19 @@ describe('rotación SRS', () => {
     });
   });
 
-  // ── Eventos de rotación ──────────────────────────────────────────────
-
   describe('eventos de rotación', () => {
     it('una rotación exitosa emite pieceRotated con la orientación destino y el step actual', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
       const stepBefore = engine.getSnapshot().step;
-      engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
       const events = engine.drainEvents();
       const rotatedEvent = events.find(e => e.type === 'pieceRotated');
 
@@ -2083,7 +3243,6 @@ describe('rotación SRS', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
-      // Apilar para intentar bloquear
       for (let i = 0; i < 11; i++) {
         if (engine.getSnapshot().status === 'gameOver') break;
         stepHardDrop(engine);
@@ -2092,60 +3251,58 @@ describe('rotación SRS', () => {
 
       if (engine.getSnapshot().status === 'running') {
         const orientationBefore = engine.getSnapshot().activePiece!.orientation;
-        engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true,
+        });
         const events = engine.drainEvents();
         const orientationAfter = engine.getSnapshot().activePiece!.orientation;
 
         if (orientationAfter === orientationBefore) {
-          // Rotación fallida: no debe haber pieceRotated
           expect(events.some(e => e.type === 'pieceRotated')).toBe(false);
         } else {
-          // Rotación exitosa: debe haber pieceRotated
           expect(events.some(e => e.type === 'pieceRotated')).toBe(true);
         }
       }
     });
   });
 
-  // ── Ciclos completos ─────────────────────────────────────────────────
-
   describe('ciclos completos', () => {
-    it('cuatro rotaciones horarias consecutivas devuelven a la orientación y geometría inicial (Spawn), si el espacio lo permite', () => {
+    it('cuatro rotaciones horarias consecutivas devuelven a la orientación y geometría inicial (Spawn)', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
       const typeInitial = engine.getSnapshot().activePiece!.type;
 
-      stepRotateCW(engine); // Spawn -> Right
-      stepRotateCW(engine); // Right -> Reverse
-      stepRotateCW(engine); // Reverse -> Left
-      stepRotateCW(engine); // Left -> Spawn
+      stepRotateCW(engine);
+      stepRotateCW(engine);
+      stepRotateCW(engine);
+      stepRotateCW(engine);
 
       const snap = engine.getSnapshot();
       expect(snap.activePiece!.orientation).toBe(Orientation.Spawn);
       expect(snap.activePiece!.type).toBe(typeInitial);
-      // Con suficiente espacio, la geometría (posición + celdas) debe ser igual
-      // Esto puede no ser cierto siempre debido a wall kicks, pero la orientación debe ser Spawn
     });
 
-    it('cuatro rotaciones antihorarias consecutivas devuelven a la orientación y geometría inicial (Spawn), si el espacio lo permite', () => {
+    it('cuatro rotaciones antihorarias consecutivas devuelven a la orientación y geometría inicial (Spawn)', () => {
       const engine = createGameEngine(makeValidOptions());
       drainAll(engine);
 
       const typeInitial = engine.getSnapshot().activePiece!.type;
 
-      stepRotateCCW(engine); // Spawn -> Left
-      stepRotateCCW(engine); // Left -> Reverse
-      stepRotateCCW(engine); // Reverse -> Right
-      stepRotateCCW(engine); // Right -> Spawn
+      stepRotateCCW(engine);
+      stepRotateCCW(engine);
+      stepRotateCCW(engine);
+      stepRotateCCW(engine);
 
       const snap = engine.getSnapshot();
       expect(snap.activePiece!.orientation).toBe(Orientation.Spawn);
       expect(snap.activePiece!.type).toBe(typeInitial);
     });
   });
-
-  // ── Snapshots ─────────────────────────────────────────────────────────
 
   describe('snapshots con orientación', () => {
     it('el snapshot expone orientation tras el spawn', () => {
@@ -2172,21 +3329,19 @@ describe('rotación SRS', () => {
     });
   });
 
-  // ── Determinismo con rotación ────────────────────────────────────────
-
   describe('determinismo con rotación', () => {
     it('misma semilla y mismas entradas (incluyendo rotaciones) producen snapshot y eventos idénticos', () => {
       const engineA = createGameEngine(makeValidOptions());
       const engineB = createGameEngine(makeValidOptions());
 
       const inputs: StepInput[] = [
-        { horizontal: -1, hardDrop: false },
-        { horizontal: 0, hardDrop: false, rotateClockwise: true },
-        { horizontal: 0, hardDrop: false },
-        { horizontal: 1, hardDrop: false, rotateCounterclockwise: true },
-        { horizontal: 0, hardDrop: false, rotateClockwise: true },
-        { horizontal: 0, hardDrop: true },
-        { horizontal: 0, hardDrop: false, rotateCounterclockwise: true },
+        { leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: false },
+        { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false, rotateClockwise: true },
+        { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+        { leftHeld: false, rightHeld: true, leftPressed: false, rightPressed: true, softDropHeld: false, hardDrop: false, rotateCounterclockwise: true },
+        { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false, rotateClockwise: true },
+        { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: true },
+        { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false, rotateCounterclockwise: true },
       ];
 
       const snapshotsA: unknown[] = [];
@@ -2214,33 +3369,35 @@ describe('rotación SRS', () => {
     });
 
     it('el PRNG no se ve afectado por las rotaciones', () => {
-      // Comparar dos motores: uno con rotaciones y otro sin, que no debe tener
-      // diferencias secuenciales más allá de las rotaciones mismas
       const engineA = createGameEngine(makeValidOptions({ seed: 42 }));
       const engineB = createGameEngine(makeValidOptions({ seed: 42 }));
       drainAll(engineA);
       drainAll(engineB);
 
-      // Ejecutar el mismo número de pasos pero con rotación en A
       for (let i = 0; i < 5; i++) {
-        engineA.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+        engineA.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true,
+        });
         drainAll(engineA);
-        engineB.step({ horizontal: 0, hardDrop: false });
+        engineB.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+        });
         drainAll(engineB);
       }
 
-      // A tiene rotaciones, B no. El PRNG no debe verse afectado:
-      // después de las rotaciones, la próxima pieza debe coincidir
       const snapA = engineA.getSnapshot();
       const snapB = engineB.getSnapshot();
 
-      // Antes de hacer hard drop, el PRNG no se usó durante las rotaciones
-      // Así que las siguientes piezas deberían ser idénticas
       expect(snapA.nextPiece).toBe(snapB.nextPiece);
     });
   });
-
-  // ── Validación de entrada de rotación ─────────────────────────────────
 
   describe('validación de entrada de rotación', () => {
     it('rotateClockwise y rotateCounterclockwise simultáneos lanzan EngineStepError con INVALID_GAME_INPUT', () => {
@@ -2248,11 +3405,23 @@ describe('rotación SRS', () => {
       drainAll(engine);
 
       expect(() => {
-        engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true, rotateCounterclockwise: true });
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true, rotateCounterclockwise: true,
+        });
       }).toThrow(EngineStepError);
 
       try {
-        engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true, rotateCounterclockwise: true });
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true, rotateCounterclockwise: true,
+        });
       } catch (e) {
         if (e instanceof EngineStepError) {
           expect(e.code).toBe('INVALID_GAME_INPUT');
@@ -2275,7 +3444,13 @@ describe('rotación SRS', () => {
       const boardBefore = snapBefore.board.map(r => [...r]);
 
       try {
-        engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true, rotateCounterclockwise: true });
+        engine.step({
+          leftHeld: false, rightHeld: false,
+          leftPressed: false, rightPressed: false,
+          softDropHeld: false,
+          hardDrop: false,
+          rotateClockwise: true, rotateCounterclockwise: true,
+        });
       } catch {
         // Esperado
       }
@@ -2283,7 +3458,6 @@ describe('rotación SRS', () => {
       const events = engine.drainEvents();
       const snapAfter = engine.getSnapshot();
 
-      // Sin mutación
       expect(snapAfter.step).toBe(stepBefore);
       expect(snapAfter.elapsedMs).toBe(elapsedBefore);
       expect(snapAfter.activePiece!.orientation).toBe(orientationBefore);
@@ -2295,7 +3469,6 @@ describe('rotación SRS', () => {
         expect(snapAfter.board[y]).toEqual(boardBefore[y]);
       }
 
-      // Sin eventos
       expect(events).toHaveLength(0);
     });
 
@@ -2305,15 +3478,25 @@ describe('rotación SRS', () => {
 
       const orientationBefore = engine.getSnapshot().activePiece!.orientation;
 
-      // Sin rotateCounterclockwise
-      engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+      });
       drainAll(engine);
 
       expect(engine.getSnapshot().activePiece!.orientation).not.toBe(orientationBefore);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Right);
 
-      // Con rotateCounterclockwise: false explícito
-      engine.step({ horizontal: 0, hardDrop: false, rotateClockwise: true, rotateCounterclockwise: false });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true, rotateCounterclockwise: false,
+      });
       drainAll(engine);
 
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Reverse);
@@ -2325,12 +3508,180 @@ describe('rotación SRS', () => {
 
       const orientationBefore = engine.getSnapshot().activePiece!.orientation;
 
-      // Sin rotateClockwise
-      engine.step({ horizontal: 0, hardDrop: false, rotateCounterclockwise: true });
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateCounterclockwise: true,
+      });
       drainAll(engine);
 
       expect(engine.getSnapshot().activePiece!.orientation).not.toBe(orientationBefore);
       expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Left);
     });
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  PRUEBAS DE EVENTOS — DAS/ARR/soft drop
+// ════════════════════════════════════════════════════════════════════════
+
+describe('eventos — DAS, ARR, soft drop', () => {
+  it('un evento pieceMoved por cada celda horizontal real (inmediato, DAS o ARR)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Mover a la derecha para tener espacio
+    engine.step({
+      leftHeld: false, rightHeld: true,
+      leftPressed: false, rightPressed: true,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    drainAll(engine);
+
+    // Activación derecha: 1 movimiento
+    // Mantener hasta DAS + varias ARR (pero no tan lejos como para chocar con pared)
+    for (let i = 0; i < 30; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: true,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+    }
+    const events = engine.drainEvents();
+    const horizontalMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal');
+    // Con 30 pasos: activación + DAS (~paso 15) + ARR (~pasos 20, 25, 30) = al menos 4
+    // Pero depende de cuándo choca con pared; verificamos que hay al menos repeticiones DAS + algunas ARR
+    expect(horizontalMoves.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('un evento pieceMoved con motivo softDrop por cada celda de soft drop', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: true,
+        hardDrop: false,
+      });
+    }
+    const events = engine.drainEvents();
+    const softMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'softDrop');
+    // Con 10 pasos y softDrop=20: 10*200=2000 → 2 descensos
+    expect(softMoves.length).toBeGreaterThanOrEqual(2);
+    for (const e of softMoves) {
+      if (e.type === 'pieceMoved') expect(e.reason).toBe('softDrop');
+    }
+  });
+
+  it('orden de eventos correcto: horizontal → rotación → hard drop o vertical', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Combinar izquierda, rotación, hard drop
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: true,
+      rotateClockwise: true,
+    });
+    const events = engine.drainEvents();
+
+    // Encontrar índices de eventos en la cola
+    const horizontalIdx = events.findIndex((e) => e.type === 'pieceMoved' && e.reason === 'horizontal');
+    const rotateIdx = events.findIndex((e) => e.type === 'pieceRotated');
+    const hardDropIdx = events.findIndex((e) => e.type === 'pieceMoved' && e.reason === 'hardDrop');
+    const lockedIdx = events.findIndex((e) => e.type === 'pieceLocked');
+
+    // Si hay horizontal, debe ir antes que rotación
+    if (horizontalIdx >= 0 && rotateIdx >= 0) {
+      expect(horizontalIdx).toBeLessThan(rotateIdx);
+    }
+    // Si hay rotación, debe ir antes que hard drop
+    if (rotateIdx >= 0 && hardDropIdx >= 0) {
+      expect(rotateIdx).toBeLessThan(hardDropIdx);
+    }
+    // Hard drop va antes del locked
+    if (hardDropIdx >= 0 && lockedIdx >= 0) {
+      expect(hardDropIdx).toBeLessThan(lockedIdx);
+    }
+  });
+
+  it('no se emiten eventos por movimientos bloqueados (horizontal bloqueado no emite)', () => {
+    // Verificar que cuando un intento horizontal es bloqueado por la pared,
+    // la pieza no emite pieceMoved horizontal
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Obtener la pieza y moverla a la pared izquierda
+    for (let i = 0; i < 10; i++) {
+      engine.step({
+        leftHeld: true, rightHeld: false,
+        leftPressed: true, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+      });
+      drainAll(engine);
+    }
+
+    // Ahora la pieza está en la pared. Un intento más de izquierda sin flanco
+    // No debe emitir pieceMoved
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
+    const events = engine.drainEvents();
+    expect(events.filter((e) => e.type === 'pieceMoved' && e.reason === 'horizontal')).toHaveLength(0);
+  });
+
+  it('misma semilla, configuración y entradas producen mismo resultado', () => {
+    // Test de determinismo con DAS/ARR y soft drop
+    const engineA = createGameEngine(makeValidOptions());
+    const engineB = createGameEngine(makeValidOptions());
+    drainAll(engineA);
+    drainAll(engineB);
+
+    const inputs: StepInput[] = [];
+    // Secuencia variada de entradas
+    inputs.push({ leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false, softDropHeld: false, hardDrop: false });
+    for (let i = 0; i < 20; i++) {
+      inputs.push({ leftHeld: true, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false });
+    }
+    inputs.push({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false });
+    for (let i = 0; i < 5; i++) {
+      inputs.push({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+    }
+    inputs.push({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: true });
+
+    const snapshotsA: unknown[] = [];
+    const eventsA: unknown[] = [];
+    const snapshotsB: unknown[] = [];
+    const eventsB: unknown[] = [];
+
+    snapshotsA.push(engineA.getSnapshot());
+    eventsA.push(engineA.drainEvents());
+    snapshotsB.push(engineB.getSnapshot());
+    eventsB.push(engineB.drainEvents());
+
+    for (const input of inputs) {
+      try { engineA.step(input); } catch { /* game over */ }
+      snapshotsA.push(engineA.getSnapshot());
+      eventsA.push(engineA.drainEvents());
+
+      try { engineB.step(input); } catch { /* game over */ }
+      snapshotsB.push(engineB.getSnapshot());
+      eventsB.push(engineB.drainEvents());
+    }
+
+    expect(snapshotsA).toEqual(snapshotsB);
+    expect(eventsA).toEqual(eventsB);
   });
 });

@@ -85,6 +85,28 @@ Ver [Informe de implementación](implementation/0003-rotacion-srs.md).
 
 Ver [Informe de implementación](implementation/0004-integracion-phaser.md).
 
+## Task [0005 — DAS, ARR y soft drop](tasks/0005-das-arr-soft-drop.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-19 |
+| **Resultado** | Movimiento horizontal mantenido determinista con DAS (`dasMs=150`) y ARR (`arrMs=50`), soft drop mantenido (`softDropCellsPerSecond=20`), prioridad horizontal gobernada por flancos, acumulador vertical único compartido entre gravedad y soft drop. Nuevo contrato `StepInput` con `leftHeld`/`rightHeld`/`leftPressed`/`rightPressed`/`softDropHeld`. Phaser adaptado sin contener lógica de repetición. 190 tests pasan, lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Implementación completa de DAS/ARR/soft drop en `game-engine`.
+- Prioridad horizontal por última dirección pulsada, sin preferencia fija izquierda/derecha.
+- Acumulador vertical único en unidades de progreso (1000 = 1 celda), compartido entre gravedad y soft drop.
+- `MoveReason` ampliado con `'softDrop'`.
+- Validación de entrada ampliada: `pressed` requiere `held`, ambos flancos simultáneos rechazados, `horizontal` rechazada como propiedad desconocida.
+- Phaser: `ArrowDown` como tecla de soft drop, estado mantenido sin flanco. No contiene `dasMs`, `arrMs` ni `softDropCellsPerSecond`.
+- 33 nuevas pruebas sobre las 157 existentes (190 totales).
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0005-das-arr-soft-drop.md).
+
 ## Siguiente tarea
 
-`0005 — Prototipo vertical Tactical` (alcance a definir en su propia especificación).
+Pendiente de definir en su propia especificación.

@@ -6,7 +6,7 @@ export type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
 export type EngineStatus = 'running' | 'gameOver';
 
-export type MoveReason = 'horizontal' | 'gravity' | 'hardDrop';
+export type MoveReason = 'horizontal' | 'gravity' | 'hardDrop' | 'softDrop';
 
 export type GameOverReason = 'spawnBlocked';
 
@@ -69,13 +69,25 @@ export type EngineSnapshot = Readonly<{
 /**
  * Entrada de un paso lógico del motor.
  *
+ * `leftHeld`, `rightHeld`, `leftPressed`, `rightPressed`, `softDropHeld`
+ * y `hardDrop` son obligatorios y deben ser boolean.
+ *
  * `rotateClockwise` y `rotateCounterclockwise` son opcionales (por defecto
  * `false`) y no pueden ser `true` a la vez: esa combinación es entrada
  * inválida y `step()` la rechaza con `EngineStepError`
  * (`code: 'INVALID_GAME_INPUT'`) sin mutar el estado del motor.
+ *
+ * Reglas de validación adicionales:
+ * - `leftPressed === true` requiere `leftHeld === true`
+ * - `rightPressed === true` requiere `rightHeld === true`
+ * - `leftPressed === true` y `rightPressed === true` simultáneos son inválidos
  */
 export type StepInput = {
-  horizontal: -1 | 0 | 1;
+  leftHeld: boolean;
+  rightHeld: boolean;
+  leftPressed: boolean;
+  rightPressed: boolean;
+  softDropHeld: boolean;
   hardDrop: boolean;
   rotateClockwise?: boolean;
   rotateCounterclockwise?: boolean;
@@ -88,10 +100,10 @@ export type EngineOptions = {
 
 export type GameEngine = {
   /**
-   * Procesa un paso lógico fijo (horizontal → rotación → hard drop/gravedad,
-   * fijación, clear de líneas y spawn de la siguiente pieza). Muta el estado
-   * interno del motor y encola los eventos resultantes, recuperables con
-   * `drainEvents`.
+   * Procesa un paso lógico fijo (horizontal → rotación → hard drop/gravedad
+   * o soft drop, fijación, clear de líneas y spawn de la siguiente pieza).
+   * Muta el estado interno del motor y encola los eventos resultantes,
+   * recuperables con `drainEvents`.
    *
    * @throws {EngineStepError} con `code: 'ENGINE_NOT_RUNNING'` si el motor ya
    *   está en game over, o `code: 'INVALID_GAME_INPUT'` si `input` no cumple
@@ -139,8 +151,8 @@ export class EngineOptionsError extends Error {
  *
  * `code` es `'ENGINE_NOT_RUNNING'` si el motor ya terminó (game over), o
  * `'INVALID_GAME_INPUT'` si `input` no cumple el contrato de `StepInput`
- * (propiedad desconocida, tipo incorrecto o rotación simultánea en ambos
- * sentidos).
+ * (propiedad desconocida, tipo incorrecto, rotación simultánea en ambos
+ * sentidos, pressed sin held, o ambos flancos horizontales simultáneos).
  */
 export class EngineStepError extends Error {
   readonly code: 'INVALID_GAME_INPUT' | 'ENGINE_NOT_RUNNING';
@@ -158,6 +170,7 @@ const UINT32_MAX = 4_294_967_295;
 const BOARD_COLS = 10;
 const BOARD_ROWS = 24;
 const HIDDEN_ROWS = 4;
+const VERTICAL_CELL_UNIT = 1000;
 
 // ── Definición de piezas ────────────────────────────────────────────────
 
@@ -253,11 +266,6 @@ const I_KICKS: KickTable = {
 
 // ── PRNG: mulberry32 ────────────────────────────────────────────────────
 
-/**
- * PRNG mulberry32: determinista y reproducible a partir de una semilla
- * uint32. La misma semilla produce siempre la misma secuencia de valores en
- * [0, 1), lo que sostiene el determinismo de la bolsa de siete piezas.
- */
 function createPrng(seed: number): () => number {
   let state = seed | 0;
   return () => {
@@ -272,7 +280,6 @@ function createPrng(seed: number): () => number {
 
 function shuffleBag(prng: () => number): PieceType[] {
   const bag = [...ALL_TYPES];
-  // Barajado Fisher–Yates
   for (let i = bag.length - 1; i > 0; i--) {
     const j = Math.floor(prng() * (i + 1));
     const tmp = bag[i]!;
@@ -310,11 +317,6 @@ function boardToReadonly(board: (PieceType | null)[][]): ReadonlyArray<ReadonlyA
 
 // ── Comprobación de colisiones ──────────────────────────────────────────
 
-/**
- * Indica si alguna celda de `cells` es inválida: fuera de los límites del
- * tablero (x fuera de [0, BOARD_COLS) o y fuera de [0, BOARD_ROWS)), o
- * superpuesta a una celda ya ocupada en `board`. No muta `board`.
- */
 function isCollision(
   board: (PieceType | null)[][],
   cells: Cell[],
@@ -327,11 +329,6 @@ function isCollision(
   return false;
 }
 
-/**
- * Convierte las celdas relativas de una pieza y orientación (definidas en
- * `PIECE_ORIENTATION_CELLS`) a coordenadas absolutas del tablero, sumando el
- * origen (`originX`, `originY`) de la pieza a cada celda relativa.
- */
 function computeAbsoluteCells(pieceType: PieceType, originX: number, originY: number, orientation: Orientation): Cell[] {
   return PIECE_ORIENTATION_CELLS[pieceType][orientation].map((c) => ({ x: originX + c.x, y: originY + c.y }));
 }
@@ -349,6 +346,26 @@ function activePieceCells(piece: ActivePiece): Cell[] {
   return computeAbsoluteCells(piece.type, piece.x, piece.y, piece.orientation);
 }
 
+// ── Estado de temporización horizontal ──────────────────────────────────
+
+type HorizontalPriority = 'left' | 'right' | null;
+
+type HorizontalState = {
+  priority: HorizontalPriority;
+  accumulatorMs: number;
+  hasReachedDas: boolean;
+};
+
+function createHorizontalState(): HorizontalState {
+  return { priority: null, accumulatorMs: 0, hasReachedDas: false };
+}
+
+function resetHorizontalState(state: HorizontalState): void {
+  state.priority = null;
+  state.accumulatorMs = 0;
+  state.hasReachedDas = false;
+}
+
 // ── Cálculo del spawn ───────────────────────────────────────────────────
 
 function calculateSpawnX(pieceType: PieceType): number {
@@ -359,16 +376,8 @@ function calculateSpawnY(pieceType: PieceType): number {
   return HIDDEN_ROWS - PIECE_HEIGHT[pieceType] + 1;
 }
 
-// ── Funciones auxiliares de gravedad ────────────────────────────────────
+// ── Funciones auxiliares ────────────────────────────────────────────────
 
-function msPerCellFromConfig(config: GameConfig): number {
-  return 1000 / config.gravityCellsPerSecond;
-}
-
-/**
- * Distancia máxima (número de celdas) que `piece` puede caer verticalmente
- * antes de colisionar. No muta `board` ni `piece`.
- */
 function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): number {
   const cells = activePieceCells(piece);
   let distance = 0;
@@ -384,7 +393,6 @@ function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): nu
 
 function getKickTable(pieceType: PieceType): KickTable {
   if (pieceType === 'I') return I_KICKS;
-  // O usa una tabla vacía
   if (pieceType === 'O') return {};
   return JLSTZ_KICKS;
 }
@@ -393,20 +401,6 @@ function getTransitionKey(from: Orientation, to: Orientation): string {
   return `${from}>${to}`;
 }
 
-/**
- * Intenta rotar `activePiece` en el sentido indicado siguiendo el algoritmo
- * SRS: calcula la orientación destino, obtiene la tabla de wall kicks de la
- * pieza y prueba cada kick en el orden oficial, aplicando el primero cuyas
- * celdas resultantes no colisionen (`isCollision`). La pieza O no usa kicks:
- * solo se comprueba el desplazamiento (0, 0).
- *
- * Si algún candidato es válido, muta `activePiece` (x, y, orientation) in
- * situ y devuelve `true`. Si ninguno lo es, no muta nada y devuelve `false`.
- *
- * @param board celdas fijas del tablero, usadas solo para comprobar colisiones.
- * @param activePiece pieza a rotar; se muta directamente solo si la rotación tiene éxito.
- * @param clockwise `true` para rotación horaria, `false` para antihoraria.
- */
 function tryRotate(
   board: (PieceType | null)[][],
   activePiece: ActivePiece,
@@ -414,7 +408,6 @@ function tryRotate(
 ): boolean {
   const pieceType = activePiece.type;
 
-  // Determinar orientación destino
   let targetOrientation: Orientation;
   if (clockwise) {
     targetOrientation = ((activePiece.orientation + 1) % 4) as Orientation;
@@ -422,7 +415,6 @@ function tryRotate(
     targetOrientation = ((activePiece.orientation + 3) % 4) as Orientation;
   }
 
-  // Para pieza O: solo actualizar orientación, no hay desplazamiento
   if (pieceType === 'O') {
     const targetCells = computeAbsoluteCells(pieceType, activePiece.x, activePiece.y, targetOrientation);
     if (!isCollision(board, targetCells)) {
@@ -432,22 +424,18 @@ function tryRotate(
     return false;
   }
 
-  // Obtener la secuencia de kicks para esta transición
   const transitionKey = getTransitionKey(activePiece.orientation, targetOrientation);
   const kickTable = getKickTable(pieceType);
   const kicks = kickTable[transitionKey];
 
-  // Si no hay tabla de kicks definida para esta transición (no debería ocurrir), fallar
   if (!kicks) return false;
 
-  // Probar cada kick en orden
   for (const kick of kicks) {
     const candidateX = activePiece.x + kick.x;
     const candidateY = activePiece.y + kick.y;
     const candidateCells = computeAbsoluteCells(pieceType, candidateX, candidateY, targetOrientation);
 
     if (!isCollision(board, candidateCells)) {
-      // Aplicar la rotación
       activePiece.x = candidateX;
       activePiece.y = candidateY;
       activePiece.orientation = targetOrientation;
@@ -455,25 +443,11 @@ function tryRotate(
     }
   }
 
-  // Ningún kick válido: no mutar
   return false;
 }
 
 // ── Creación del motor ──────────────────────────────────────────────────
 
-/**
- * Crea una instancia del motor determinista. Valida `options.seed` (entero
- * en [0, UINT32_MAX]) y `options.config` antes de inicializar el estado, y
- * genera la pieza activa inicial y la siguiente a partir del PRNG sembrado
- * con `options.seed`.
- *
- * Dada la misma semilla, configuración y secuencia de llamadas a `step()`,
- * el motor produce siempre el mismo snapshot y la misma secuencia de
- * eventos.
- *
- * @throws {EngineOptionsError} si `options.seed` o `options.config` no
- *   cumplen su contrato.
- */
 export function createGameEngine(options: EngineOptions): GameEngine {
   validateSeed(options.seed);
   parseGameConfig(options.config);
@@ -488,9 +462,12 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   let bagState = createBag(prng);
   let activePiece: ActivePiece | null = null;
   let nextPieceType: PieceType | null = null;
-  let gravityAccumulatorMs = 0;
+  let verticalProgress = 0;
   let clearedLines = 0;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
+
+  // Estado de temporización horizontal
+  const horizontalState = createHorizontalState();
 
   function spawnInitialPieces(): void {
     const firstType = nextFromBag(bagState, prng);
@@ -499,7 +476,6 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     const spawnY = calculateSpawnY(firstType);
     const cells = computeAbsoluteCells(firstType, spawnX, spawnY, Orientation.Spawn);
 
-    // Si el spawn inicial está bloqueado (no debería ocurrir con el tablero vacío), fin de partida
     if (isCollision(board, cells)) {
       status = 'gameOver';
       eventQueue.push({ type: 'gameOver', step: currentStep, reason: 'spawnBlocked' });
@@ -510,7 +486,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
     activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     nextPieceType = secondType;
-    gravityAccumulatorMs = 0;
+    resetHorizontalState(horizontalState);
+    verticalProgress = 0;
   }
 
   function lockActivePiece(): void {
@@ -522,12 +499,6 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     eventQueue.push({ type: 'pieceLocked', step: currentStep, piece: activePiece.type });
   }
 
-  /**
-   * Elimina las filas completas del tablero, desplaza hacia abajo las filas
-   * restantes y añade filas vacías en la parte superior. Devuelve los
-   * índices (previos al desplazamiento) de las filas eliminadas; vacío si
-   * ninguna fila estaba completa.
-   */
   function clearLines(): number[] {
     const completeLineIndices: number[] = [];
     for (let y = 0; y < BOARD_ROWS; y++) {
@@ -538,7 +509,6 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
     if (completeLineIndices.length === 0) return [];
 
-    // Eliminar las líneas completas y añadir filas vacías en la parte superior
     const newBoard = createEmptyBoard();
     let writeRow = BOARD_ROWS - 1;
     for (let y = BOARD_ROWS - 1; y >= 0; y--) {
@@ -573,21 +543,171 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     nextPieceType = nextNext;
 
     activePiece = { type: pieceType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
-    gravityAccumulatorMs = 0;
+    resetHorizontalState(horizontalState);
+    verticalProgress = 0;
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: pieceType });
   }
 
-  // Procesamiento interno del paso (pasos 5-12 del orden lógico, §14 de 0002 + §13 de 0003)
-  function processStep(input: StepInput): void {
-    // 5. Movimiento horizontal
-    if (input.horizontal !== 0 && activePiece) {
-      const newX = activePiece.x + input.horizontal;
-      const cells = computeAbsoluteCells(activePiece.type, newX, activePiece.y, activePiece.orientation);
-      if (!isCollision(board, cells)) {
-        activePiece.x = newX;
-        eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'horizontal' });
+  /**
+   * Intenta mover la pieza activa una celda en la dirección `dir` (-1 = izquierda, +1 = derecha).
+   * Si el movimiento es válido, lo aplica y emite `pieceMoved` con motivo `'horizontal'`.
+   * Devuelve `true` si el movimiento tuvo éxito, `false` si fue bloqueado.
+   */
+  function tryMoveHorizontal(dir: -1 | 1): boolean {
+    if (!activePiece) return false;
+    const newX = activePiece.x + dir;
+    const cells = computeAbsoluteCells(activePiece.type, newX, activePiece.y, activePiece.orientation);
+    if (!isCollision(board, cells)) {
+      activePiece.x = newX;
+      eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'horizontal' });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Activa una dirección horizontal como prioritaria:
+   * establece la prioridad, reinicia acumuladores e intenta un movimiento inmediato.
+   */
+  function activateDirection(dir: 'left' | 'right'): void {
+    horizontalState.priority = dir;
+    horizontalState.accumulatorMs = 0;
+    horizontalState.hasReachedDas = false;
+    // Movimiento inmediato
+    tryMoveHorizontal(dir === 'left' ? -1 : 1);
+  }
+
+  /**
+   * Limpia la prioridad horizontal y sus acumuladores.
+   */
+  function clearPriority(): void {
+    horizontalState.priority = null;
+    horizontalState.accumulatorMs = 0;
+    horizontalState.hasReachedDas = false;
+  }
+
+  /**
+   * Resuelve la dirección horizontal efectiva del paso y ejecuta las acciones
+   * correspondientes (activación, DAS, ARR). Paso 5 del orden lógico.
+   */
+  function processHorizontal(input: StepInput): void {
+    // Reglas 1-6 del §9.1 de la especificación
+
+    // 1. Flanco izquierdo
+    if (input.leftPressed) {
+      activateDirection('left');
+      return;
+    }
+
+    // 2. Flanco derecho
+    if (input.rightPressed) {
+      activateDirection('right');
+      return;
+    }
+
+    // 3. Prioridad izquierda pero left ya no está mantenida
+    if (horizontalState.priority === 'left' && !input.leftHeld) {
+      if (input.rightHeld) {
+        activateDirection('right');
+      } else {
+        clearPriority();
+      }
+      return;
+    }
+
+    // 4. Prioridad derecha pero right ya no está mantenida
+    if (horizontalState.priority === 'right' && !input.rightHeld) {
+      if (input.leftHeld) {
+        activateDirection('left');
+      } else {
+        clearPriority();
+      }
+      return;
+    }
+
+    // 5. Sin prioridad: evaluar estado mantenido
+    if (horizontalState.priority === null) {
+      if (input.leftHeld && !input.rightHeld) {
+        activateDirection('left');
+        return;
+      }
+      if (input.rightHeld && !input.leftHeld) {
+        activateDirection('right');
+        return;
+      }
+      // Ninguna mantenida, o ambas sin flanco: no hacer nada
+      return;
+    }
+
+    // 6. Continuar la secuencia DAS/ARR en curso
+    // (la prioridad actual sigue manteniéndose, sin flanco de cambio)
+    if (horizontalState.priority !== null) {
+      horizontalState.accumulatorMs += config.fixedStepMs;
+
+      const dir = horizontalState.priority === 'left' ? -1 : 1;
+
+      if (!horizontalState.hasReachedDas && horizontalState.accumulatorMs >= config.dasMs) {
+        horizontalState.accumulatorMs -= config.dasMs;
+        horizontalState.hasReachedDas = true;
+        tryMoveHorizontal(dir);
+      }
+
+      if (horizontalState.hasReachedDas) {
+        while (horizontalState.accumulatorMs >= config.arrMs) {
+          horizontalState.accumulatorMs -= config.arrMs;
+          tryMoveHorizontal(dir);
+        }
       }
     }
+  }
+
+  /**
+   * Procesa el descenso vertical (gravedad o soft drop). Paso 8 del orden lógico.
+   */
+  function processVertical(input: StepInput): void {
+    if (!activePiece) return;
+
+    const activeCellsPerSecond = input.softDropHeld
+      ? config.softDropCellsPerSecond
+      : config.gravityCellsPerSecond;
+
+    verticalProgress += config.fixedStepMs * activeCellsPerSecond;
+
+    while (verticalProgress >= VERTICAL_CELL_UNIT) {
+      if (!activePiece) break; // Seguridad por si se fijó en la iteración anterior
+      const nextY = activePiece.y + 1;
+      const cells = computeAbsoluteCells(activePiece.type, activePiece.x, nextY, activePiece.orientation);
+
+      if (!isCollision(board, cells)) {
+        activePiece.y = nextY;
+        verticalProgress -= VERTICAL_CELL_UNIT;
+        const reason = input.softDropHeld ? 'softDrop' : 'gravity';
+        eventQueue.push({ type: 'pieceMoved', step: currentStep, reason });
+      } else {
+        // Colisión: fijar la pieza inmediatamente
+        lockActivePiece();
+
+        // 9. Eliminación de líneas
+        const lineIndices = clearLines();
+        if (lineIndices.length > 0) {
+          eventQueue.push({
+            type: 'linesCleared',
+            step: currentStep,
+            lines: lineIndices.length,
+            lineIndices: Object.freeze([...lineIndices]),
+          });
+        }
+
+        // 10. Spawn de la siguiente pieza
+        spawnNextPiece();
+        break; // Detener procesamiento vertical
+      }
+    }
+  }
+
+  function processStep(input: StepInput): void {
+    // 5. Movimiento horizontal
+    processHorizontal(input);
 
     // 6. Rotación
     if (activePiece) {
@@ -595,7 +715,6 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       const rotateCCW = input.rotateCounterclockwise === true;
 
       if (rotateCW || rotateCCW) {
-        // rotateClockwise tiene prioridad si ambos son true (nunca debería ocurrir tras la validación)
         const rotated = tryRotate(board, activePiece, rotateCW);
         if (rotated) {
           eventQueue.push({ type: 'pieceRotated', step: currentStep, orientation: activePiece.orientation });
@@ -610,9 +729,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         activePiece.y += distance;
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'hardDrop' });
       }
-      // Fijación inmediata (distancia 0 -> sin pieceMoved, solo pieceLocked)
       lockActivePiece();
-      // 9. Eliminación de líneas
       const lineIndices = clearLines();
       if (lineIndices.length > 0) {
         eventQueue.push({
@@ -622,50 +739,19 @@ export function createGameEngine(options: EngineOptions): GameEngine {
           lineIndices: Object.freeze([...lineIndices]),
         });
       }
-      // 10. Spawn de la siguiente pieza
       spawnNextPiece();
-      return; // El hard drop completa el procesamiento del paso; se omite la gravedad
+      return; // Hard drop completa el procesamiento del paso
     }
 
-    // 8. Gravedad (solo si hardDrop es false)
-    if (activePiece) {
-      const msPerCell = msPerCellFromConfig(config);
-      gravityAccumulatorMs += config.fixedStepMs;
-
-      while (gravityAccumulatorMs >= msPerCell) {
-        const nextY = activePiece.y + 1;
-        const cells = computeAbsoluteCells(activePiece.type, activePiece.x, nextY, activePiece.orientation);
-        if (!isCollision(board, cells)) {
-          activePiece.y = nextY;
-          gravityAccumulatorMs -= msPerCell;
-          eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'gravity' });
-        } else {
-          lockActivePiece();
-
-          // 9. Eliminación de líneas
-          const lineIndices = clearLines();
-          if (lineIndices.length > 0) {
-            eventQueue.push({
-              type: 'linesCleared',
-              step: currentStep,
-              lines: lineIndices.length,
-              lineIndices: Object.freeze([...lineIndices]),
-            });
-          }
-
-          // 10. Spawn de la siguiente pieza
-          spawnNextPiece();
-          break; // Se detiene el procesamiento de gravedad para este paso
-        }
-      }
-    }
+    // 8. Gravedad o soft drop (solo si no hubo hard drop)
+    processVertical(input);
   }
 
   spawnInitialPieces();
 
   return {
     step(input: StepInput): void {
-      // 1. Comprobar el estado del motor (antes de validar la entrada, según §13)
+      // 1. Comprobar el estado del motor
       if (status === 'gameOver') {
         throw new EngineStepError(
           'ENGINE_NOT_RUNNING',
@@ -731,11 +817,11 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       bagState = createBag(prng);
       activePiece = null;
       nextPieceType = null;
-      gravityAccumulatorMs = 0;
+      verticalProgress = 0;
       clearedLines = 0;
+      resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 
-      // Genera la pieza activa inicial y la siguiente (igual que en el constructor)
       const firstType = nextFromBag(bagState, prng);
       const secondType = nextFromBag(bagState, prng);
       const spawnX = calculateSpawnX(firstType);
@@ -750,7 +836,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       } else {
         activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
         nextPieceType = secondType;
-        gravityAccumulatorMs = 0;
+        resetHorizontalState(horizontalState);
+        verticalProgress = 0;
       }
 
       eventQueue.push({ type: 'engineReset', step: 0 });
@@ -760,15 +847,6 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
 // ── Validación de entrada ───────────────────────────────────────────────
 
-/**
- * Valida la forma de `input` contra el contrato de `StepInput`: rechaza
- * propiedades desconocidas, campos ausentes o de tipo incorrecto, y la
- * combinación simultánea de `rotateClockwise` y `rotateCounterclockwise`.
- * No muta `input` ni el estado del motor.
- *
- * @throws {EngineStepError} con `code: 'INVALID_GAME_INPUT'` ante cualquier
- *   incumplimiento del contrato.
- */
 function validateInput(input: unknown): asserts input is StepInput {
   if (typeof input !== 'object' || input === null) {
     throw new EngineStepError(
@@ -780,7 +858,7 @@ function validateInput(input: unknown): asserts input is StepInput {
   const obj = input as Record<string, unknown>;
 
   // Comprobar propiedades desconocidas
-  const allowedKeys = ['horizontal', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise'];
+  const allowedKeys = ['leftHeld', 'rightHeld', 'leftPressed', 'rightPressed', 'softDropHeld', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise'];
   for (const key of Object.keys(obj)) {
     if (!allowedKeys.includes(key)) {
       throw new EngineStepError(
@@ -790,58 +868,80 @@ function validateInput(input: unknown): asserts input is StepInput {
     }
   }
 
-  // Comprobar horizontal
-  if (!('horizontal' in obj)) {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      'Missing required field: horizontal',
-    );
+  // Comprobar leftHeld
+  if (!('leftHeld' in obj)) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Missing required field: leftHeld');
+  }
+  if (typeof obj.leftHeld !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `leftHeld must be boolean, got ${typeof obj.leftHeld}`);
   }
 
-  if (obj.horizontal !== -1 && obj.horizontal !== 0 && obj.horizontal !== 1) {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      `horizontal must be -1, 0, or 1, got ${obj.horizontal}`,
-    );
+  // Comprobar rightHeld
+  if (!('rightHeld' in obj)) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Missing required field: rightHeld');
+  }
+  if (typeof obj.rightHeld !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `rightHeld must be boolean, got ${typeof obj.rightHeld}`);
+  }
+
+  // Comprobar leftPressed
+  if (!('leftPressed' in obj)) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Missing required field: leftPressed');
+  }
+  if (typeof obj.leftPressed !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `leftPressed must be boolean, got ${typeof obj.leftPressed}`);
+  }
+
+  // Comprobar rightPressed
+  if (!('rightPressed' in obj)) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Missing required field: rightPressed');
+  }
+  if (typeof obj.rightPressed !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `rightPressed must be boolean, got ${typeof obj.rightPressed}`);
+  }
+
+  // Comprobar softDropHeld
+  if (!('softDropHeld' in obj)) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Missing required field: softDropHeld');
+  }
+  if (typeof obj.softDropHeld !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `softDropHeld must be boolean, got ${typeof obj.softDropHeld}`);
   }
 
   // Comprobar hardDrop
   if (!('hardDrop' in obj)) {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      'Missing required field: hardDrop',
-    );
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Missing required field: hardDrop');
   }
-
   if (typeof obj.hardDrop !== 'boolean') {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      `hardDrop must be boolean, got ${typeof obj.hardDrop}`,
-    );
+    throw new EngineStepError('INVALID_GAME_INPUT', `hardDrop must be boolean, got ${typeof obj.hardDrop}`);
   }
 
   // Comprobar rotateClockwise si está presente
   if ('rotateClockwise' in obj && typeof obj.rotateClockwise !== 'boolean') {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      `rotateClockwise must be boolean, got ${typeof obj.rotateClockwise}`,
-    );
+    throw new EngineStepError('INVALID_GAME_INPUT', `rotateClockwise must be boolean, got ${typeof obj.rotateClockwise}`);
   }
 
   // Comprobar rotateCounterclockwise si está presente
   if ('rotateCounterclockwise' in obj && typeof obj.rotateCounterclockwise !== 'boolean') {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      `rotateCounterclockwise must be boolean, got ${typeof obj.rotateCounterclockwise}`,
-    );
+    throw new EngineStepError('INVALID_GAME_INPUT', `rotateCounterclockwise must be boolean, got ${typeof obj.rotateCounterclockwise}`);
   }
 
-  // Comprobar simultaneidad
+  // pressed sin held
+  if (obj.leftPressed === true && obj.leftHeld === false) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'leftPressed requires leftHeld to be true');
+  }
+  if (obj.rightPressed === true && obj.rightHeld === false) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'rightPressed requires rightHeld to be true');
+  }
+
+  // Ambos flancos simultáneos
+  if (obj.leftPressed === true && obj.rightPressed === true) {
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Cannot have both leftPressed and rightPressed simultaneously');
+  }
+
+  // Rotaciones simultáneas
   if (obj.rotateClockwise === true && obj.rotateCounterclockwise === true) {
-    throw new EngineStepError(
-      'INVALID_GAME_INPUT',
-      'Cannot rotate both clockwise and counterclockwise simultaneously',
-    );
+    throw new EngineStepError('INVALID_GAME_INPUT', 'Cannot rotate both clockwise and counterclockwise simultaneously');
   }
 }
 

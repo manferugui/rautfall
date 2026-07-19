@@ -16,7 +16,12 @@ describe('integración del workspace', () => {
     const config = parseGameConfig(prototypeConfig);
     const engine = createGameEngine({ seed: 99, config });
 
-    engine.step({ horizontal: 0, hardDrop: false });
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    });
 
     const snap = engine.getSnapshot();
     expect(snap.configVersion).toBe('prototype-0001');

@@ -2,25 +2,25 @@
  * Gestión de entrada de teclado para el juego.
  *
  * Traduce el estado de teclas Phaser a un StepInput del motor.
- * Reglas:
- * - Movimiento horizontal solo por nueva pulsación (flanco de bajada).
- * - Rotación y hard drop son acciones de pulsación única.
- * - Una acción discreta se consume en un solo paso aunque el mismo frame
- *   ejecute varios pasos lógicos.
- * - Si izquierda y derecha están presionadas simultáneamente, horizontal = 0.
- * - Nunca se envían ambas rotaciones simultáneamente.
+ * Responsabilidades:
+ * - Detectar flancos de pulsación para teclas de acción discreta (rotación, hard drop)
+ *   y teclas de dirección horizontal.
+ * - Conservar estado mantenido (held) para izquierda, derecha y soft drop.
+ * - Entregar cada flanco una sola vez (mecanismo consumed).
+ * - No contiene lógica de repetición horizontal (DAS/ARR), ni de soft drop,
+ *   ni de prioridad horizontal: todo eso es responsabilidad exclusiva del motor.
  */
 
 import type { StepInput } from '@rautfall/game-engine';
 
 export type KeyState = {
-  justPressedLeft: boolean;
-  justPressedRight: boolean;
-  isDownLeft: boolean;
-  isDownRight: boolean;
+  horizontalPressed: 'left' | 'right' | null;
+  leftHeld: boolean;
+  rightHeld: boolean;
   justPressedUp: boolean;
   justPressedZ: boolean;
   justPressedSpace: boolean;
+  softDropHeld: boolean;
 };
 
 /**
@@ -40,25 +40,27 @@ export function buildStepInput(
     hardDrop: boolean;
   },
 ): [StepInput, { horizontal: boolean; clockwise: boolean; counterclockwise: boolean; hardDrop: boolean }] {
-  // Movimiento horizontal: solo por nueva pulsación, no repetir si ya se consumió
-  let horizontal: -1 | 0 | 1 = 0;
-  const leftPressed = keys.justPressedLeft;
-  const rightPressed = keys.justPressedRight;
-  const bothPressed = keys.isDownLeft && keys.isDownRight;
+  // Estado mantenido horizontal (siempre el real, independientemente de consumed)
+  const leftHeld = keys.leftHeld;
+  const rightHeld = keys.rightHeld;
 
+  // Flancos horizontales: un único flanco direccional garantizado por el productor (GameScene),
+  // o null si no hay flanco. Se consume una sola vez.
+  let leftPressed = false;
+  let rightPressed = false;
   let consumedHorizontal = consumedThisFrame.horizontal;
-  if (!consumedThisFrame.horizontal) {
-    if (bothPressed) {
-      horizontal = 0;
-      consumedHorizontal = true;
-    } else if (leftPressed && !rightPressed) {
-      horizontal = -1;
-      consumedHorizontal = true;
-    } else if (rightPressed && !leftPressed) {
-      horizontal = 1;
-      consumedHorizontal = true;
+
+  if (!consumedThisFrame.horizontal && keys.horizontalPressed !== null) {
+    if (keys.horizontalPressed === 'left') {
+      leftPressed = true;
+    } else {
+      rightPressed = true;
     }
+    consumedHorizontal = true;
   }
+
+  // Soft drop: estado mantenido, no hay flanco, no se consume
+  const softDropHeld = keys.softDropHeld;
 
   // Rotación horaria (ArrowUp)
   let rotateClockwise = false;
@@ -91,7 +93,7 @@ export function buildStepInput(
   }
 
   return [
-    { horizontal, hardDrop, rotateClockwise, rotateCounterclockwise },
+    { leftHeld, rightHeld, leftPressed, rightPressed, softDropHeld, hardDrop, rotateClockwise, rotateCounterclockwise },
     {
       horizontal: consumedHorizontal,
       clockwise: consumedClockwise,
