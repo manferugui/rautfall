@@ -2,7 +2,7 @@
  * Factoría que centraliza la creación de Phaser.Game.
  *
  * Recibe el elemento contenedor y los callbacks, y devuelve un controlador
- * tipado pequeño (PhaserGameController) con reset() y destroy().
+ * tipado pequeño (PhaserGameController) con reset(), togglePause() y destroy().
  */
 
 import Phaser from 'phaser';
@@ -54,6 +54,12 @@ export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameCo
       const scene = game.scene.getScene('GameScene') as GameScene | null;
       if (scene) {
         scene.resetGame();
+      }
+    },
+    togglePause(): void {
+      const scene = game.scene.getScene('GameScene') as GameScene | null;
+      if (scene) {
+        scene.togglePause();
       }
     },
     destroy(): void {

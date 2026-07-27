@@ -1,10 +1,11 @@
 import type { PieceType } from '@rautfall/game-engine';
+import type { SessionStatus } from './session-status';
 
 /**
  * Resumen mínimo que Phaser comunica a Vue.
  */
 export type GamePresentationState = Readonly<{
-  status: 'running' | 'gameOver';
+  status: SessionStatus;
   step: number;
   elapsedMs: number;
   nextPieces: readonly PieceType[];
@@ -15,5 +16,6 @@ export type GamePresentationState = Readonly<{
  */
 export type PhaserGameController = Readonly<{
   reset(): void;
+  togglePause(): void;
   destroy(): void;
 }>;

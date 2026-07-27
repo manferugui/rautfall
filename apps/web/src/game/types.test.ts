@@ -55,6 +55,19 @@ describe('GamePresentationState', () => {
     expect(state.status).toBe('gameOver');
   });
 
+  it('soporta status paused', () => {
+    const state: GamePresentationState = {
+      status: 'paused',
+      step: 50,
+      elapsedMs: 2500,
+      nextPieces: ['S', 'Z', 'J'],
+    };
+
+    expect(state.status).toBe('paused');
+    const keys = Object.keys(state);
+    expect(keys).toHaveLength(4);
+  });
+
   it('nextPieces tiene tres elementos', () => {
     const state: GamePresentationState = {
       status: 'running',

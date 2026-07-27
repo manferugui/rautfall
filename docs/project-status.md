@@ -156,6 +156,38 @@ Ver [Informe de implementación](implementation/0006-lock-delay-fijacion-diferid
 
 Ver [Informe de implementación](implementation/0007-cola-proximas-piezas-preview-tecnico.md).
 
+## Task [0008 — Pausa, reanudación y reinicio coordinados](tasks/0008-pausa-reanudacion-reinicio-coordinados.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-27 |
+| **Resultado** | Pausa/reanudación por Escape y botón Vue, overlay «PAUSA», neutralización de teclas mantenidas, guardián de liberación de entrada, drenaje durante pausa, precedencia gameOver > paused, reinicio desde cualquier estado sin duplicar listeners ni modificar el motor. 298 tests pasan, lint, typecheck y build exitosos (aviso de chunk de Phaser no bloqueante). |
+
+### Resumen
+
+- `SessionStatus = 'running' | 'paused' | 'gameOver'` con precedencia determinista.
+- `computeSessionStatus` deriva el estado de sesión de `(engineStatus, isPaused)` sin dos estados independientes.
+- `Escape` detectado por flanco (JustDown) alterna running ⇄ paused; sin efecto en gameOver.
+- Botón Pausar/Reanudar en Vue invoca `controller.togglePause()` (misma operación que Escape).
+- Overlay técnico provisional «PAUSA» en Vue+CSS sobre el canvas, con `pointer-events: none`.
+- Botón Reiniciar disponible en los tres estados, reutiliza semilla y configuración.
+- Mecanismo `input-release-guard.ts` bloquea left/right/softDrop al reanudar o reiniciar hasta observar keyup real.
+- Drenaje continuo de flancos durante frames pausados mediante `readKeys()` descartado.
+- Acumulador temporal puesto a 0 al pausar y al reanudar; sin catch-up ni ráfaga de pasos.
+- `GamePresentationState.status` ensanchado de `'running' | 'gameOver'` a `SessionStatus`.
+- `PhaserGameController` ampliado con `togglePause()`.
+- Reordenación de `create()` para construir cursores antes de `resetEngine()`.
+- No se modificó `packages/game-engine`; no se usa `scene.pause()`; no se añadieron dependencias.
+- 22 nuevos tests (298 totales).
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0008-pausa-reanudacion-reinicio-coordinados.md).
+
 ## Siguiente tarea
 
-La tarea 0008 se definirá tras revisar la implementación de 0007, validar manualmente la preview técnica y recorrer el roadmap. Candidatas razonables mencionadas en `docs/rautfall.md`: hold, pieza fantasma, pausa, indicador visual de lock delay, consolidación visual del HUD. Ninguna se asume automáticamente como alcance de la siguiente tarea hasta que se redacte su propia especificación.
+No se fija una 0009 definitiva. La siguiente tarea se decidirá después de:
+- validar en el navegador la pausa, reanudación y reinicio de 0008;
+- revisar la sensación de control resultante;
+- decidir, a la vista de `docs/rautfall.md` y del estado real, entre candidatas razonables como hold, ghost piece, puntuación/combos, o una consolidación visual del HUD.

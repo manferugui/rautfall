@@ -21,6 +21,10 @@ function doReset(): void {
     controller.reset();
   }
 }
+
+function doTogglePause(): void {
+  controller?.togglePause();
+}
 </script>
 
 <template>
@@ -37,6 +41,9 @@ function doReset(): void {
           :on-state-update="onStateUpdate"
           @controller-ready="onControllerReady"
         />
+        <div v-if="gameState.status === 'paused'" class="pause-overlay" role="status" aria-live="polite">
+          PAUSA
+        </div>
       </div>
 
       <div class="info-panel">
@@ -58,17 +65,21 @@ function doReset(): void {
         <NextPiecesPreview :next-pieces="gameState.nextPieces" />
 
         <div class="actions">
-          <button type="button" @click="doReset">Reset</button>
+          <button type="button" :disabled="gameState.status === 'gameOver'" @click="doTogglePause">
+            {{ gameState.status === 'paused' ? 'Reanudar' : 'Pausar' }}
+          </button>
+          <button type="button" @click="doReset">Reiniciar</button>
         </div>
 
         <div class="controls-help">
-          <h2>Controls</h2>
+          <h2>Controles</h2>
           <ul>
-            <li><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Move</li>
-            <li><kbd>&uarr;</kbd> Rotate clockwise</li>
-            <li><kbd>Z</kbd> Rotate counter-clockwise</li>
-            <li><kbd>Space</kbd> Hard drop</li>
-            <li><kbd>R</kbd> Reset</li>
+            <li><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Mover</li>
+            <li><kbd>&uarr;</kbd> Girar sentido horario</li>
+            <li><kbd>Z</kbd> Girar sentido antihorario</li>
+            <li><kbd>Space</kbd> Caída instantánea</li>
+            <li><kbd>R</kbd> Reiniciar</li>
+            <li><kbd>Esc</kbd> Pausar/Reanudar</li>
           </ul>
         </div>
 
@@ -78,7 +89,7 @@ function doReset(): void {
       </div>
     </div>
 
-    <p class="footnote">Technical prototype — 0007</p>
+    <p class="footnote">Prototipo técnico — 0008</p>
   </div>
 </template>
 
@@ -125,6 +136,21 @@ h1 {
 
 .canvas-wrapper {
   flex-shrink: 0;
+  position: relative;
+}
+
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 20, 0.6);
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  pointer-events: none;
 }
 
 .info-panel {
@@ -179,12 +205,17 @@ button {
   transition: background 0.15s;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: #1a4a8a;
 }
 
-button:active {
+button:active:not(:disabled) {
   background: #0d2b50;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .controls-help {

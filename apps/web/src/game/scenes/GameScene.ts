@@ -9,6 +9,8 @@
  * - Drenar eventos del motor.
  * - Notificar a Vue mediante callback con el resumen mínimo.
  * - Soportar reset desde teclado (R) y desde controlador externo.
+ * - Gestionar pausa, reanudación y reinicio coordinados (0008).
+ * - Neutralizar entrada al pausar y rearmar al reanudar/reiniciar.
  * - No contiene reglas de dominio (colisiones, SRS, gravedad, DAS, ARR, soft drop, etc.).
  */
 
@@ -19,6 +21,8 @@ import type { GamePresentationState } from '../types';
 import { computeSteps } from '../time-adapter';
 import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
+import { computeSessionStatus, canTogglePause } from '../session-status';
+import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
   CELL_SIZE,
   HIDDEN_ROWS,
@@ -71,7 +75,18 @@ export class GameScene extends Phaser.Scene {
     space: Phaser.Input.Keyboard.Key;
     z: Phaser.Input.Keyboard.Key;
     r: Phaser.Input.Keyboard.Key;
+    esc: Phaser.Input.Keyboard.Key;
   };
+
+  /** true mientras la sesión web está pausada. El motor no recibe step() durante la pausa. */
+  private isPaused = false;
+
+  /**
+   * Guardián de liberación de teclas. Bloquea left/right/softDrop hasta que
+   * se observe su keyup real, evitando que teclas mantenidas durante una
+   * transición (pausa→running, reinicio) produzcan acciones fantasma.
+   */
+  private releaseGuard: ReleaseGuard = NO_RELEASE_GUARD;
 
   /**
    * Flanco horizontal pendiente. Se establece en el evento `keydown` real
@@ -95,12 +110,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.resetEngine();
-
-    this.graphics = this.add.graphics();
-    this.graphics.setPosition(0, 0);
-
     const kb = this.input.keyboard!;
+
+    // Construir this.cursors antes de resetEngine() para que pueda leer el
+    // estado físico de las teclas al armar el guardián de liberación.
     this.cursors = {
       left: kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
       right: kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
@@ -109,7 +122,13 @@ export class GameScene extends Phaser.Scene {
       space: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       z: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
       r: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
+      esc: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
     };
+
+    this.resetEngine();
+
+    this.graphics = this.add.graphics();
+    this.graphics.setPosition(0, 0);
 
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
@@ -142,9 +161,17 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard!.on('keydown', onKeyDown);
 
-    // Registrar keyup para teclas horizontales y de soft drop
+    // Registrar keyup para teclas horizontales, de soft drop y para limpiar el guardián de liberación
     const onKeyUp = (event: KeyboardEvent): void => {
-      if (event.code !== 'ArrowLeft' && event.code !== 'ArrowRight' && event.code !== 'ArrowDown') return;
+      if (event.code === 'ArrowLeft') {
+        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'left');
+      } else if (event.code === 'ArrowRight') {
+        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'right');
+      } else if (event.code === 'ArrowDown') {
+        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'softDrop');
+      } else {
+        return; // Solo registrar log si es una tecla que nos interesa
+      }
       logDebug({
         source: 'keyboard',
         event: 'keyup',
@@ -190,16 +217,35 @@ export class GameScene extends Phaser.Scene {
     // Reiniciar banderas de consumo al empezar el frame
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
 
+    // R tiene prioridad máxima: funciona en cualquier estado (running, paused, gameOver)
     if (Phaser.Input.Keyboard.JustDown(this.cursors.r)) {
-      this.resetEngine();
+      this.resetGame();
+      return;
+    }
+
+    const engineStatus = this.engine.getSnapshot().status;
+
+    // gameOver prevalece sobre cualquier otro estado
+    if (engineStatus === 'gameOver') {
+      if (this.isPaused) this.isPaused = false;              // precedencia defensiva
+      Phaser.Input.Keyboard.JustDown(this.cursors.esc);       // drenar sin efecto
+      this.renderFrame();
+      this.engine.drainEvents();
       this.notifyState();
       return;
     }
 
-    const status = this.engine.getSnapshot().status;
-    if (status === 'gameOver') {
+    // Escape solo se evalúa cuando el motor no está en gameOver
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.esc)) {
+      this.togglePause();
+      return;
+    }
+
+    // Mientras está pausado: drenar entrada, renderizar (congelado) y notificar
+    if (this.isPaused) {
+      this.readKeys();               // drenar entrada durante la pausa (§11.4)
       this.renderFrame();
-      this.engine.drainEvents();
+      this.notifyState();
       return;
     }
 
@@ -308,12 +354,50 @@ export class GameScene extends Phaser.Scene {
     logDebug({ source: 'lifecycle', event: 'reset – resetGame' });
   }
 
+  /**
+   * Alterna entre running y paused.
+   * Es la única implementación de la operación de pausa: tanto Escape como el
+   * botón Vue llaman exactamente a este método.
+   */
+  togglePause(): void {
+    const engineStatus = this.engine.getSnapshot().status;
+    if (!canTogglePause(engineStatus)) return; // 1. no-op durante gameOver
+
+    this.isPaused = !this.isPaused;             // 2. cambiar estado de sesión
+
+    this.pendingHorizontal = null;              // 3. limpiar entrada pendiente
+    this.readKeys();                            //    drenar flancos residuales del instante de la transición
+
+    if (this.isPaused) {
+      this.accumulator = 0;                     // 4. limpiar acumulador temporal
+      logDebug({ source: 'lifecycle', event: 'pause' });
+    } else {
+      this.releaseGuard = armReleaseGuard({      // arma el rearme por liberación
+        left: this.cursors.left.isDown,
+        right: this.cursors.right.isDown,
+        softDrop: this.cursors.down.isDown,
+      });
+      this.accumulator = 0;                     // establecer la nueva referencia temporal
+      logDebug({ source: 'lifecycle', event: 'resume' });
+    }
+
+    this.renderFrame();                         // 5. renderizar inmediatamente con el nuevo estado
+    this.notifyState();                         // 6. notificar el nuevo estado a Vue
+  }
+
   private resetEngine(): void {
     this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
     this.engine.drainEvents();
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
     this.pendingHorizontal = null;
+    this.isPaused = false;                       // el reinicio siempre deja la sesión en running
+    this.releaseGuard = armReleaseGuard({
+      left: this.cursors.left.isDown,
+      right: this.cursors.right.isDown,
+      softDrop: this.cursors.down.isDown,
+    });
+    this.readKeys();                             // drena cualquier flanco pendiente antes del reinicio
     logDebug({ source: 'lifecycle', event: 'reset – engine' });
   }
 
@@ -324,11 +408,14 @@ export class GameScene extends Phaser.Scene {
    * real registrado desde el frame anterior. Si la tecla correspondiente
    * ya no está mantenida (se soltó antes de consumir), el flanco se descarta
    * para no violar la validación `pressed requiere held` del motor.
+   *
+   * Aplica el guardián de liberación (releaseGuard) a left, right y softDrop
+   * para neutralizar teclas mantenidas durante transiciones de pausa/reinicio.
    */
   private readKeys(): KeyState {
     let horizontalPressed: 'left' | 'right' | null = null;
-    let leftHeld = this.cursors.left.isDown;
-    let rightHeld = this.cursors.right.isDown;
+    let leftHeld = resolveHeld(this.releaseGuard, 'left', this.cursors.left.isDown);
+    let rightHeld = resolveHeld(this.releaseGuard, 'right', this.cursors.right.isDown);
 
     if (this.pendingHorizontal !== null) {
       // Se recibió un keydown real desde la última vez. Siempre entregar el flanco,
@@ -352,7 +439,7 @@ export class GameScene extends Phaser.Scene {
       justPressedUp: Phaser.Input.Keyboard.JustDown(this.cursors.up),
       justPressedZ: Phaser.Input.Keyboard.JustDown(this.cursors.z),
       justPressedSpace: Phaser.Input.Keyboard.JustDown(this.cursors.space),
-      softDropHeld: this.cursors.down.isDown,
+      softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
     };
   }
 
@@ -363,16 +450,18 @@ export class GameScene extends Phaser.Scene {
    * para continuar o limpiar la secuencia DAS/ARR. El flanco horizontal
    * se bloquea (null) para no repetir la pulsación; lo mismo para rotación
    * y hard drop, que se consumen con `consumedThisFrame`.
+   *
+   * Aplica el guardián de liberación a left, right y softDrop.
    */
   private emptyInput(): KeyState {
     return {
       horizontalPressed: null,
-      leftHeld: this.cursors.left.isDown,
-      rightHeld: this.cursors.right.isDown,
+      leftHeld: resolveHeld(this.releaseGuard, 'left', this.cursors.left.isDown),
+      rightHeld: resolveHeld(this.releaseGuard, 'right', this.cursors.right.isDown),
       justPressedUp: false,
       justPressedZ: false,
       justPressedSpace: false,
-      softDropHeld: this.cursors.down.isDown,
+      softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
     };
   }
 
@@ -419,7 +508,7 @@ export class GameScene extends Phaser.Scene {
   private notifyState(): void {
     const snap = this.engine.getSnapshot();
     const newState: GamePresentationState = {
-      status: snap.status,
+      status: computeSessionStatus(snap.status, this.isPaused),
       step: snap.step,
       elapsedMs: snap.elapsedMs,
       nextPieces: [...snap.nextPieces],
