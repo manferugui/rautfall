@@ -4,6 +4,8 @@
  *
  * Se mockea createPhaserGame para evitar arrancar WebGL real en Vitest.
  * El controlador simulado expone reset, togglePause y destroy.
+ *
+ * Ver docs/tasks/0009-marco-tactical-identidad-visual-industrial-dramatic.md §21.4.
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -33,6 +35,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       global: {
         stubs: {
           NextPiecesPreview: true,
+          OpponentMonitor: true,
+          CombatStatusPanel: true,
         },
       },
     });
@@ -40,7 +44,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
 
   it('muestra "Pausar" cuando el estado es running', () => {
     const wrapper = mountApp();
-    const pauseButton = wrapper.find('button:first-child');
+    const pauseButton = wrapper.find('[data-testid="pause-toggle"]');
     expect(pauseButton.text()).toBe('Pausar');
     expect(pauseButton.attributes('disabled')).toBeUndefined();
     wrapper.unmount();
@@ -62,7 +66,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     stateUpdateCallback(pausedState);
     await wrapper.vm.$nextTick();
 
-    const pauseButton = wrapper.find('button:first-child');
+    const pauseButton = wrapper.find('[data-testid="pause-toggle"]');
     expect(pauseButton.text()).toBe('Reanudar');
     expect(pauseButton.attributes('disabled')).toBeUndefined();
 
@@ -80,7 +84,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     // No está pulsado aún
     expect(mockController.togglePause).not.toHaveBeenCalled();
 
-    await wrapper.find('button:first-child').trigger('click');
+    await wrapper.find('[data-testid="pause-toggle"]').trigger('click');
     expect(mockController.togglePause).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
@@ -100,7 +104,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     stateUpdateCallback(gameOverState);
     await wrapper.vm.$nextTick();
 
-    const pauseButton = wrapper.find('button:first-child');
+    const pauseButton = wrapper.find('[data-testid="pause-toggle"]');
     expect(pauseButton.text()).toBe('Pausar');
     expect(pauseButton.attributes('disabled')).toBeDefined();
 
@@ -113,7 +117,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
 
     // Verificar en running (estado inicial)
-    const resetButton = wrapper.find('button:last-child');
+    const resetButton = wrapper.find('[data-testid="reset-button"]');
     expect(resetButton.text()).toBe('Reiniciar');
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
@@ -134,7 +138,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     const wrapper = mountApp();
 
     expect(mockController.reset).not.toHaveBeenCalled();
-    await wrapper.find('button:last-child').trigger('click');
+    await wrapper.find('[data-testid="reset-button"]').trigger('click');
     expect(mockController.reset).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
@@ -172,6 +176,92 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     const preview = wrapper.findComponent({ name: 'NextPiecesPreview' });
     expect(preview.exists()).toBe(true);
     expect(preview.props('nextPieces')).toEqual(['T', 'L', 'J']);
+
+    wrapper.unmount();
+  });
+
+  // === Nuevas pruebas de layout Tactical ===
+
+  it('existen las tres zonas del layout Tactical', () => {
+    const wrapper = mountApp();
+    expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="tactical-column"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="opponent-column"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('OpponentMonitor está presente dentro de la columna de monitor rival', () => {
+    const wrapper = mountApp();
+    const opponentColumn = wrapper.find('[data-testid="opponent-column"]');
+    const opponentMonitor = opponentColumn.findComponent({ name: 'OpponentMonitor' });
+    expect(opponentMonitor.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('CombatStatusPanel está presente dentro de la columna táctica', () => {
+    const wrapper = mountApp();
+    const tacticalColumn = wrapper.find('[data-testid="tactical-column"]');
+    const combatPanel = tacticalColumn.findComponent({ name: 'CombatStatusPanel' });
+    expect(combatPanel.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('CombatStatusPanel aparece después de NextPiecesPreview en la columna táctica', () => {
+    const wrapper = mountApp();
+    const tacticalColumn = wrapper.find('[data-testid="tactical-column"]');
+
+    // Verificar que ambos componentes existen en la columna
+    const preview = tacticalColumn.findComponent({ name: 'NextPiecesPreview' });
+    const combatPanel = tacticalColumn.findComponent({ name: 'CombatStatusPanel' });
+    expect(preview.exists()).toBe(true);
+    expect(combatPanel.exists()).toBe(true);
+
+    // Verificar el orden DOM: el elemento NextPiecesPreview debe aparecer antes
+    // que CombatStatusPanel en el árbol DOM de la columna táctica
+    const previewEl = preview.element;
+    const combatEl = combatPanel.element;
+
+    // Usamos compareDocumentPosition para verificar el orden
+    const position = previewEl.compareDocumentPosition(combatEl);
+    // DOCUMENT_POSITION_FOLLOWING = 4 significa que preview está antes que combatEl
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    wrapper.unmount();
+  });
+
+  it('el elemento width-warning existe en el DOM', () => {
+    const wrapper = mountApp();
+    const warning = wrapper.find('[data-testid="width-warning"]');
+    expect(warning.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  // === Nuevas pruebas de la revisión visual 0009b ===
+
+  it('existe una carcasa Tactical que agrupa cabecera y las tres zonas', () => {
+    const wrapper = mountApp();
+    const chassis = wrapper.find('.tactical-chassis');
+    expect(chassis.exists()).toBe(true);
+    expect(chassis.find('.app-header').exists()).toBe(true);
+    expect(chassis.find('[data-testid="own-board-column"]').exists()).toBe(true);
+    expect(chassis.find('[data-testid="tactical-column"]').exists()).toBe(true);
+    expect(chassis.find('[data-testid="opponent-column"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('el marco del tablero propio refleja el estado de sesión real', async () => {
+    const wrapper = mountApp();
+    const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
+
+    expect(wrapper.find('.board-bezel--running').exists()).toBe(true);
+
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.board-bezel--paused').exists()).toBe(true);
+
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.board-bezel--gameOver').exists()).toBe(true);
 
     wrapper.unmount();
   });

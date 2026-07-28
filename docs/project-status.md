@@ -185,9 +185,57 @@ Ver [Informe de implementación](implementation/0007-cola-proximas-piezas-previe
 
 Ver [Informe de implementación](implementation/0008-pausa-reanudacion-reinicio-coordinados.md).
 
+## Task [0009 — Marco Tactical e identidad visual Industrial Dramatic](tasks/0009-marco-tactical-identidad-visual-industrial-dramatic.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-28 |
+| **Resultado** | Layout Tactical de escritorio (tres zonas, responsive hasta 760px), identidad visual Industrial Dramatic (paleta grafito/metal, acentos cian/ámbar/rojo, biseles y sombras), componentes simulados (OpponentMonitor, CombatStatusPanel) con datos congelados fuera del motor, aviso de ancho insuficiente, selectores migrados a data-testid. 316 tests pasan, lint, typecheck y build exitosos (aviso de chunk de Phaser no bloqueante). |
+
+### Resumen
+
+- Hoja de variables CSS `tactical-theme.css` con 18 tokens visuales, importada desde `main.ts`.
+- Layout de tres columnas: tablero propio (360 px), columna táctica (300–380 px), monitor rival (220 px).
+- Dos puntos de corte responsive: 1200px (escritorio), 760px (suelo mínimo con aviso).
+- `OpponentMonitor.vue`: tablero rival estático 10×20 con patrón fijo y etiqueta SIMULADO.
+- `CombatStatusPanel.vue`: energía segmentada (7 segmentos, 3 activos en cian), cartucho (ámbar), Residuos (rojo).
+- `simulated-tactical-data.ts`: datos congelados, fuera de `GamePresentationState` y del motor.
+- `NextPiecesPreview.vue` restilado con variables del tema, sin cambios en script/template.
+- Migration de selectores `button:first-child/last-child` a `data-testid` en `App.test.ts`.
+- 13 nuevas pruebas (5 datos simulados + 4 monitor + 4 combate + 5 layout en App).
+- No se modificaron `packages/game-engine` ni `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0009-marco-tactical-identidad-visual-industrial-dramatic.md).
+
+## Revisión [0009b — Refinamiento visual del marco Tactical Industrial Dramatic](implementation/0009b-refinamiento-visual-marco-tactical.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada (validación visual en navegador pendiente de confirmación del usuario) |
+| **Fecha de finalización** | 2026-07-28 |
+| **Resultado** | Revisión visual correctiva de `0009` (no es una tarea de mecánica nueva): carcasa Tactical (`.tactical-chassis`) que agrupa cabecera y las tres zonas, cabecera integrada como placa estructural, marco de tablero propio en cuatro niveles con acento dinámico por estado real de sesión, consola táctica unificada sin tarjetas sueltas, monitor rival rediseñado (celda 16px, patrón "skyline" de 87 celdas, ventilación y telemetría simulada), breakpoint de portátil corregido a `grid` explícito. 321 tests pasan, lint, typecheck y build exitosos. Sin cambios en `packages/game-engine` ni `packages/game-config`. |
+
+### Resumen
+
+- Corrige exclusivamente composición, escala, integración y acabado de `0009`; no añade mecánicas ni estado de dominio.
+- `App.vue`: carcasa `.tactical-chassis` con remaches de esquina, cabecera en placa con tag angular y franja de advertencia decorativa, marco de tablero en 4 niveles (`.board-column` → `.board-bezel--{status}` → `.canvas-wrapper` → canvas), consola táctica unificada (`.tactical-console` con `.console-section`/`.console-divider`), aviso de ancho insuficiente reubicado al inicio del DOM, breakpoint 760–1199px pasado de `flex-wrap` a `grid` explícito.
+- `OpponentMonitor.vue`: `OPPONENT_CELL_SIZE` 10→16px, patrón estático regenerado con perfil irregular por columna (87 celdas), ranura de ventilación y telemetría simulada (enlace/sector/canal), columna ensanchada a 240px.
+- `CombatStatusPanel.vue`: identificación general de módulo prototipo añadida sin alterar los tres badges `SIMULADO` por bloque; eliminado el chrome de tarjeta individual de cada bloque.
+- `NextPiecesPreview.vue`: solo se simplifica su `<style scoped>` (sin chrome de tarjeta propia); script y template sin cambios.
+- `simulated-tactical-data.ts`: nuevas constantes de señalética simulada del rival; patrón del tablero regenerado deterministamente a partir de un array de alturas por columna.
+- Ningún `data-testid` existente se modifica; 5 pruebas nuevas protegen la carcasa, el acento dinámico del marco, la señalética simulada y la identificación general de módulo.
+- Limitación explícita: no se pudo generar una captura de navegador real ni comparar visualmente pixel a pixel (entorno sin Chromium/Playwright/Puppeteer disponible); queda pendiente de validación manual por el usuario vía `pnpm dev`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0009b-refinamiento-visual-marco-tactical.md).
+
 ## Siguiente tarea
 
-No se fija una 0009 definitiva. La siguiente tarea se decidirá después de:
-- validar en el navegador la pausa, reanudación y reinicio de 0008;
-- revisar la sensación de control resultante;
-- decidir, a la vista de `docs/rautfall.md` y del estado real, entre candidatas razonables como hold, ghost piece, puntuación/combos, o una consolidación visual del HUD.
+No se fija una 0010 definitiva. La siguiente tarea se decidirá después de:
+- validar visualmente en un navegador real el resultado de `0009b` (pendiente: este entorno no dispuso de herramientas de navegador headless para generar una captura);
+- revisar si la identidad Industrial Dramatic y la jerarquía visual funcionan como se pretendía sin comprometer la jugabilidad;
+- decidir, a la vista de `docs/rautfall.md` y del estado real, entre candidatas razonables como hold, ghost piece, puntuación/combos, o el primer sabotaje real (Residuos) sustituyendo su versión simulada.

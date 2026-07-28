@@ -91,23 +91,20 @@ const previews = computed<PreviewPiece[]>(() => {
 </template>
 
 <style scoped>
-.next-pieces-preview {
-  background: #16213e;
-  padding: 1rem;
-  border-radius: 4px;
-}
-
 .preview-heading {
-  font-size: 0.875rem;
-  margin-bottom: 0.75rem;
-  opacity: 0.7;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.625rem;
+  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
 }
 
 .preview-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .preview-slot {
@@ -119,14 +116,14 @@ const previews = computed<PreviewPiece[]>(() => {
 .preview-order {
   font-size: 0.75rem;
   font-family: monospace;
-  opacity: 0.6;
+  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
   min-width: 1rem;
 }
 
 .preview-type {
   font-size: 0.75rem;
   font-family: monospace;
-  opacity: 0.8;
+  color: var(--rf-color-text-primary, #e8e8ec);
   min-width: 1rem;
 }
 
