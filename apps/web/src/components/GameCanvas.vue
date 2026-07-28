@@ -52,6 +52,7 @@ onBeforeUnmount(() => {
     ref="gameContainer"
     class="game-container"
     tabindex="0"
+    data-testid="game-canvas"
   ></div>
 </template>
 

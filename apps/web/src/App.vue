@@ -59,7 +59,7 @@ function doTogglePause(): void {
                 :on-state-update="onStateUpdate"
                 @controller-ready="onControllerReady"
               />
-              <div v-if="gameState.status === 'paused'" class="pause-overlay" role="status" aria-live="polite">
+              <div v-if="gameState.status === 'paused'" class="pause-overlay" role="status" aria-live="polite" data-testid="pause-overlay">
                 PAUSA
               </div>
             </div>
@@ -84,11 +84,11 @@ function doTogglePause(): void {
               <div class="session-grid">
                 <div class="session-item">
                   <span class="session-label">Status</span>
-                  <span class="session-value" :class="gameState.status">{{ gameState.status }}</span>
+                  <span class="session-value" :class="gameState.status" data-testid="session-status">{{ gameState.status }}</span>
                 </div>
                 <div class="session-item">
                   <span class="session-label">Step</span>
-                  <span class="session-value">{{ gameState.step }}</span>
+                  <span class="session-value" data-testid="session-step">{{ gameState.step }}</span>
                 </div>
                 <div class="session-item">
                   <span class="session-label">Tiempo (ms)</span>

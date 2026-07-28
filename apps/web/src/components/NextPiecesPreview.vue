@@ -54,7 +54,7 @@ const previews = computed<PreviewPiece[]>(() => {
 </script>
 
 <template>
-  <div class="next-pieces-preview">
+  <div class="next-pieces-preview" data-testid="next-pieces-preview">
     <h2 class="preview-heading">Próximas piezas</h2>
     <ol class="preview-list">
       <li

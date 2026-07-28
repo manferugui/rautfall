@@ -233,9 +233,31 @@ Ver [Informe de implementación](implementation/0009-marco-tactical-identidad-vi
 
 Ver [Informe de implementación](implementation/0009b-refinamiento-visual-marco-tactical.md).
 
+## Task [0010 — E2E mínimo del flujo esencial](tasks/0010-e2e-minimo-flujo-esencial.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-28 |
+| **Resultado** | Playwright configurado en `apps/web`, Chromium como único navegador, flujo E2E esencial sobre Vue, Phaser y DOM, pausa, reanudación y reinicio verificados, errores de consola y `pageerror` controlados, 321 tests Vitest y 1 test E2E en verde, lint, typecheck y build correctos, sin cambios en dominio. |
+
+### Resumen
+
+- Playwright instalado como dependencia de desarrollo en `apps/web` con scripts E2E.
+- Configuración de Playwright con Chromium como único navegador, servidor web automático en puerto 5174.
+- Flujo E2E esencial que cubre carga de aplicación, estado inicial `running`, pausa, reanudación y reinicio mediante controles reales de la interfaz.
+- Añadidos selectores contractuales `data-testid` para facilitar la localización de elementos sin depender de clases CSS.
+- Control de errores: registro y verificación de mensajes de consola de tipo `error` y eventos `pageerror`.
+- Validación completa: 321 tests Vitest y 1 test E2E pasan, sin errores de lint, typecheck ni build.
+- No se modificaron `packages/game-engine` ni `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0010-e2e-minimo-flujo-esencial.md).
+
 ## Siguiente tarea
 
-No se fija una 0010 definitiva. La siguiente tarea se decidirá después de:
-- validar visualmente en un navegador real el resultado de `0009b` (pendiente: este entorno no dispuso de herramientas de navegador headless para generar una captura);
-- revisar si la identidad Industrial Dramatic y la jerarquía visual funcionan como se pretendía sin comprometer la jugabilidad;
-- decidir, a la vista de `docs/rautfall.md` y del estado real, entre candidatas razonables como hold, ghost piece, puntuación/combos, o el primer sabotaje real (Residuos) sustituyendo su versión simulada.
+No se fija una 0011 definitiva. La siguiente tarea se decidirá después de:
+- revisar si la cobertura E2E de `0010` es suficiente o si se requieren flujos adicionales;
+- decidir, a la vista de `docs/rautfall.md` y del estado real del proyecto, entre candidatas razonables como pieza fantasma, reserva/hold, puntuación y combos, o el primer sabotaje real;
+- tener en cuenta que la siguiente decisión debe tomar en cuenta el roadmap, el tiempo restante y la prioridad del TFM.

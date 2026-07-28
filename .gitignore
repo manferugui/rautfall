@@ -8,3 +8,6 @@ coverage/
 !.env.example
 
 .claude/
+test-results/
+playwright-report/
+blob-report/
