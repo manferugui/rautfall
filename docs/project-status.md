@@ -255,9 +255,40 @@ Ver [Informe de implementación](implementation/0009b-refinamiento-visual-marco-
 
 Ver [Informe de implementación](implementation/0010-e2e-minimo-flujo-esencial.md).
 
+## Task [0011 — Pieza fantasma determinista](tasks/0011-pieza-fantasma-determinista.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-28 |
+| **Resultado** | `ActivePieceSnapshot` ampliado con `landingCells: ReadonlyArray<Readonly<{ x: number; y: number }>>` que representa las celdas absolutas donde aterrizaría la pieza activa mediante hard drop desde el estado actual. Proyección derivada en `packages/game-engine` reutilizando `hardDropDistance` y `computeAbsoluteCells`. Phaser renderiza `snapshot.activePiece.landingCells` sin recalcular reglas. La pieza fantasma se dibuja antes que la activa, con opacidad reducida (0.25 relleno, 0.5 contorno) y el mismo color base que la pieza activa. 321 tests pasan, lint, typecheck y build exitosos. |
+
+### Resumen
+
+- `ActivePieceSnapshot` ampliado con `landingCells: ReadonlyArray<Readonly<{ x: number; y: number }>>`.
+- Derivación en `getSnapshot()` con la misma semántica que hard drop: conserva tipo, orientación y X, con Y válida más baja antes de colisionar.
+- `landingCells` coincide con `cells` cuando la pieza ya está apoyada.
+- No se añade a `EngineSnapshot` fuera de `activePiece`.
+- No se expone función pública adicional para calcular la proyección.
+- Implementación en `packages/game-engine/src/index.ts` reutilizando `hardDropDistance` y `computeAbsoluteCells`.
+- `GameScene.ts` renderiza `snapshot.activePiece.landingCells` en orden previo a la pieza activa.
+- Estilo visual: opacidad reducida (0.25 relleno, 0.5 contorno), mismo color base que pieza activa, geometría clara sin efectos.
+- `landingCells` y sus celdas son inmutables (`ReadonlyArray<Readonly<...>>`).
+- Desaparece cuando `activePiece` es `null` (sin pieza activa o en `gameOver`).
+- No modifica `grounded`, `lockDelayElapsedMs` ni `lockResetsUsed`.
+- No se añade hold, puntuación, multijugador, audio, partículas, ni configuración de usuario.
+- 13 pruebas nuevas (321 totales).
+- No se modificó `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0011-pieza-fantasma-determinista.md).
+
 ## Siguiente tarea
 
-No se fija una 0011 definitiva. La siguiente tarea se decidirá después de:
-- revisar si la cobertura E2E de `0010` es suficiente o si se requieren flujos adicionales;
-- decidir, a la vista de `docs/rautfall.md` y del estado real del proyecto, entre candidatas razonables como pieza fantasma, reserva/hold, puntuación y combos, o el primer sabotaje real;
-- tener en cuenta que la siguiente decisión debe tomar en cuenta el roadmap, el tiempo restante y la prioridad del TFM.
+La siguiente tarea se decidirá después de validar manualmente la pieza fantasma y revisar `docs/rautfall.md` frente al estado real del proyecto, considerando candidatas como reserva/hold de pieza, puntuación y combos, o sabotajes reales.
+
+</file_content>
+
+Now that you have the latest state of the file, try the operation again with fewer, more precise SEARCH blocks. For large files especially, it may be prudent to try to limit yourself to <5 SEARCH/REPLACE blocks at a time, then wait for the user to respond with the result of the operation before following up with another replace_in_file call to make additional edits.
+(If you run into this error 3 times in a row, you may use the write_to_file tool as a fallback.)

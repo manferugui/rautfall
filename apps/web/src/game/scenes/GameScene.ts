@@ -465,45 +465,59 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  private renderFrame(): void {
-    const snap = this.engine.getSnapshot();
+   private renderFrame(): void {
+      const snap = this.engine.getSnapshot();
 
-    this.graphics.clear();
+      this.graphics.clear();
 
-    // Dibujar tablero fijo (filas visibles 4-23)
-    for (let y = HIDDEN_ROWS; y < 24; y++) {
-      for (let x = 0; x < 10; x++) {
-        const cell = snap.board[y]![x];
-        const canvasX = boardXToCanvas(x);
-        const canvasY = boardYToCanvas(y);
-        if (cell !== null) {
-          this.graphics.fillStyle(PIECE_COLORS[cell as PieceType], 1);
+      // Dibujar tablero fijo (filas visibles 4-23)
+      for (let y = HIDDEN_ROWS; y < 24; y++) {
+        for (let x = 0; x < 10; x++) {
+          const cell = snap.board[y]![x];
+          const canvasX = boardXToCanvas(x);
+          const canvasY = boardYToCanvas(y);
+          if (cell !== null) {
+            this.graphics.fillStyle(PIECE_COLORS[cell as PieceType], 1);
+            this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+            this.graphics.lineStyle(1, 0x000000, 0.3);
+            this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+          } else {
+            this.graphics.fillStyle(0x1a1a2e, 1);
+            this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+            this.graphics.lineStyle(1, 0x2a2a3e, 1);
+            this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+          }
+        }
+      }
+
+      // Dibujar pieza fantasma si existe pieza activa
+      if (snap.activePiece) {
+        const ghostColor = PIECE_COLORS[snap.activePiece.type as PieceType];
+        for (const cell of snap.activePiece.landingCells) {
+          if (!isRowVisible(cell.y)) continue;
+          const canvasX = boardXToCanvas(cell.x);
+          const canvasY = boardYToCanvas(cell.y);
+          this.graphics.fillStyle(ghostColor, 0.25); // Opacidad reducida
+          this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+          this.graphics.lineStyle(1, ghostColor, 0.5); // Contorno con opacidad media
+          this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+        }
+      }
+
+      // Superponer pieza activa
+      if (snap.activePiece) {
+        const color = PIECE_COLORS[snap.activePiece.type as PieceType];
+        for (const cell of snap.activePiece.cells) {
+          if (!isRowVisible(cell.y)) continue;
+          const canvasX = boardXToCanvas(cell.x);
+          const canvasY = boardYToCanvas(cell.y);
+          this.graphics.fillStyle(color, 1);
           this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
           this.graphics.lineStyle(1, 0x000000, 0.3);
-          this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-        } else {
-          this.graphics.fillStyle(0x1a1a2e, 1);
-          this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-          this.graphics.lineStyle(1, 0x2a2a3e, 1);
           this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
         }
       }
     }
-
-    // Superponer pieza activa
-    if (snap.activePiece) {
-      const color = PIECE_COLORS[snap.activePiece.type as PieceType];
-      for (const cell of snap.activePiece.cells) {
-        if (!isRowVisible(cell.y)) continue;
-        const canvasX = boardXToCanvas(cell.x);
-        const canvasY = boardYToCanvas(cell.y);
-        this.graphics.fillStyle(color, 1);
-        this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-        this.graphics.lineStyle(1, 0x000000, 0.3);
-        this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-      }
-    }
-  }
 
   private notifyState(): void {
     const snap = this.engine.getSnapshot();

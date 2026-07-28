@@ -60,6 +60,7 @@ export type ActivePieceSnapshot = Readonly<{
   grounded: boolean;
   lockDelayElapsedMs: number;
   lockResetsUsed: number;
+  landingCells: ReadonlyArray<Readonly<{ x: number; y: number }>>;
 }>;
 
 /**
@@ -425,6 +426,16 @@ function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): nu
     distance++;
   }
   return distance;
+}
+
+function computeLandingCells(board: (PieceType | null)[][], activePiece: ActivePiece): Cell[] {
+  const distance = hardDropDistance(board, activePiece);
+  return computeAbsoluteCells(
+    activePiece.type,
+    activePiece.x,
+    activePiece.y + distance,
+    activePiece.orientation,
+  );
 }
 
 // ── Rotación SRS ────────────────────────────────────────────────────────
@@ -963,6 +974,9 @@ export function createGameEngine(options: EngineOptions): GameEngine {
             grounded,
             lockDelayElapsedMs,
             lockResetsUsed,
+            landingCells: Object.freeze(
+              computeLandingCells(board, activePiece).map((c) => Object.freeze({ x: c.x, y: c.y })),
+            ),
           })
         : null;
 
