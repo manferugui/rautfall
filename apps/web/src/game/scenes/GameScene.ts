@@ -11,7 +11,7 @@
  * - Soportar reset desde teclado (R) y desde controlador externo.
  * - Gestionar pausa, reanudación y reinicio coordinados (0008).
  * - Neutralizar entrada al pausar y rearmar al reanudar/reiniciar.
- * - No contiene reglas de dominio (colisiones, SRS, gravedad, DAS, ARR, soft drop, etc.).
+ * - No contiene reglas de dominio (colisiones, SRS, gravedad, DAS, ARR, soft drop, hold, etc.).
  */
 
 import Phaser from 'phaser';
@@ -48,6 +48,7 @@ type ConsumedFlags = {
   clockwise: boolean;
   counterclockwise: boolean;
   hardDrop: boolean;
+  hold: boolean;
 };
 
 export type GameSceneCallbacks = {
@@ -65,6 +66,7 @@ export class GameScene extends Phaser.Scene {
     clockwise: false,
     counterclockwise: false,
     hardDrop: false,
+    hold: false,
   };
 
   private cursors!: {
@@ -76,6 +78,7 @@ export class GameScene extends Phaser.Scene {
     z: Phaser.Input.Keyboard.Key;
     r: Phaser.Input.Keyboard.Key;
     esc: Phaser.Input.Keyboard.Key;
+    c: Phaser.Input.Keyboard.Key;
   };
 
   /** true mientras la sesión web está pausada. El motor no recibe step() durante la pausa. */
@@ -123,6 +126,7 @@ export class GameScene extends Phaser.Scene {
       z: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
       r: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
       esc: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
+      c: kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
     };
 
     this.resetEngine();
@@ -131,7 +135,7 @@ export class GameScene extends Phaser.Scene {
     this.graphics.setPosition(0, 0);
 
     this.accumulator = 0;
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
     this.lastState = null;
     this.pendingHorizontal = null;
 
@@ -215,7 +219,7 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     // Reiniciar banderas de consumo al empezar el frame
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
 
     // R tiene prioridad máxima: funciona en cualquier estado (running, paused, gameOver)
     if (Phaser.Input.Keyboard.JustDown(this.cursors.r)) {
@@ -262,7 +266,7 @@ export class GameScene extends Phaser.Scene {
         i === 0 ? keys : this.emptyInput(),
         i === 0
           ? this.consumedThisFrame
-          : { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true },
+          : { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true },
       );
 
       if (i === 0) {
@@ -349,7 +353,7 @@ export class GameScene extends Phaser.Scene {
   resetGame(): void {
     this.resetEngine();
     this.accumulator = 0;
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
     this.notifyState();
     logDebug({ source: 'lifecycle', event: 'reset – resetGame' });
   }
@@ -389,7 +393,7 @@ export class GameScene extends Phaser.Scene {
     this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
     this.engine.drainEvents();
     this.accumulator = 0;
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
     this.pendingHorizontal = null;
     this.isPaused = false;                       // el reinicio siempre deja la sesión en running
     this.releaseGuard = armReleaseGuard({
@@ -439,6 +443,7 @@ export class GameScene extends Phaser.Scene {
       justPressedUp: Phaser.Input.Keyboard.JustDown(this.cursors.up),
       justPressedZ: Phaser.Input.Keyboard.JustDown(this.cursors.z),
       justPressedSpace: Phaser.Input.Keyboard.JustDown(this.cursors.space),
+      justPressedC: Phaser.Input.Keyboard.JustDown(this.cursors.c),
       softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
     };
   }
@@ -461,6 +466,7 @@ export class GameScene extends Phaser.Scene {
       justPressedUp: false,
       justPressedZ: false,
       justPressedSpace: false,
+      justPressedC: false,
       softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
     };
   }
@@ -526,6 +532,7 @@ export class GameScene extends Phaser.Scene {
       step: snap.step,
       elapsedMs: snap.elapsedMs,
       nextPieces: [...snap.nextPieces],
+      heldPiece: snap.heldPiece,
     };
 
     if (
@@ -534,7 +541,8 @@ export class GameScene extends Phaser.Scene {
       this.lastState.step === newState.step &&
       this.lastState.elapsedMs === newState.elapsedMs &&
       this.lastState.nextPieces.length === newState.nextPieces.length &&
-      this.lastState.nextPieces.every((p, i) => p === newState.nextPieces[i])
+      this.lastState.nextPieces.every((p, i) => p === newState.nextPieces[i]) &&
+      this.lastState.heldPiece === newState.heldPiece
     ) {
       return;
     }

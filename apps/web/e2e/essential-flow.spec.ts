@@ -17,8 +17,9 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     await expect(canvas).toBeVisible();
   });
 
-  await test.step('estado inicial running, próximas piezas y paneles', async () => {
+  await test.step('estado inicial running, próximas piezas, reserva y paneles', async () => {
     await expect(page.getByTestId('session-status')).toHaveText('running');
+    await expect(page.getByTestId('held-piece-preview')).toBeVisible();
     const nextPiecesItems = page.getByTestId('next-pieces-preview').getByRole('listitem');
     await expect(nextPiecesItems).toHaveCount(3);
     await expect(page.getByTestId('opponent-column')).toContainText('SIMULADO');

@@ -9,12 +9,13 @@ function emptyKeys(): KeyState {
     justPressedUp: false,
     justPressedZ: false,
     justPressedSpace: false,
+    justPressedC: false,
     softDropHeld: false,
   };
 }
 
 function noConsumed() {
-  return { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false };
+  return { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
 }
 
 describe('buildStepInput — flanco horizontal único', () => {
@@ -46,7 +47,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('flanco se consume una sola vez (consumido=true no lo entrega)', () => {
     const keys = { ...emptyKeys(), horizontalPressed: 'left' as const, leftHeld: true };
-    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false };
+    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
     const [input] = buildStepInput(keys, consumed);
     expect(input.leftPressed).toBe(false);
     expect(input.leftHeld).toBe(true);
@@ -54,7 +55,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('mantener izquierda produce leftHeld=true sin flanco si consumed=true', () => {
     const keys = { ...emptyKeys(), horizontalPressed: null, leftHeld: true };
-    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false };
+    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
     const [input] = buildStepInput(keys, consumed);
     expect(input.leftHeld).toBe(true);
     expect(input.leftPressed).toBe(false);
@@ -62,7 +63,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('mantener derecha produce rightHeld=true sin flanco si consumed=true', () => {
     const keys = { ...emptyKeys(), horizontalPressed: null, rightHeld: true };
-    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false };
+    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
     const [input] = buildStepInput(keys, consumed);
     expect(input.rightHeld).toBe(true);
     expect(input.rightPressed).toBe(false);
@@ -90,7 +91,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('soft drop mantenido no se consume (no tiene consumed)', () => {
     const keys = { ...emptyKeys(), softDropHeld: true };
-    const [input] = buildStepInput(keys, { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true });
+    const [input] = buildStepInput(keys, { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true });
     expect(input.softDropHeld).toBe(true);
   });
 
@@ -119,6 +120,35 @@ describe('buildStepInput — flanco horizontal único', () => {
     expect(input.hardDrop).toBe(true);
   });
 
+  describe('hold (reserva)', () => {
+    it('justPressedC produce hold: true una sola vez', () => {
+      const keys = { ...emptyKeys(), justPressedC: true };
+      const [input] = buildStepInput(keys, noConsumed());
+      expect(input.hold).toBe(true);
+    });
+
+    it('sin flanco produce hold ausente (undefined)', () => {
+      const keys = { ...emptyKeys(), justPressedC: false };
+      const [input] = buildStepInput(keys, noConsumed());
+      expect(input.hold).toBeUndefined();
+    });
+
+    it('se consume una sola vez (consumido=true no lo entrega)', () => {
+      const keys = { ...emptyKeys(), justPressedC: true };
+      const consumed = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: true };
+      const [input] = buildStepInput(keys, consumed);
+      expect(input.hold).toBeUndefined();
+    });
+
+    it('puede coexistir con rotación y hard drop', () => {
+      const keys = { ...emptyKeys(), justPressedC: true, justPressedUp: true, justPressedSpace: true };
+      const [input] = buildStepInput(keys, noConsumed());
+      expect(input.hold).toBe(true);
+      expect(input.rotateClockwise).toBe(true);
+      expect(input.hardDrop).toBe(true);
+    });
+  });
+
   it('acciones no repetidas en pasos adicionales del mismo frame (todo consumido)', () => {
     const keys = {
       ...emptyKeys(),
@@ -128,7 +158,7 @@ describe('buildStepInput — flanco horizontal único', () => {
       justPressedSpace: false,
       softDropHeld: true,
     };
-    const consumed = { horizontal: true, clockwise: true, counterclockwise: false, hardDrop: true };
+    const consumed = { horizontal: true, clockwise: true, counterclockwise: false, hardDrop: true, hold: true };
     const [input] = buildStepInput(keys, consumed);
     expect(input.leftPressed).toBe(false);
     expect(input.leftHeld).toBe(true);

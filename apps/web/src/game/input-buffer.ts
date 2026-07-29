@@ -3,7 +3,7 @@
  *
  * Traduce el estado de teclas Phaser a un StepInput del motor.
  * Responsabilidades:
- * - Detectar flancos de pulsación para teclas de acción discreta (rotación, hard drop)
+ * - Detectar flancos de pulsación para teclas de acción discreta (rotación, hard drop, hold)
  *   y teclas de dirección horizontal.
  * - Conservar estado mantenido (held) para izquierda, derecha y soft drop.
  * - Entregar cada flanco una sola vez (mecanismo consumed).
@@ -20,6 +20,7 @@ export type KeyState = {
   justPressedUp: boolean;
   justPressedZ: boolean;
   justPressedSpace: boolean;
+  justPressedC: boolean;
   softDropHeld: boolean;
 };
 
@@ -38,8 +39,9 @@ export function buildStepInput(
     clockwise: boolean;
     counterclockwise: boolean;
     hardDrop: boolean;
+    hold: boolean;
   },
-): [StepInput, { horizontal: boolean; clockwise: boolean; counterclockwise: boolean; hardDrop: boolean }] {
+): [StepInput, { horizontal: boolean; clockwise: boolean; counterclockwise: boolean; hardDrop: boolean; hold: boolean }] {
   // Estado mantenido horizontal (siempre el real, independientemente de consumed)
   const leftHeld = keys.leftHeld;
   const rightHeld = keys.rightHeld;
@@ -92,13 +94,27 @@ export function buildStepInput(
     rotateCounterclockwise = false;
   }
 
+  // Reserva (C)
+  // Reserva (C)
+  const hold = !consumedThisFrame.hold && keys.justPressedC;
+  const consumedHold = consumedThisFrame.hold || hold;
+
+  const stepInput: StepInput = {
+    leftHeld, rightHeld, leftPressed, rightPressed, softDropHeld, hardDrop,
+    rotateClockwise, rotateCounterclockwise,
+  };
+  if (hold) {
+    stepInput.hold = true;
+  }
+
   return [
-    { leftHeld, rightHeld, leftPressed, rightPressed, softDropHeld, hardDrop, rotateClockwise, rotateCounterclockwise },
+    stepInput,
     {
       horizontal: consumedHorizontal,
       clockwise: consumedClockwise,
       counterclockwise: consumedCounterclockwise,
       hardDrop: consumedHardDrop,
+      hold: consumedHold,
     },
   ];
 }

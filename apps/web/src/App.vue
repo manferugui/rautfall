@@ -2,11 +2,12 @@
 import { ref } from 'vue';
 import GameCanvas from './components/GameCanvas.vue';
 import NextPiecesPreview from './components/NextPiecesPreview.vue';
+import HeldPiecePreview from './components/HeldPiecePreview.vue';
 import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'] });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -69,6 +70,13 @@ function doTogglePause(): void {
         <!-- Zona 2: Columna táctica -->
         <div class="tactical-column" data-testid="tactical-column">
           <div class="tactical-console">
+            <!-- Reserva -->
+            <div class="console-section">
+              <HeldPiecePreview :held-piece="gameState.heldPiece" />
+            </div>
+
+            <div class="console-divider"></div>
+
             <!-- Próximas piezas reales -->
             <div class="console-section">
               <NextPiecesPreview :next-pieces="gameState.nextPieces" />
@@ -124,6 +132,7 @@ function doTogglePause(): void {
                   <li><kbd>Space</kbd> Caída instantánea</li>
                   <li><kbd>R</kbd> Reiniciar</li>
                   <li><kbd>Esc</kbd> Pausar/Reanudar</li>
+                  <li><kbd>C</kbd> Reserva</li>
                 </ul>
               </div>
             </div>

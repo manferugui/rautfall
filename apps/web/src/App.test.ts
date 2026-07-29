@@ -62,6 +62,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       step: 50,
       elapsedMs: 2500,
       nextPieces: ['S', 'Z', 'J'],
+      heldPiece: null,
     };
     stateUpdateCallback(pausedState);
     await wrapper.vm.$nextTick();
@@ -100,6 +101,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       step: 100,
       elapsedMs: 5000,
       nextPieces: ['O', 'T', 'I'],
+      heldPiece: null,
     };
     stateUpdateCallback(gameOverState);
     await wrapper.vm.$nextTick();
@@ -122,12 +124,12 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en paused
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'] });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en gameOver
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'] });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
@@ -152,7 +154,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
     // gameOver — sin overlay
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'] });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
@@ -168,6 +170,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       step: 10,
       elapsedMs: 500,
       nextPieces: ['T', 'L', 'J'],
+      heldPiece: null,
     };
     stateUpdateCallback(state);
     await wrapper.vm.$nextTick();
@@ -255,11 +258,11 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
 
     expect(wrapper.find('.board-bezel--running').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'] });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--paused').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'] });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--gameOver').exists()).toBe(true);
 

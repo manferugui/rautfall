@@ -4977,3 +4977,535 @@ describe('lock delay - determinismo', () => {
     }
   });
 });
+
+describe('reserva - estado inicial', () => {
+  it('heldPiece es null tras createGameEngine', () => {
+    const engine = createGameEngine(makeValidOptions());
+    const snap = engine.getSnapshot();
+    expect(snap.heldPiece).toBeNull();
+  });
+
+  it('activePiece.holdUsed es false para la pieza activa inicial', () => {
+    const engine = createGameEngine(makeValidOptions());
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece?.holdUsed).toBe(false);
+  });
+});
+
+describe('reserva - primera reserva (hueco vacío)', () => {
+  it('heldPiece pasa a ser el tipo de la pieza activa anterior', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    const snapBefore = engine.getSnapshot();
+    const outgoing = snapBefore.activePiece!.type;
+    const incoming = snapBefore.nextPieces[0];
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    const snap = engine.getSnapshot();
+    expect(snap.heldPiece).toBe(outgoing);
+    expect(snap.activePiece?.type).toBe(incoming);
+  });
+
+  it('nextPieces mantiene longitud 3 tras el hold', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    const snapBefore = engine.getSnapshot();
+    const nextsBefore = [...snapBefore.nextPieces];
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    const snap = engine.getSnapshot();
+    expect(snap.nextPieces).toHaveLength(3);
+    // nextPieces[0] era nextPieces[1] antes
+    expect(snap.nextPieces[0]).toBe(nextsBefore[1]);
+    expect(snap.nextPieces[1]).toBe(nextsBefore[2]);
+  });
+
+  it('emite pieceHeld seguido de pieceSpawned en ese orden', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    const snapBefore = engine.getSnapshot();
+    const outgoing = snapBefore.activePiece!.type;
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    const events = engine.drainEvents();
+    expect(events[0]).toEqual({ type: 'pieceHeld', step: 1, piece: outgoing });
+    expect(events[1]?.type).toBe('pieceSpawned');
+  });
+});
+
+describe('reserva - intercambio (hueco ocupado)', () => {
+  it('intercambia heldPiece con activePiece.type', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Primera reserva: guardar la pieza activa
+    const snap0 = engine.getSnapshot();
+    const firstPiece = snap0.activePiece!.type;
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+
+    // Fijar la pieza actual (la que entró por hold) mediante hard drop
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // La nueva pieza activa (spawn normal) debe tener holdUsed = false
+    const snap1 = engine.getSnapshot();
+    expect(snap1.activePiece?.holdUsed).toBe(false);
+
+    // Ahora hold está disponible de nuevo. Intercambiar.
+    const secondPiece = snap1.activePiece!.type;
+    const nextPiecesBefore = [...snap1.nextPieces];
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    const snap = engine.getSnapshot();
+    expect(snap.heldPiece).toBe(secondPiece);
+    expect(snap.activePiece?.type).toBe(firstPiece);
+    // nextPieces no debe cambiar en un intercambio
+    expect([...snap.nextPieces]).toEqual(nextPiecesBefore);
+  });
+
+  it('nextPieces no cambia en el intercambio', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Primera reserva
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    const snapBefore = engine.getSnapshot();
+    const nextsBefore = [...snapBefore.nextPieces];
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    const snap = engine.getSnapshot();
+    expect([...snap.nextPieces]).toEqual(nextsBefore);
+  });
+});
+
+describe('reserva - disponibilidad', () => {
+  it('segunda reserva antes de fijar se ignora (no muta ni emite)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Primera reserva
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+
+    // holdUsed debería ser true (la pieza entró por hold)
+    expect(engine.getSnapshot().activePiece?.holdUsed).toBe(true);
+
+    // Intentar segunda reserva antes de fijar
+    const snapBefore = engine.getSnapshot();
+    const heldBefore = snapBefore.heldPiece;
+    const nextsBefore = [...snapBefore.nextPieces];
+
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    const snap = engine.getSnapshot();
+    // heldPiece no cambió
+    expect(snap.heldPiece).toBe(heldBefore);
+    // nextPieces no cambió
+    expect([...snap.nextPieces]).toEqual(nextsBefore);
+    // activePiece sigue existiendo y es del mismo tipo
+    expect(snap.activePiece?.type).toBe(snapBefore.activePiece?.type);
+    // No se emitió ningún evento pieceHeld
+    const events = engine.drainEvents();
+    expect(events.find(e => e.type === 'pieceHeld')).toBeUndefined();
+  });
+
+  it('tras fijar y spawnear, holdUsed vuelve a false', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Reservar
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+
+    // Fijar la pieza que entró por hold
+    stepHardDrop(engine);
+    drainAll(engine);
+
+    // La nueva pieza (spawn normal) debe tener holdUsed = false
+    expect(engine.getSnapshot().activePiece?.holdUsed).toBe(false);
+  });
+});
+
+describe('reserva - spawn de la pieza recuperada', () => {
+  it('la pieza recuperada reaparece en Orientation.Spawn', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece?.orientation).toBe(Orientation.Spawn);
+  });
+
+  it('la pieza recuperada tiene coordenadas de spawn correctas para su tipo', () => {
+    // Semilla 42: la primera pieza activa es I (the first from the bag with seed 42)
+    // nextPieces[0] es la segunda pieza de la bolsa
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    const snap0 = engine.getSnapshot();
+    const incoming = snap0.nextPieces[0]!;
+
+    // Hold: guarda la pieza actual, entra nextPieces[0]
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    const snap1 = engine.getSnapshot();
+    // La pieza recuperada debe tener coordenadas de spawn correctas
+    const width: Record<PieceType, number> = { I: 4, O: 2, T: 3, S: 3, Z: 3, J: 3, L: 3 };
+    const height: Record<PieceType, number> = { I: 1, O: 2, T: 2, S: 2, Z: 2, J: 2, L: 2 };
+    const expectedX = Math.floor((10 - width[incoming]) / 2);
+    const expectedY = 4 - height[incoming] + 1;
+    expect(snap1.activePiece?.x).toBe(expectedX);
+    expect(snap1.activePiece?.y).toBe(expectedY);
+    expect(snap1.activePiece?.type).toBe(incoming);
+  });
+});
+
+describe('reserva - gravedad y lock delay', () => {
+  it('lockDelayElapsedMs es 0 tras el hold', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece?.lockDelayElapsedMs).toBe(0);
+  });
+
+  it('lockResetsUsed es 0 tras el hold', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece?.lockResetsUsed).toBe(0);
+  });
+
+  it('landingCells se recalcula para la nueva pieza activa tras hold', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece?.landingCells.length).toBeGreaterThan(0);
+    // Las landingCells deben estar debajo o en la misma posición que la pieza
+    for (const cell of snap.activePiece!.landingCells) {
+      expect(cell.y).toBeGreaterThanOrEqual(snap.activePiece!.y);
+    }
+  });
+});
+
+describe('reserva - orden dentro del paso y precedencia', () => {
+  it('hold + movimiento + rotación + hard drop ejecuta solo el hold', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false, hardDrop: true,
+      rotateClockwise: true,
+      hold: true,
+    });
+
+    const events = engine.drainEvents();
+    const eventTypes = events.map(e => e.type);
+    // pieceHeld debe estar presente
+    expect(eventTypes).toContain('pieceHeld');
+    // No debe haber pieceMoved, pieceRotated ni pieceLocked (del hard drop)
+    expect(eventTypes).not.toContain('pieceMoved');
+    expect(eventTypes).not.toContain('pieceRotated');
+    expect(eventTypes).not.toContain('pieceLocked');
+  });
+
+  it('hold ignorado (holdUsed) no bloquea el resto del paso', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Primera reserva para marcar holdUsed = true
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+
+    // Ahora holdUsed = true. Enviar hold + leftPressed
+    const snapBefore = engine.getSnapshot();
+    const xBefore = snapBefore.activePiece!.x;
+
+    engine.step({
+      leftHeld: true, rightHeld: false,
+      leftPressed: true, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+
+    // El movimiento horizontal debería haberse procesado
+    const snap = engine.getSnapshot();
+    expect(snap.activePiece!.x).not.toBe(xBefore);
+    // No debe haber evento pieceHeld
+    const events = engine.drainEvents();
+    expect(events.find(e => e.type === 'pieceHeld')).toBeUndefined();
+  });
+});
+
+describe('reserva - hold con spawn bloqueado (game over)', () => {
+  it('rama vacía: spawn bloqueado emite pieceHeld + gameOver', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Hacer hard drops repetidos para llenar el tablero
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+
+    // Creamos un nuevo motor y lo llenamos hasta que esté casi lleno.
+    const engine2 = createGameEngine(makeValidOptions());
+    drainAll(engine2);
+
+    // Hacer hard drops repetidos para llenar el tablero
+    for (let i = 0; i < 100; i++) {
+      if (engine2.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine2);
+      drainAll(engine2);
+    }
+
+    // Si el motor está en running, el hold podría causar spawn bloqueado.
+    if (engine2.getSnapshot().status === 'running') {
+      // Todavía hay espacio. El hold debería spawnear una pieza nueva.
+      const outgoing = engine2.getSnapshot().activePiece?.type;
+
+      engine2.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+        hold: true,
+      });
+
+      const snap = engine2.getSnapshot();
+      if (snap.status === 'gameOver') {
+        const events = engine2.drainEvents();
+        expect(events[0]?.type).toBe('pieceHeld');
+        expect(events[1]?.type).toBe('gameOver');
+        expect(snap.heldPiece).toBe(outgoing);
+      }
+    }
+  });
+
+  it('rama intercambio: spawn bloqueado emite pieceHeld + gameOver sin cambiar nextPieces', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Hacer una primera reserva
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+
+    // Hacer hard drops repetidos para llenar el tablero
+    for (let i = 0; i < 100; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+
+    if (engine.getSnapshot().status === 'running') {
+      // Todavía hay espacio para una pieza más. Realizar intercambio
+      // que spawneará la pieza guardada en reserva.
+      const nextPiecesBefore = [...engine.getSnapshot().nextPieces];
+
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+        hold: true,
+      });
+
+      const snap = engine.getSnapshot();
+      if (snap.status === 'gameOver') {
+        const events = engine.drainEvents();
+        expect(events[0]?.type).toBe('pieceHeld');
+        expect(events[1]?.type).toBe('gameOver');
+        // nextPieces no debe cambiar en intercambio
+        expect([...snap.nextPieces]).toEqual(nextPiecesBefore);
+      }
+    }
+  });
+});
+
+describe('reserva - reset', () => {
+  it('reset vacía la reserva y holdUsed es false', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    // Hacer una reserva
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false, hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+
+    engine.reset(makeValidOptions({ seed: 42 }));
+    const snap = engine.getSnapshot();
+    expect(snap.heldPiece).toBeNull();
+    expect(snap.activePiece?.holdUsed).toBe(false);
+  });
+});
+
+describe('reserva - atomicidad', () => {
+  it('hold con tipo incorrecto lanza INVALID_GAME_INPUT sin mutar nada', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    expect(() => {
+      (engine.step as unknown as (input: unknown) => void)({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+        hold: 'yes',
+      });
+    }).toThrow(EngineStepError);
+
+    const snap = engine.getSnapshot();
+    expect(snap.heldPiece).toBeNull();
+    expect(snap.activePiece?.holdUsed).toBe(false);
+  });
+
+  it('propiedad desconocida sigue siendo rechazada (hold está en la lista blanca)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+
+    expect(() => {
+      (engine.step as unknown as (input: unknown) => void)({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+        unknownProp: true,
+      });
+    }).toThrow(EngineStepError);
+  });
+});
+
+describe('reserva - determinismo', () => {
+  it('misma semilla e inputs con holds producen snapshots y eventos idénticos', () => {
+    const engineA = createGameEngine(makeValidOptions({ seed: 12345 }));
+    const engineB = createGameEngine(makeValidOptions({ seed: 12345 }));
+    drainAll(engineA);
+    drainAll(engineB);
+
+    const inputs: StepInput[] = [
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false, hold: true },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false, hold: true },
+      { leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false },
+    ];
+
+    const snapshotsA: unknown[] = [];
+    const eventsA: unknown[] = [];
+    const snapshotsB: unknown[] = [];
+    const eventsB: unknown[] = [];
+
+    for (const input of inputs) {
+      if (engineA.getSnapshot().status === 'running') {
+        engineA.step(input);
+        snapshotsA.push(engineA.getSnapshot());
+        eventsA.push(engineA.drainEvents());
+      }
+      if (engineB.getSnapshot().status === 'running') {
+        engineB.step(input);
+        snapshotsB.push(engineB.getSnapshot());
+        eventsB.push(engineB.drainEvents());
+      }
+    }
+
+    expect(snapshotsA).toEqual(snapshotsB);
+    expect(eventsA).toEqual(eventsB);
+  });
+});

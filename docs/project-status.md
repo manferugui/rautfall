@@ -284,11 +284,36 @@ Ver [Informe de implementación](implementation/0010-e2e-minimo-flujo-esencial.m
 
 Ver [Informe de implementación](implementation/0011-pieza-fantasma-determinista.md).
 
+## Task [0012 — Reserva de pieza / hold](tasks/0012-reserva-pieza-hold.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada técnicamente |
+| **Fecha de finalización técnica** | 2026-07-29 |
+| **Validación manual** | Pendiente de confirmación por el usuario |
+| **Resultado** | 361 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- `StepInput` ampliado con `hold?: boolean` (opcional, ausente equivale a `false`).
+- `EngineSnapshot` expone `heldPiece: PieceType | null`.
+- `ActivePieceSnapshot` expone `holdUsed: boolean`.
+- Nuevo evento `pieceHeld { step, piece }`.
+- `GamePresentationState` expone `heldPiece: PieceType | null`.
+- Algoritmo completo de hold en el motor: rama vacía (consume `nextPieces[0]` y repone cola), rama ocupada (intercambio sin tocar `nextPieces` ni bolsa), control de disponibilidad mediante `holdUsed`, prioridad absoluta del hold dentro del paso.
+- Spawn bloqueado durante hold produce `gameOver` con `spawnBlocked`; `heldPiece` no se revierte.
+- Phaser añade la tecla `C` como flanco único (`JustDown`), sin reglas de dominio.
+- Vue muestra el contenido de la reserva (o hueco vacío) mediante `HeldPiecePreview.vue`, posicionado antes de `NextPiecesPreview` en la consola táctica.
+- 22 nuevas pruebas de motor, 4 de input buffer, 2 de tipos y 10 del componente.
+- Sin cambios en `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0012-reserva-pieza-hold.md).
+
 ## Siguiente tarea
 
-La siguiente tarea se decidirá después de validar manualmente la pieza fantasma y revisar `docs/rautfall.md` frente al estado real del proyecto, considerando candidatas como reserva/hold de pieza, puntuación y combos, o sabotajes reales.
-
-</file_content>
+La siguiente tarea se decidirá después de validar manualmente la reserva y revisar `docs/rautfall.md` frente al estado real del proyecto. Candidatas razonables: puntuación y combos, o el primer sabotaje real (que presupone una mecánica de puntuación/energía previa). No se fija una tarea 0013 definitiva en este documento.
 
 Now that you have the latest state of the file, try the operation again with fewer, more precise SEARCH blocks. For large files especially, it may be prudent to try to limit yourself to <5 SEARCH/REPLACE blocks at a time, then wait for the user to respond with the result of the operation before following up with another replace_in_file call to make additional edits.
 (If you run into this error 3 times in a row, you may use the write_to_file tool as a fallback.)

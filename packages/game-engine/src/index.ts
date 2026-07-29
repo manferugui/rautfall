@@ -36,7 +36,8 @@ export type GameEvent =
       lineIndices: readonly number[];
     }
   | { type: 'gameOver'; step: number; reason: GameOverReason }
-  | { type: 'pieceRotated'; step: number; orientation: Orientation };
+  | { type: 'pieceRotated'; step: number; orientation: Orientation }
+  | { type: 'pieceHeld'; step: number; piece: PieceType };
 
 /**
  * Estado inmutable de la pieza activa en un instante dado.
@@ -50,6 +51,7 @@ export type GameEvent =
  * actual. `lockDelayElapsedMs` es el tiempo lógico acumulado en que la pieza
  * ha estado apoyada. `lockResetsUsed` es el número de reinicios de lock delay
  * consumidos por acciones válidas desde que esta pieza se generó.
+ * `holdUsed` indica si esta pieza activa ya ha consumido su única reserva.
  */
 export type ActivePieceSnapshot = Readonly<{
   type: PieceType;
@@ -61,6 +63,7 @@ export type ActivePieceSnapshot = Readonly<{
   lockDelayElapsedMs: number;
   lockResetsUsed: number;
   landingCells: ReadonlyArray<Readonly<{ x: number; y: number }>>;
+  holdUsed: boolean;
 }>;
 
 /**
@@ -83,6 +86,7 @@ export type EngineSnapshot = Readonly<{
   activePiece: ActivePieceSnapshot | null;
   nextPieces: readonly PieceType[];
   clearedLines: number;
+  heldPiece: PieceType | null;
 }>;
 
 /**
@@ -91,8 +95,8 @@ export type EngineSnapshot = Readonly<{
  * `leftHeld`, `rightHeld`, `leftPressed`, `rightPressed`, `softDropHeld`
  * y `hardDrop` son obligatorios y deben ser boolean.
  *
- * `rotateClockwise` y `rotateCounterclockwise` son opcionales (por defecto
- * `false`) y no pueden ser `true` a la vez: esa combinación es entrada
+ * `rotateClockwise`, `rotateCounterclockwise` y `hold` son opcionales (por
+ * defecto `false`) y no pueden ser `true` a la vez: esa combinación es entrada
  * inválida y `step()` la rechaza con `EngineStepError`
  * (`code: 'INVALID_GAME_INPUT'`) sin mutar el estado del motor.
  *
@@ -110,6 +114,7 @@ export type StepInput = {
   hardDrop: boolean;
   rotateClockwise?: boolean;
   rotateCounterclockwise?: boolean;
+  hold?: boolean;
 };
 
 export type EngineOptions = {
@@ -119,7 +124,7 @@ export type EngineOptions = {
 
 export type GameEngine = {
   /**
-   * Procesa un paso lógico fijo (horizontal → rotación → hard drop/gravedad
+   * Procesa un paso lógico fijo (hold → horizontal → rotación → hard drop/gravedad
    * o soft drop, fijación, clear de líneas y spawn de la siguiente pieza).
    * Muta el estado interno del motor y encola los eventos resultantes,
    * recuperables con `drainEvents`.
@@ -534,6 +539,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   let clearedLines = 0;
   let lockDelayElapsedMs = 0;
   let lockResetsUsed = 0;
+  let heldPiece: PieceType | null = null;
+  let holdUsed = false;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
@@ -566,6 +573,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     verticalProgress = 0;
     lockDelayElapsedMs = 0;
     lockResetsUsed = 0;
+    holdUsed = false;
   }
 
   function lockActivePiece(): void {
@@ -656,7 +664,39 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     verticalProgress = 0;
     lockDelayElapsedMs = 0;
     lockResetsUsed = 0;
+    holdUsed = false;
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: candidate });
+  }
+
+  /**
+   * Intenta activar una pieza como resultado de un hold.
+   * La pieza entrante se spawnea con `holdUsed = true` (no puede volver a
+   * reservar hasta que se fije y aparezca la siguiente pieza).
+   * Reutiliza las funciones de spawn existentes.
+   *
+   * Si el spawn está bloqueado, la partida termina con `spawnBlocked`.
+   * `heldPiece` ya se ha actualizado antes de llamar a esta función y no
+   * se revierte si el spawn falla.
+   */
+  function attemptIncomingSpawn(incoming: PieceType): void {
+    const spawnX = calculateSpawnX(incoming);
+    const spawnY = calculateSpawnY(incoming);
+    const cells = computeAbsoluteCells(incoming, spawnX, spawnY, Orientation.Spawn);
+
+    if (isCollision(board, cells)) {
+      status = 'gameOver';
+      activePiece = null;
+      eventQueue.push({ type: 'gameOver', step: currentStep, reason: 'spawnBlocked' });
+      return;
+    }
+
+    activePiece = { type: incoming, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
+    resetHorizontalState(horizontalState);
+    verticalProgress = 0;
+    lockDelayElapsedMs = 0;
+    lockResetsUsed = 0;
+    holdUsed = true;
+    eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: incoming });
   }
 
   /**
@@ -738,7 +778,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
 
   /**
    * Resuelve la dirección horizontal efectiva del paso y ejecuta las acciones
-   * correspondientes (activación, DAS, ARR). Paso 5 del orden lógico.
+   * correspondientes (activación, DAS, ARR). Paso 6 del orden lógico.
    */
   function processHorizontal(input: StepInput): void {
     // Reglas 1-6 del §9.1 de la especificación
@@ -815,7 +855,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   }
 
   /**
-   * Procesa el descenso vertical (gravedad o soft drop). Paso 8 del orden lógico.
+   * Procesa el descenso vertical (gravedad o soft drop). Paso 9 del orden lógico.
    * Un intento de descenso bloqueado ya no fija la pieza: consume la unidad de
    * progreso y continúa, para que el lock delay posterior decida la fijación.
    */
@@ -848,11 +888,36 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   }
 
   function processStep(input: StepInput): void {
-    // 5. Movimiento horizontal
+    // 5. Reserva (hold) — procesar antes que cualquier otra acción
+    if (input.hold === true && activePiece) {
+      if (!holdUsed) {
+        // El hold se ejecuta: guardar la pieza saliente e intentar spawn de la entrante
+        const outgoing = activePiece.type;
+
+        if (heldPiece === null) {
+          // Ranura vacía: extraer de nextPieces y reponer cola
+          const incoming = nextPiecesQueue.shift()!;
+          nextPiecesQueue.push(nextFromBag(bagState, prng));
+          heldPiece = outgoing;
+          eventQueue.push({ type: 'pieceHeld', step: currentStep, piece: outgoing });
+          attemptIncomingSpawn(incoming);
+        } else {
+          // Ranura ocupada: intercambiar sin tocar nextPieces ni la bolsa
+          const incoming = heldPiece;
+          heldPiece = outgoing;
+          eventQueue.push({ type: 'pieceHeld', step: currentStep, piece: outgoing });
+          attemptIncomingSpawn(incoming);
+        }
+        return; // Hold ejecutado: termina el paso inmediatamente
+      }
+      // holdUsed === true: ignorar la solicitud de hold, continuar con el resto del paso
+    }
+
+    // 6. Movimiento horizontal
     processHorizontal(input);
     if (!continueIfActive()) return;
 
-    // 6. Rotación
+    // 7. Rotación
     if (activePiece) {
       const rotateCW = input.rotateClockwise === true;
       const rotateCCW = input.rotateCounterclockwise === true;
@@ -891,7 +956,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     }
     if (!continueIfActive()) return;
 
-    // 7. Hard drop
+    // 8. Hard drop
     if (input.hardDrop && activePiece) {
       const distance = hardDropDistance(board, activePiece);
       if (distance >= 1) {
@@ -912,11 +977,11 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       return; // Hard drop completa el procesamiento del paso
     }
 
-    // 8. Gravedad o soft drop (solo si no hubo hard drop)
+    // 9. Gravedad o soft drop (solo si no hubo hard drop)
     processVertical(input);
     if (!continueIfActive()) return;
 
-    // 9. Detección final de apoyo y avance del lock delay
+    // 10. Detección final de apoyo y avance del lock delay
     if (activePiece) {
       const groundedAtEndOfStep = isGrounded(board, activePiece);
 
@@ -977,6 +1042,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
             landingCells: Object.freeze(
               computeLandingCells(board, activePiece).map((c) => Object.freeze({ x: c.x, y: c.y })),
             ),
+            holdUsed,
           })
         : null;
 
@@ -990,6 +1056,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         activePiece: activePieceSnap,
         nextPieces: Object.freeze([...nextPiecesQueue]),
         clearedLines,
+        heldPiece,
       });
     },
 
@@ -1016,6 +1083,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       clearedLines = 0;
       lockDelayElapsedMs = 0;
       lockResetsUsed = 0;
+      heldPiece = null;
+      holdUsed = false;
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 
@@ -1039,6 +1108,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         verticalProgress = 0;
         lockDelayElapsedMs = 0;
         lockResetsUsed = 0;
+        holdUsed = false;
       }
 
       eventQueue.push({ type: 'engineReset', step: 0 });
@@ -1059,7 +1129,7 @@ function validateInput(input: unknown): asserts input is StepInput {
   const obj = input as Record<string, unknown>;
 
   // Comprobar propiedades desconocidas
-  const allowedKeys = ['leftHeld', 'rightHeld', 'leftPressed', 'rightPressed', 'softDropHeld', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise'];
+  const allowedKeys = ['leftHeld', 'rightHeld', 'leftPressed', 'rightPressed', 'softDropHeld', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise', 'hold'];
   for (const key of Object.keys(obj)) {
     if (!allowedKeys.includes(key)) {
       throw new EngineStepError(
@@ -1125,6 +1195,11 @@ function validateInput(input: unknown): asserts input is StepInput {
   // Comprobar rotateCounterclockwise si está presente
   if ('rotateCounterclockwise' in obj && typeof obj.rotateCounterclockwise !== 'boolean') {
     throw new EngineStepError('INVALID_GAME_INPUT', `rotateCounterclockwise must be boolean, got ${typeof obj.rotateCounterclockwise}`);
+  }
+
+  // Comprobar hold si está presente
+  if ('hold' in obj && typeof obj.hold !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `hold must be boolean, got ${typeof obj.hold}`);
   }
 
   // pressed sin held
