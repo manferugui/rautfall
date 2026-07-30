@@ -889,7 +889,159 @@ Todas las pruebas se añaden a `packages/game-engine/src/game-engine.test.ts`, s
 
 No se fuerza ninguna secuencia de teclado larga o frágil para construir un T-Spin real en Playwright (`0010`, criterio ya establecido). Ampliación mínima justificada de `apps/web/e2e/essential-flow.spec.ts`: comprobar únicamente que, en el estado inicial de la aplicación, el HUD muestra el estado neutro de back-to-back (`back-to-back-value` visible con contenido `'—'`), siguiendo el mismo patrón ya usado para `combo-value`. La aritmética de puntuación, la clasificación de T-Spin y las reglas de back-to-back se prueban exclusivamente en Vitest dentro del motor (§34).
 
-## 37. Archivos previsiblemente afectados
+### 36.1 Uso opcional del escenario controlado de §37 en E2E
+
+No se obliga a Playwright a construir un T-Spin mediante juego normal. La especificación permite, sin decidirlo aquí, dos caminos igualmente válidos:
+
+- no modificar el E2E más allá de lo ya fijado arriba (opción por defecto si el escenario controlado de §37 no resulta trivial de aislar del flujo de producción);
+- o añadir, como mucho, un único test E2E adicional que reutilice el escenario controlado de §37 **únicamente si** ese escenario queda completamente aislado del flujo de producción (activado exclusivamente por `import.meta.env.DEV`, sin ningún control visible añadido a la interfaz normal) y aporta una prueba estable (sin condiciones de carrera, sin dependencia de temporización real).
+
+La decisión final queda a cargo de la implementación, tras auditar cómo de aislable resulta el mecanismo elegido en §37. No se decide aquí para no imponer una arquitectura de pruebas E2E sin conocer la forma final del escenario.
+
+## 37. Escenario reproducible de validación manual
+
+### 37.1 Objetivo
+
+La futura implementación debe proporcionar una forma de ejecutar manualmente al menos un escenario controlado de T-Spin **sin** construir el tablero jugando desde cero. El escenario mínimo debe permitir:
+
+- arrancar con un tablero preconfigurado;
+- tener una pieza `T` activa en posición y orientación conocidas;
+- ejecutar una secuencia manual muy corta;
+- completar al menos un T-Spin válido;
+- observar la puntuación resultante;
+- observar el estado de `backToBack`;
+- reiniciar o salir del escenario de forma clara.
+
+La secuencia manual, la parte que el usuario ejecuta con el teclado, debe ser idealmente:
+
+1. activar el escenario;
+2. ejecutar una rotación;
+3. fijar la pieza mediante lock delay o hard drop de distancia cero;
+4. verificar el resultado visible.
+
+Esta sección fija **qué** debe cumplir el escenario y **con qué criterios objetivos** debe elegirse su mecanismo interno de preparación (§37.3-§37.5); no impone una única solución técnica: la elección concreta se hace durante la implementación, tras medir complejidad, estabilidad y coste de mantenimiento (§37.5).
+
+### 37.2 Auditoría de mecanismos de diagnóstico existentes (obligatoria antes de elegir la solución)
+
+Confirmado por lectura directa del código real, no por suposición:
+
+- **`apps/web/src/game/input-debug.ts`** es el único mecanismo de diagnóstico existente en el repositorio. Se activa mediante `import.meta.env.DEV && new URL(window.location.href).searchParams.get('inputDebug') === '1'` (constante `isActive` calculada una sola vez al cargar el módulo, `input-debug.ts:27-30`), y su función `logDebug()` no produce ninguna salida cuando está desactivado. Está diseñado exclusivamente para registrar eventos de teclado, adaptador y resultados de `step()` en la consola — **no** ofrece ningún mecanismo de inyección de estado de tablero, ni de creación de una partida en un punto controlado. No es reutilizable directamente para el objetivo de esta sección, pero **su patrón de activación (`import.meta.env.DEV` + parámetro de query reservado) sí debe reutilizarse por consistencia** con el único precedente ya establecido en el repositorio, con independencia de qué estrategia de preparación del tablero se elija (§37.3/§37.4).
+- **`packages/game-engine/src/index.ts`** no expone hoy ninguna función de diagnóstico, fixture, ni API interna para construir un tablero o una pieza activa en un estado arbitrario: su única superficie pública es `createGameEngine(options)` (que solo acepta `seed` y `config`), `getPieceShape(type)`, y los tipos/errores ya documentados (§4 de esta especificación). No existe hoy ningún punto de entrada, exportado o no, para inyectar un tablero preconstruido. Esta auditoría no prejuzga si conviene añadir uno: solo confirma el punto de partida real (§37.4 fija en qué condiciones sería aceptable hacerlo).
+- El único parámetro que controla el estado inicial de una partida hoy es la semilla (`EngineOptions.seed`), ya usada de forma fija en `apps/web` (`GameScene.ts:34`, `const FIXED_SEED = 42`, reutilizada en `GameScene.ts:393`). El motor es enteramente determinista: la misma semilla, la misma configuración y la misma secuencia exacta de `StepInput` producen siempre el mismo tablero y la misma pieza activa (§31), propiedad ya explotada por los tests existentes (`game-engine.test.ts`, patrón de «avanzar mediante hard drop hasta obtener el tipo de pieza deseado», §4.9 de esta especificación).
+
+### 37.3 Estrategia preferida: reproducción determinista mediante la API pública existente
+
+**Regla:** se preferirá preparar el escenario mediante una secuencia determinista de llamadas a la API pública existente (`engine.reset({ seed, config })` seguido de una serie de `engine.step(input)`) cuando dicha secuencia sea corta, estable, comprensible y deje un estado inicial inequívoco.
+
+Esta reproducción mediante API pública solo será aceptable como solución final si, verificado durante la implementación:
+
+- tiene una longitud razonable (número de pasos automáticos acotado y justificable, §37.6);
+- no depende de temporización real (solo de pasos lógicos deterministas, como el resto del motor);
+- no requiere que el usuario ejecute una secuencia manual larga (la parte manual sigue limitada a los pasos 2-4 de §37.1);
+- no resulta frágil ante cambios menores del motor (pequeños ajustes de constantes, orden interno o geometría no deben romperla de forma silenciosa o imprevisible);
+- no deja `score`, `combo` o `backToBack` en un estado previo ambiguo antes del T-Spin de validación (§37.6, §37.7);
+- puede probarse automáticamente (una prueba de motor o de `apps/web` puede ejecutar la misma secuencia y verificar el estado resultante sin intervención humana);
+- puede documentarse de forma clara y verificable en el informe de implementación (§44);
+- no duplica ninguna regla de dominio (la secuencia se limita a `StepInput` legítimos consumidos por `step()`; ningún cálculo de esquinas, puntuación, combo o back-to-back ocurre fuera de `packages/game-engine`).
+
+Si, durante la implementación, la secuencia necesaria resulta larga, opaca, fràgil o de interpretación difícil (por ejemplo, porque construir el hueco de la `T` exige demasiados pasos de relleno, o porque su resultado depende de forma poco transparente del orden interno de la bolsa de siete), esta estrategia se descarta en favor de la alternativa de §37.4 — no se adopta por sistema ni se impone como única vía válida.
+
+### 37.4 Alternativa: factoría o fixture interno de escenario
+
+Si la implementación demuestra que la reproducción mediante la API pública (§37.3) es larga, opaca, frágil o costosa de mantener, podrá utilizarse una factoría o fixture interno de escenario, estrictamente aislado en desarrollo y pruebas.
+
+El fixture interno, si se adopta, debe cumplir:
+
+- no formar parte de la API pública normal del paquete que lo contenga (no se añade a la superficie exportada que consumen `apps/web` en producción ni ningún otro paquete);
+- no permitir edición arbitraria del tablero (no acepta una matriz de celdas cualquiera ni parámetros libres de posición/orientación; construye únicamente los escenarios previstos);
+- construir únicamente uno o varios escenarios **cerrados y nominados** (por ejemplo, «T-Spin Single de validación», identificados por nombre, no por parámetros libres);
+- estar protegido por el mecanismo real de desarrollo o pruebas (el mismo gating `import.meta.env.DEV` + parámetro de query ya fijado en §37.2/§37.5 si vive en `apps/web`; exclusivamente invocado desde pruebas o desde ese mecanismo si vive en `packages/game-engine`);
+- no incluirse ni ser accesible desde el flujo normal de producción;
+- no calcular T-Spins, puntuación, combo ni back-to-back (se limita a preparar el tablero y la pieza activa; la clasificación y la puntuación las sigue calculando exclusivamente el motor cuando el escenario se ejecuta, §39);
+- limitarse a preparar un estado inicial válido para que el motor ejecute después las reglas reales sobre él, sin atajos que se salten `isCollision`/`isGrounded`/las reglas de spawn ya vigentes;
+- tener pruebas propias (que el fixture produce el escenario nominado exacto, y que no es accesible fuera de su mecanismo de protección);
+- documentar claramente, en el informe de implementación (§44), por qué no constituye una puerta trasera general del motor (alcance cerrado a escenarios nominados, sin parámetros arbitrarios, sin acceso desde producción).
+
+**La ubicación del fixture no se fija en esta especificación.** Puede vivir en `apps/web` (por ejemplo, junto al módulo de activación) o en `packages/game-engine` (por ejemplo, como una función interna no exportada en la superficie pública, invocada solo desde pruebas o desde un punto de entrada dev-only), según la frontera real más segura que la implementación identifique. No se fija un nombre de archivo ni un paquete concreto por adelantado.
+
+### 37.5 Comparación obligatoria durante la implementación
+
+La implementación debe comparar de forma explícita, y documentar la comparación en el informe de implementación (§44), al menos estas dos opciones:
+
+**Opción A — Reproducción mediante API pública (§37.3).** Evaluar:
+
+- número exacto de pasos automáticos;
+- longitud y legibilidad de la secuencia;
+- estabilidad ante cambios futuros del motor;
+- estado de `score` resultante antes del T-Spin de validación;
+- estado de `combo` resultante;
+- estado de `backToBack` resultante;
+- facilidad de reinicio;
+- facilidad de prueba automatizada.
+
+**Opción B — Fixture interno controlado (§37.4).** Evaluar:
+
+- superficie de código nueva;
+- riesgo de exposición accidental fuera de desarrollo/pruebas;
+- aislamiento real de producción;
+- testabilidad;
+- dependencia con detalles internos del motor;
+- facilidad de mantenimiento;
+- claridad del escenario resultante;
+- posibilidad de reutilización limitada en futuros diagnósticos (sin que eso obligue a generalizarlo ahora).
+
+La elección final, con su criterio objetivo de decisión, se documenta en el informe de implementación (§44) — esta especificación no la prejuzga.
+
+### 37.6 Mecanismo de activación (común a ambas estrategias)
+
+Con independencia de si se adopta §37.3 o §37.4, la activación del escenario en `apps/web` sigue el mismo patrón ya establecido por `input-debug.ts` (§37.2), por consistencia y por ser la única forma de gating dev-only ya validada en el repositorio:
+
+- gating mediante `import.meta.env.DEV && new URL(window.location.href).searchParams.get('<parámetro>') === '1'` (nombre de parámetro a decidir por la implementación, orientativamente `tSpinDemo`);
+- integración en `GameScene.ts` mediante una llamada condicional mínima (en `create()` o en el punto donde ya se invoca `createGameEngine`/`resetEngine`), sin necesitar ninguna reestructuración de `GameScene.ts`, siguiendo el mismo estilo puntual en que `input-debug.ts` ya se invoca desde varios puntos de ese archivo.
+
+Este mecanismo de activación es una restricción de seguridad permanente (§38), no la decisión de estrategia interna: fija **cómo se activa** el escenario, no **cómo se construye** el tablero (§37.3-§37.5).
+
+## 38. Restricciones del escenario
+
+Queda expresamente prohibido, con independencia de si se adopta la estrategia de §37.3 o la de §37.4:
+
+- convertirlo en un editor de tablero general (ni la secuencia pública ni el fixture interno aceptan una configuración arbitraria de celdas; el escenario reproduce únicamente uno o varios escenarios cerrados y conocidos de antemano);
+- añadir una pantalla general de selección de escenarios (uno o pocos escenarios nominados, sin catálogo ni menú);
+- exponerlo en producción (gating exclusivo por `import.meta.env.DEV`, mismo mecanismo ya usado y ya verificado por `input-debug.ts` para excluirse del build de producción de Vite; si el mecanismo interno vive en `packages/game-engine`, debe quedar igualmente inalcanzable desde el código de producción de `apps/web`);
+- añadir rutas o controles visibles para usuarios normales (ningún botón, enlace o elemento de interfaz nuevo en el flujo normal de la aplicación; la única forma de activarlo es el parámetro de query reservado, igual que `inputDebug`);
+- introducir lógica de T-Spin en Vue o Phaser (el escenario no clasifica nada; solo prepara un estado y reproduce entradas ya válidas para el motor, §39);
+- duplicar reglas del motor (toda detección de esquinas, puntuación, combo y back-to-back sigue calculándose exclusivamente dentro de `packages/game-engine`, sea cual sea la estrategia elegida);
+- depender de una secuencia larga de teclas (la parte que el usuario ejecuta con el teclado real se limita a los pasos 2-4 de §37.1: una rotación y una fijación; la preparación del tablero de apoyo, automática, no cuenta como «secuencia de teclas» del usuario);
+- crear una API pública **permanente** de manipulación arbitraria del motor (ni una función pública nueva en `packages/game-engine` que acepte un tablero o pieza arbitrarios, ni un mecanismo equivalente en `apps/web` reutilizable para cualquier estado; el alcance queda cerrado a los escenarios nominados de esta tarea);
+- utilizar APIs públicas de depuración permanentes sin una necesidad real (el mecanismo se limita a lo estrictamente necesario para este escenario, sin generalizar a una herramienta de depuración de propósito amplio).
+
+## 39. Fuente de verdad del escenario manual
+
+El tablero preparado por el mecanismo elegido (reproducción por API pública, §37.3, o fixture interno, §37.4) entra en el motor como un estado inicial **producido por el propio `packages/game-engine`** — nunca como una estructura de datos arbitraria inyectada desde `apps/web`. Vue y Phaser, en este escenario, únicamente:
+
+- activan el escenario (leen el parámetro de query, invocan la preparación elegida);
+- presentan el snapshot resultante (igual que en cualquier otro momento del juego, mediante `getSnapshot()`/`GamePresentationState`);
+- envían la rotación o la fijación finales que ejecuta el usuario, mediante el mismo adaptador de teclado ya existente.
+
+Vue y Phaser **no pueden**, en ningún caso:
+
+- declarar que existe un T-Spin;
+- alterar `score`;
+- alterar `backToBack`;
+- calcular esquinas ocupadas;
+- clasificar la jugada de ningún modo.
+
+Toda clasificación, puntuación y actualización de `backToBack` observada en el escenario procede exclusivamente de `packages/game-engine`, exactamente igual que en el resto del juego (§9-§22 de esta especificación, sin ninguna excepción para el escenario de validación manual, con independencia de qué estrategia de preparación se haya elegido).
+
+## 40. Separación entre pruebas y validación manual
+
+- Las pruebas unitarias del motor (§34) cubren exhaustivamente detección, clasificación, puntuación y back-to-back, incluidas todas las variantes, los casos límite y las interacciones con SRS/wall kicks/lock delay/hold — son la fuente principal de confianza sobre la corrección de las reglas.
+- El escenario manual de §37 solo verifica la integración visible (que el HUD muestre correctamente lo que el motor ya calculó) y la interacción real por teclado — no sustituye ni reduce la cobertura de §34.
+- No es obligatorio crear escenarios manuales para todas las variantes de T-Spin.
+- Un único escenario estable de T-Spin Single o T-Spin Double es suficiente para esta tarea.
+- T-Spin Triple, los casos con wall kick relevante, y los casos límite de esquinas (exactamente 3 vs. 4 ocupadas, pared vs. suelo) se validan principalmente — y en esta tarea, exclusivamente — mediante los tests automatizados de §34.
+
+## 41. Archivos previsiblemente afectados
 
 - `packages/game-engine/src/index.ts` — estado interno nuevo, detección de T-Spin, tabla de puntos, lógica de back-to-back, cambios en `EngineSnapshot`/`reset()`/`lockAndProcess()`/`tryMoveHorizontal()`/`processVertical()`/bloque de rotación/bloque de hard drop/funciones de spawn.
 - `packages/game-engine/src/game-engine.test.ts` — pruebas nuevas (§34).
@@ -900,13 +1052,20 @@ No se fuerza ninguna secuencia de teclado larga o frágil para construir un T-Sp
 - `apps/web/src/components/ScorePanel.test.ts` — pruebas nuevas (§35).
 - `apps/web/src/App.vue` — prop nueva hacia `ScorePanel`, valor inicial de `gameState`.
 - `apps/web/src/App.test.ts` — literales y prueba de propagación actualizados.
-- `apps/web/e2e/essential-flow.spec.ts` — verificación mínima del estado neutro de back-to-back (§36).
+- `apps/web/e2e/essential-flow.spec.ts` — verificación mínima del estado neutro de back-to-back (§36); ampliación opcional del escenario controlado, solo si se decide en el sentido de §36.1.
 - `docs/implementation/0014-t-spins-back-to-back.md` — informe de implementación (creado al completar la tarea, no ahora).
 - `docs/project-status.md` — actualizado al completar la tarea, no ahora.
 
-No se incluye `packages/game-config`: ningún valor de esta tarea se convierte en configuración (§15.1, mismo criterio que `0013` §8.3).
+**Archivos posibles para el escenario reproducible de validación manual (§37), a confirmar durante la implementación según la estrategia elegida (§37.5) — esta lista es orientativa, no prescriptiva, y no fija nombres definitivos:**
 
-## 38. Criterios de aceptación
+- un módulo dev-only nuevo en `apps/web` (por ejemplo, junto a `input-debug.ts`) con el mecanismo de activación y, si se adopta la Opción A (§37.3), la secuencia de preparación;
+- una prueba específica de dicho módulo (activación por `import.meta.env.DEV`/parámetro de query, ausencia de efecto cuando está desactivado, mismo patrón que `input-debug.test.ts`);
+- un cambio mínimo en `apps/web/src/game/scenes/GameScene.ts` (llamada condicional que invoca el escenario cuando está activo; ningún cambio de comportamiento cuando está desactivado);
+- si se adopta la Opción B (§37.4), una utilidad interna o fixture controlado dentro de `packages/game-engine/src/index.ts` (o de un archivo interno nuevo de ese paquete no exportado en su superficie pública), con sus propias pruebas en `packages/game-engine/src/game-engine.test.ts` o en un archivo de test dedicado.
+
+No se incluye `packages/game-config`: ningún valor de esta tarea se convierte en configuración (§15.1, mismo criterio que `0013` §8.3). Un cambio en `packages/game-engine` para dar soporte al escenario (Opción B) no está excluido por esta especificación, pero debe quedar aislado, probado y justificado (§37.4, §38), y en ningún caso constituir una API pública permanente de manipulación arbitraria del motor (§38).
+
+## 42. Criterios de aceptación
 
 - El motor clasifica correctamente como T-Spin toda fijación de `T` cuya última acción relevante fue una rotación válida y cuyo centro de rotación tiene 3 o 4 esquinas ocupadas, según la regla exacta de §9.
 - Ninguna fijación de una pieza distinta de `T`, ni ninguna fijación de `T` sin candidatura de rotación vigente, se clasifica como T-Spin.
@@ -917,8 +1076,23 @@ No se incluye `packages/game-config`: ningún valor de esta tarea se convierte e
 - `ScorePanel.vue` muestra `backToBack` real, sin recalcular ninguna regla de dominio.
 - Todas las pruebas mínimas de §34/§35/§36 están implementadas y pasan.
 - No queda ninguna ampliación de alcance no justificada respecto de §6/§7 (en particular: ninguna traza de T-Spin Mini, energía, sabotajes, bot, batalla, audio, animaciones).
+- Existe una forma documentada y reproducible de validar manualmente un T-Spin (§37).
+- Esa forma no requiere construir el tablero desde una partida vacía.
+- La secuencia manual que ejecuta el usuario (rotar, fijar, verificar) es corta y determinista.
+- La solución elegida para preparar el escenario (Opción A o Opción B, §37.5) se basa en una comparación documentada, no en una preferencia arbitraria.
+- La secuencia de reproducción pública (Opción A) no se adopta si resulta larga, opaca o frágil (§37.3): en ese caso se usa el fixture interno (Opción B).
+- Si se adoptó un fixture interno, no expone edición arbitraria del tablero ni parámetros libres de posición/orientación (§37.4).
+- No se añade ninguna API pública permanente de carga de tablero, en `packages/game-engine` ni en `apps/web` (§38).
+- El estado inicial (pieza, orientación, posición, tablero, `score`, `combo`, `backToBack`) y el estado final esperado tras la jugada de validación están completamente especificados en el informe de implementación (§44).
+- El usuario puede validar el T-Spin con una secuencia manual corta (§37.1).
+- La puntuación observada se contrasta contra valores exactos (tabla de §15, no una comprobación de «aumenta»).
+- La solución no depende de temporización real, en ninguna de las dos estrategias.
+- El escenario está aislado de producción, con independencia de dónde viva su mecanismo interno (§38).
+- El resultado mostrado (puntuación, `backToBack`) procede exclusivamente del snapshot real del motor.
+- El escenario no contiene ninguna lógica duplicada de detección de T-Spin ni de cálculo de puntuación (§39): las reglas siguen ejecutándose exclusivamente en `packages/game-engine`.
+- Las pruebas automatizadas de §34 siguen siendo la fuente principal de confianza; el escenario manual es un complemento de integración, no un sustituto.
 
-## 39. Puertas de calidad
+## 43. Puertas de calidad
 
 Antes de declarar la tarea completada, ejecutar desde la raíz y confirmar que todas finalizan correctamente:
 
@@ -930,7 +1104,7 @@ Antes de declarar la tarea completada, ejecutar desde la raíz y confirmar que t
 
 Además, validar el arranque real de `apps/web` con `pnpm dev` (`AGENTS.md`, «Aplicaciones ejecutables»), comprobando que carga sin errores de consola, jugando manualmente lo suficiente para observar `backToBack` cambiar en el HUD, y deteniendo el servidor al finalizar.
 
-## 40. Informe de implementación obligatorio
+## 44. Informe de implementación obligatorio
 
 Al completar la tarea, crear `docs/implementation/0014-t-spins-back-to-back.md` con, como mínimo:
 
@@ -950,11 +1124,43 @@ Al completar la tarea, crear `docs/implementation/0014-t-spins-back-to-back.md` 
 - deuda técnica identificada (por ejemplo, T-Spin Mini como candidato futuro si se demuestra un consumidor real, o la necesidad futura de mover las tablas de puntuación a `packages/game-config` si se introducen perfiles de batalla reales);
 - validación manual pendiente de confirmación por el usuario, si la hubiera;
 - confirmación explícita de la ausencia de las mecánicas excluidas (§7): T-Spin Mini, energía, sabotajes, bot, batalla, backend, persistencia, audio, animaciones;
-- confirmación explícita de que no se hicieron commits durante la implementación.
+- confirmación explícita de que no se hicieron commits durante la implementación;
+- **alternativas evaluadas** para preparar el escenario (Opción A — reproducción por API pública, §37.3; Opción B — fixture interno, §37.4), con los criterios de §37.5 aplicados a cada una;
+- **criterio de elección** que decidió entre A y B (longitud/estabilidad/opacidad de la secuencia pública frente al coste y aislamiento del fixture interno);
+- **cómo se activa el escenario** (parámetro de query y condición `import.meta.env.DEV` exactos, nombres finales si difieren de los orientativos);
+- **número exacto de pasos automáticos usados en la preparación, si se optó por la Opción A** (reproducción por API pública), justificando por qué se considera razonable, si existen hard drops, soft drops, esperas o holds en esa preparación, qué impacto tienen sobre `score`/`combo`/`backToBack` antes de la jugada de validación, y por qué la secuencia no es frágil;
+- si se optó por la Opción B, **superficie de código añadida** para el fixture interno (archivo, funciones, si vive en `apps/web` o en `packages/game-engine`) y por qué resultó más segura o mantenible que la Opción A;
+- **estado inicial completo** en el momento en que el usuario recupera el control: pieza activa, orientación, posición, tablero, próximas piezas relevantes, `heldPiece` si aplica, `score`, `combo`, `backToBack`, estado de `gameOver`, y condición de lock delay relevante;
+- **qué acciones debe realizar el usuario** exactamente (teclas, orden);
+- **estado final esperado y delta exacto de puntuación**: tipo de jugada (T-Spin Single/Double/Triple/sin líneas), líneas eliminadas, puntos base, bonificación de combo, bonificación back-to-back, puntos de caída si existen, incremento total de `score`, y los valores finales exactos de `score`, `combo` y `backToBack`;
+- **pruebas del escenario** añadidas (del módulo de activación, y del fixture interno si se adoptó la Opción B);
+- **mecanismo de aislamiento** de producción (gating exacto, y por qué resulta suficiente);
+- **comprobación de producción**: cómo se verificó que el escenario no aparece ni es accesible en un build de producción real;
+- **justificación de que no es una API general**: ausencia de selector de escenarios, ausencia de edición arbitraria de tablero, alcance cerrado a uno o pocos escenarios nominados;
+- **deuda técnica residual** relativa al escenario (por ejemplo, si la Opción A resultó aceptable pero podría volverse frágil ante una tarea futura que cambie la geometría del motor, o si el fixture interno de la Opción B podría generalizarse en el futuro para más escenarios de diagnóstico sin que eso se autorice todavía).
 
 Y actualizar [docs/project-status.md](../project-status.md): estado de `0014` (completada), fecha de finalización, resultado resumido, referencia al informe de implementación, y propuesta de siguiente tarea. Esta especificación no crea esos documentos ahora.
 
-## 41. Restricciones para el agente implementador
+## 45. Validación manual futura
+
+Además de la validación manual ya exigida por `AGENTS.md` («Aplicaciones ejecutables») y por §43, la persona que valide esta tarea debe poder seguir, íntegramente a partir del informe de implementación (§44), esta lista concreta:
+
+Esta lista es independiente de la estrategia elegida en §37.5 (reproducción por API pública o fixture interno): se sigue igual en ambos casos, a partir de lo que el informe de implementación documente.
+
+1. Iniciar la aplicación en desarrollo (`pnpm dev`).
+2. Activar el escenario documentado (parámetro de query indicado en el informe de implementación).
+3. Confirmar que aparece el tablero y la pieza preparados, con la `T` activa en la posición y orientación descritas en el informe.
+4. Confirmar los valores iniciales exactos indicados en el informe: `score`, `combo` y `backToBack` antes de ejecutar ninguna acción manual.
+5. Ejecutar la rotación indicada en el informe.
+6. Fijar la pieza como indique el informe (lock delay o hard drop de distancia cero).
+7. Confirmar el tipo de T-Spin esperado (sin líneas, Single, Double o Triple, según el escenario documentado).
+8. Confirmar el número de líneas eliminadas indicado en el informe.
+9. Confirmar el incremento exacto de puntuación (puntos base, bonificación de combo, bonificación back-to-back y puntos de caída si existen, tal como los fije el informe).
+10. Confirmar los valores finales exactos de `score`, `combo` y `backToBack` indicados en el informe.
+11. Reiniciar (o recargar sin el parámetro de query) y comprobar que el escenario es reproducible: el estado vuelve a los mismos valores iniciales confirmados en el paso 4, y repetir los pasos 5-10 produce exactamente el mismo resultado.
+12. Confirmar, inspeccionando un build de producción (`pnpm build` + servido estático, o revisión del bundle generado), que el escenario no aparece ni es accesible fuera de desarrollo.
+
+## 46. Restricciones para el agente implementador
 
 - No modificar ninguna especificación existente de `docs/tasks/`, incluida esta.
 - No usar scripts ad hoc, heredocs, ficheros temporales, `node -e` ni Python inline para modificar archivos ni para depurar el motor (`AGENTS.md`).
@@ -967,22 +1173,29 @@ Y actualizar [docs/project-status.md](../project-status.md): estado de `0014` (c
 - No implementar energía de combate, sabotajes, bot, batalla, backend, ranking, persistencia ni pantalla de resultados.
 - No añadir animaciones, partículas, flashes ni audio asociados al T-Spin o al back-to-back.
 - No modificar la regla de combo ya fijada por `0013` para ninguna jugada no-T-Spin.
+- No convertir el escenario controlado de §37 en un editor de tablero, en una pantalla general de selección de escenarios, ni en un mecanismo de depuración de propósito amplio (§38).
+- No exponer el escenario controlado fuera de `import.meta.env.DEV`, ni añadir ningún control visible para usuarios normales (§38).
+- No introducir lógica de T-Spin, de puntuación ni de back-to-back en Vue o Phaser al implementar el escenario controlado: toda clasificación procede exclusivamente del motor (§39).
+- No añadir una API pública **permanente** para cargar tableros arbitrarios en `packages/game-engine` (§38). Sí puede añadirse una utilidad interna, de pruebas o de desarrollo (fixture, §37.4) si, tras comparar con la reproducción por API pública (§37.5), resulta la opción más pequeña, estable y segura — cualquier cambio de este tipo en `packages/game-engine` debe quedar aislado, probado y justificado en el informe de implementación (§44), y el motor sigue siendo la única fuente de verdad de la detección de T-Spin, la clasificación, la puntuación, el combo y el back-to-back.
+- No elegir entre la Opción A (§37.3) y la Opción B (§37.4) sin comparar ambas según los criterios objetivos de §37.5, ni documentar esa comparación en el informe de implementación.
+- No sustituir ni reducir la cobertura de las pruebas automatizadas de §34 por el escenario manual de §37 (§40).
 - Detenerse y preguntar si, durante la implementación, se detecta una decisión funcional no cubierta explícitamente por esta especificación (`AGENTS.md`, «Procedimiento de trabajo»).
 - No hacer commits salvo instrucción explícita del usuario.
 - Ejecutar las cinco validaciones (`pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test:e2e`) y validar el arranque real con `pnpm dev` antes de declarar la tarea completada, deteniendo el servidor al finalizar.
 
-## 42. Definición de terminado
+## 47. Definición de terminado
 
 La tarea `0014` se considera terminada cuando:
 
 - el contrato público descrito en §21/§32 está implementado exactamente como se especifica, sin campos adicionales no previstos ni eventos nuevos;
 - todas las reglas de §9 a §31 están implementadas y verificadas por las pruebas mínimas de §34/§35/§36;
 - la presentación Vue (§33) muestra correctamente `backToBack` real sin duplicar la lógica del motor;
-- las puertas de calidad de §39 finalizan correctamente;
-- se ha creado el informe de implementación (§40) y actualizado `docs/project-status.md`;
+- existe el escenario reproducible de validación manual de §37, respetando las restricciones de §38 y la separación de responsabilidades de §39, con la elección entre reproducción por API pública y fixture interno (§37.5) justificada y documentada;
+- las puertas de calidad de §43 finalizan correctamente;
+- se ha creado el informe de implementación (§44), incluida la documentación del escenario controlado, y actualizado `docs/project-status.md`;
 - no queda ninguna ampliación de alcance no justificada respecto de §6/§7;
 - no se ha hecho ningún commit no solicitado explícitamente por el usuario.
 
-## 43. Siguiente tarea
+## 48. Siguiente tarea
 
 No se fija una `0015` definitiva. Esta especificación no prejuzga cuál será. Candidatas razonables, a decidir tras validar manualmente T-Spins y back-to-back y revisar `docs/rautfall.md` frente al estado real del proyecto: la energía de combate (que presupone la puntuación y las jugadas difíciles aquí definidas, `docs/rautfall.md` §680–695), o el primer sabotaje real (que a su vez presupone la energía). No se fija ninguna de estas como definitiva.
