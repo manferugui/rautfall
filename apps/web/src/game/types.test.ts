@@ -2,23 +2,27 @@ import { describe, expect, it } from 'vitest';
 import type { GamePresentationState } from './types';
 
 describe('GamePresentationState', () => {
-  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces y heldPiece', () => {
+  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score y combo', () => {
     const state: GamePresentationState = {
       status: 'running',
       step: 42,
       elapsedMs: 420,
       nextPieces: ['I', 'O', 'T'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
 
-    // Verificar que solo tiene las cinco propiedades esperadas
+    // Verificar que solo tiene las siete propiedades esperadas
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(5);
+    expect(keys).toHaveLength(7);
     expect(keys).toContain('status');
     expect(keys).toContain('step');
     expect(keys).toContain('elapsedMs');
     expect(keys).toContain('nextPieces');
     expect(keys).toContain('heldPiece');
+    expect(keys).toContain('score');
+    expect(keys).toContain('combo');
   });
 
   it('no contiene el campo singular nextPiece', () => {
@@ -28,6 +32,8 @@ describe('GamePresentationState', () => {
       elapsedMs: 0,
       nextPieces: ['T', 'S', 'Z'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
 
     expect('nextPiece' in state).toBe(false);
@@ -40,6 +46,8 @@ describe('GamePresentationState', () => {
       elapsedMs: 0,
       nextPieces: ['I', 'J', 'L'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
 
     // Verificar que no hay propiedades como board, activePiece, etc.
@@ -48,6 +56,8 @@ describe('GamePresentationState', () => {
     expect('clearedLines' in state).toBe(false);
     // holdUsed no debe filtrarse a nivel superior
     expect('holdUsed' in state).toBe(false);
+    // maxCombo no debe estar presente
+    expect('maxCombo' in state).toBe(false);
   });
 
   it('soporta status gameOver', () => {
@@ -57,9 +67,13 @@ describe('GamePresentationState', () => {
       elapsedMs: 5000,
       nextPieces: ['O', 'T', 'I'],
       heldPiece: null,
+      score: 1234,
+      combo: 3,
     };
 
     expect(state.status).toBe('gameOver');
+    expect(state.score).toBe(1234);
+    expect(state.combo).toBe(3);
   });
 
   it('soporta status paused', () => {
@@ -69,11 +83,13 @@ describe('GamePresentationState', () => {
       elapsedMs: 2500,
       nextPieces: ['S', 'Z', 'J'],
       heldPiece: null,
+      score: 500,
+      combo: 2,
     };
 
     expect(state.status).toBe('paused');
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(5);
+    expect(keys).toHaveLength(7);
   });
 
   it('nextPieces tiene tres elementos', () => {
@@ -83,6 +99,8 @@ describe('GamePresentationState', () => {
       elapsedMs: 0,
       nextPieces: ['J', 'L', 'S'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
 
     expect(state.nextPieces).toHaveLength(3);
@@ -95,6 +113,8 @@ describe('GamePresentationState', () => {
       elapsedMs: 50,
       nextPieces: ['T', 'I', 'O'],
       heldPiece: 'L',
+      score: 100,
+      combo: 1,
     };
 
     expect(state.heldPiece).toBe('L');
@@ -107,8 +127,25 @@ describe('GamePresentationState', () => {
       elapsedMs: 0,
       nextPieces: ['I', 'I', 'I'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
 
     expect(state.heldPiece).toBeNull();
+  });
+
+  it('score y combo son números', () => {
+    const state: GamePresentationState = {
+      status: 'running',
+      step: 0,
+      elapsedMs: 0,
+      nextPieces: ['I', 'I', 'I'],
+      heldPiece: null,
+      score: 0,
+      combo: 0,
+    };
+
+    expect(typeof state.score).toBe('number');
+    expect(typeof state.combo).toBe('number');
   });
 });

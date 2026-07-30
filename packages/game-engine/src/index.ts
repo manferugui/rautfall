@@ -87,6 +87,8 @@ export type EngineSnapshot = Readonly<{
   nextPieces: readonly PieceType[];
   clearedLines: number;
   heldPiece: PieceType | null;
+  score: number;
+  combo: number;
 }>;
 
 /**
@@ -195,6 +197,18 @@ const BOARD_COLS = 10;
 const BOARD_ROWS = 24;
 const HIDDEN_ROWS = 4;
 const VERTICAL_CELL_UNIT = 1000;
+
+// ── Constantes de puntuación ────────────────────────────────────────────
+
+const LINE_CLEAR_POINTS: Readonly<Record<1 | 2 | 3 | 4, number>> = Object.freeze({
+  1: 100,
+  2: 300,
+  3: 500,
+  4: 800,
+});
+
+const SOFT_DROP_POINTS_PER_CELL = 1;
+const HARD_DROP_POINTS_PER_CELL = 2;
 
 // ── Definición de piezas ────────────────────────────────────────────────
 
@@ -541,6 +555,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   let lockResetsUsed = 0;
   let heldPiece: PieceType | null = null;
   let holdUsed = false;
+  let score = 0;
+  let combo = 0;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
@@ -596,12 +612,23 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     // Eliminación de líneas
     const lineIndices = clearLines();
     if (lineIndices.length > 0) {
+      // Puntos base por líneas
+      const linesCount = lineIndices.length as 1 | 2 | 3 | 4;
+      const basePoints = LINE_CLEAR_POINTS[linesCount];
+      // Combo: incrementar y calcular bonificación
+      combo += 1;
+      const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
+      score += basePoints + comboBonus;
+
       eventQueue.push({
         type: 'linesCleared',
         step: currentStep,
         lines: lineIndices.length,
         lineIndices: Object.freeze([...lineIndices]),
       });
+    } else {
+      // Ruptura silenciosa del combo
+      combo = 0;
     }
 
     // Spawn de la siguiente pieza
@@ -881,6 +908,10 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         activePiece.y = nextY;
         const reason = input.softDropHeld ? 'softDrop' : 'gravity';
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason });
+        // Puntuación por soft drop: 1 punto por celda realmente descendida
+        if (reason === 'softDrop') {
+          score += SOFT_DROP_POINTS_PER_CELL;
+        }
       }
       // Colisión: no fijar, no emitir evento. La unidad de progreso ya se consumió.
       // El lock delay determinará la fijación al final del paso.
@@ -962,18 +993,11 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       if (distance >= 1) {
         activePiece.y += distance;
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'hardDrop' });
+        score += distance * HARD_DROP_POINTS_PER_CELL;
       }
-      lockActivePiece();
-      const lineIndices = clearLines();
-      if (lineIndices.length > 0) {
-        eventQueue.push({
-          type: 'linesCleared',
-          step: currentStep,
-          lines: lineIndices.length,
-          lineIndices: Object.freeze([...lineIndices]),
-        });
-      }
-      spawnNextPiece();
+      // Unificar con lockAndProcess() para que la puntuación
+      // por líneas/combo tenga una única implementación
+      lockAndProcess();
       return; // Hard drop completa el procesamiento del paso
     }
 
@@ -1057,6 +1081,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         nextPieces: Object.freeze([...nextPiecesQueue]),
         clearedLines,
         heldPiece,
+        score,
+        combo,
       });
     },
 
@@ -1085,6 +1111,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       lockResetsUsed = 0;
       heldPiece = null;
       holdUsed = false;
+      score = 0;
+      combo = 0;
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 

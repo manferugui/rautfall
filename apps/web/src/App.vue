@@ -2,12 +2,13 @@
 import { ref } from 'vue';
 import GameCanvas from './components/GameCanvas.vue';
 import NextPiecesPreview from './components/NextPiecesPreview.vue';
+import ScorePanel from './components/ScorePanel.vue';
 import HeldPiecePreview from './components/HeldPiecePreview.vue';
 import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0 });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -80,6 +81,13 @@ function doTogglePause(): void {
             <!-- Próximas piezas reales -->
             <div class="console-section">
               <NextPiecesPreview :next-pieces="gameState.nextPieces" />
+            </div>
+
+            <div class="console-divider"></div>
+
+            <!-- Puntuación y combo reales -->
+            <div class="console-section">
+              <ScorePanel :score="gameState.score" :combo="gameState.combo" />
             </div>
 
             <div class="console-divider"></div>

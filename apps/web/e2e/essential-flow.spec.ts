@@ -17,7 +17,7 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     await expect(canvas).toBeVisible();
   });
 
-  await test.step('estado inicial running, próximas piezas, reserva y paneles', async () => {
+  await test.step('estado inicial running, próximas piezas, reserva, paneles y puntuación', async () => {
     await expect(page.getByTestId('session-status')).toHaveText('running');
     await expect(page.getByTestId('held-piece-preview')).toBeVisible();
     const nextPiecesItems = page.getByTestId('next-pieces-preview').getByRole('listitem');
@@ -26,6 +26,8 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     await expect(page.getByTestId('simulated-energy')).toBeVisible();
     await expect(page.getByTestId('simulated-cartridge')).toBeVisible();
     await expect(page.getByTestId('simulated-residues')).toBeVisible();
+    await expect(page.getByTestId('score-value')).toHaveText('0');
+    await expect(page.getByTestId('combo-value')).toBeVisible();
   });
 
   await test.step('pausa mediante el botón real', async () => {

@@ -35,6 +35,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       global: {
         stubs: {
           NextPiecesPreview: true,
+          ScorePanel: true,
           OpponentMonitor: true,
           CombatStatusPanel: true,
         },
@@ -63,6 +64,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       elapsedMs: 2500,
       nextPieces: ['S', 'Z', 'J'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
     stateUpdateCallback(pausedState);
     await wrapper.vm.$nextTick();
@@ -102,6 +105,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       elapsedMs: 5000,
       nextPieces: ['O', 'T', 'I'],
       heldPiece: null,
+      score: 0,
+      combo: 0,
     };
     stateUpdateCallback(gameOverState);
     await wrapper.vm.$nextTick();
@@ -124,12 +129,12 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en paused
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0 });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en gameOver
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0 });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
@@ -154,7 +159,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
     // gameOver — sin overlay
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
@@ -171,6 +176,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       elapsedMs: 500,
       nextPieces: ['T', 'L', 'J'],
       heldPiece: null,
+      score: 100,
+      combo: 1,
     };
     stateUpdateCallback(state);
     await wrapper.vm.$nextTick();
@@ -179,6 +186,30 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     const preview = wrapper.findComponent({ name: 'NextPiecesPreview' });
     expect(preview.exists()).toBe(true);
     expect(preview.props('nextPieces')).toEqual(['T', 'L', 'J']);
+
+    wrapper.unmount();
+  });
+
+  it('ScorePanel recibe score y combo desde App', async () => {
+    const wrapper = mountApp();
+    const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
+
+    const state: GamePresentationState = {
+      status: 'running',
+      step: 10,
+      elapsedMs: 500,
+      nextPieces: ['T', 'L', 'J'],
+      heldPiece: null,
+      score: 450,
+      combo: 3,
+    };
+    stateUpdateCallback(state);
+    await wrapper.vm.$nextTick();
+
+    const scorePanel = wrapper.findComponent({ name: 'ScorePanel' });
+    expect(scorePanel.exists()).toBe(true);
+    expect(scorePanel.props('score')).toBe(450);
+    expect(scorePanel.props('combo')).toBe(3);
 
     wrapper.unmount();
   });
@@ -258,11 +289,11 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
 
     expect(wrapper.find('.board-bezel--running').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--paused').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--gameOver').exists()).toBe(true);
 

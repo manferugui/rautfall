@@ -533,6 +533,8 @@ export class GameScene extends Phaser.Scene {
       elapsedMs: snap.elapsedMs,
       nextPieces: [...snap.nextPieces],
       heldPiece: snap.heldPiece,
+      score: snap.score,
+      combo: snap.combo,
     };
 
     if (
@@ -542,7 +544,9 @@ export class GameScene extends Phaser.Scene {
       this.lastState.elapsedMs === newState.elapsedMs &&
       this.lastState.nextPieces.length === newState.nextPieces.length &&
       this.lastState.nextPieces.every((p, i) => p === newState.nextPieces[i]) &&
-      this.lastState.heldPiece === newState.heldPiece
+      this.lastState.heldPiece === newState.heldPiece &&
+      this.lastState.score === newState.score &&
+      this.lastState.combo === newState.combo
     ) {
       return;
     }

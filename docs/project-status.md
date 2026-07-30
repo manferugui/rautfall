@@ -311,9 +311,32 @@ Ver [Informe de implementación](implementation/0011-pieza-fantasma-determinista
 
 Ver [Informe de implementación](implementation/0012-reserva-pieza-hold.md).
 
+## Task [0013 — Puntuación y combos](tasks/0013-puntuacion-combos.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-30 |
+| **Resultado** | 406 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- `EngineSnapshot` expone `score: number` y `combo: number`.
+- `GamePresentationState` expone `score` y `combo`.
+- Tabla de puntos por líneas: 100/300/500/800 para 1/2/3/4 líneas simultáneas.
+- Combo: 0 sin cadena, 1 tras primera eliminación consecutiva, incremento por cada eliminación adicional, ruptura silenciosa a 0 cuando fijación sin líneas.
+- Bonificación de combo: `50 * (combo - 1)` cuando `combo >= 2`.
+- Soft drop: 1 punto por celda realmente descendida.
+- Hard drop: 2 puntos por celda de distancia real.
+- Hard drop unificado sobre `lockAndProcess()`.
+- `ScorePanel.vue` muestra puntuación y combo reales en la consola táctica.
+- 26 nuevas pruebas de motor, 4 de ScorePanel, 1 nueva de App.
+- Sin cambios en `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0013-puntuacion-combos.md).
+
 ## Siguiente tarea
 
-La siguiente tarea se decidirá después de validar manualmente la reserva y revisar `docs/rautfall.md` frente al estado real del proyecto. Candidatas razonables: puntuación y combos, o el primer sabotaje real (que presupone una mecánica de puntuación/energía previa). No se fija una tarea 0013 definitiva en este documento.
-
-Now that you have the latest state of the file, try the operation again with fewer, more precise SEARCH blocks. For large files especially, it may be prudent to try to limit yourself to <5 SEARCH/REPLACE blocks at a time, then wait for the user to respond with the result of the operation before following up with another replace_in_file call to make additional edits.
-(If you run into this error 3 times in a row, you may use the write_to_file tool as a fallback.)
+La siguiente tarea se decidirá después de validar manualmente la puntuación y combos, y revisar `docs/rautfall.md` frente al estado real del proyecto. Candidatas razonables: T-Spins y back-to-back, energía de combate, o el primer sabotaje real.

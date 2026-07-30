@@ -10,6 +10,8 @@ export type GamePresentationState = Readonly<{
   elapsedMs: number;
   nextPieces: readonly PieceType[];
   heldPiece: PieceType | null;
+  score: number;
+  combo: number;
 }>;
 
 /**
