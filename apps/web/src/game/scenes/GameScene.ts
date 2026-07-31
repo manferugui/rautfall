@@ -22,6 +22,7 @@ import { computeSteps } from '../time-adapter';
 import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
 import { computeSessionStatus, canTogglePause } from '../session-status';
+import { isTSpinDemoActive, createTSpinDemoEngine } from '../tspin-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
   CELL_SIZE,
@@ -259,8 +260,28 @@ export class GameScene extends Phaser.Scene {
 
     const keys = this.readKeys();
 
-    for (let i = 0; i < stepsToExecute; i++) {
-      if (this.engine.getSnapshot().status === 'gameOver') break;
+    let demoWaitingForInput = false;
+    if (isTSpinDemoActive()) {
+      const snap = this.engine.getSnapshot();
+      if (snap.step === 0) {
+        const hasInput = keys.horizontalPressed !== null ||
+          keys.justPressedUp ||
+          keys.justPressedZ ||
+          keys.justPressedSpace ||
+          keys.justPressedC ||
+          keys.leftHeld ||
+          keys.rightHeld ||
+          keys.softDropHeld;
+        if (!hasInput) {
+          demoWaitingForInput = true;
+          this.accumulator = 0;
+        }
+      }
+    }
+
+    if (!demoWaitingForInput) {
+      for (let i = 0; i < stepsToExecute; i++) {
+        if (this.engine.getSnapshot().status === 'gameOver') break;
 
       const [input, updatedConsumed] = buildStepInput(
         i === 0 ? keys : this.emptyInput(),
@@ -334,6 +355,7 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+    }
 
     this.renderFrame();
     const frameEvents = this.engine.drainEvents();
@@ -390,7 +412,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetEngine(): void {
-    this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
+    if (isTSpinDemoActive()) {
+      // Escenario cerrado de desarrollo: tablero preparado + pieza T
+      this.engine = createTSpinDemoEngine();
+    } else {
+      this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
+    }
     this.engine.drainEvents();
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
@@ -535,6 +562,7 @@ export class GameScene extends Phaser.Scene {
       heldPiece: snap.heldPiece,
       score: snap.score,
       combo: snap.combo,
+      backToBack: snap.backToBack,
     };
 
     if (
@@ -546,7 +574,8 @@ export class GameScene extends Phaser.Scene {
       this.lastState.nextPieces.every((p, i) => p === newState.nextPieces[i]) &&
       this.lastState.heldPiece === newState.heldPiece &&
       this.lastState.score === newState.score &&
-      this.lastState.combo === newState.combo
+      this.lastState.combo === newState.combo &&
+      this.lastState.backToBack === newState.backToBack
     ) {
       return;
     }

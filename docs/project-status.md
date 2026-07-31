@@ -337,6 +337,33 @@ Ver [Informe de implementación](implementation/0012-reserva-pieza-hold.md).
 
 Ver [Informe de implementación](implementation/0013-puntuacion-combos.md).
 
+## Task [0014 — T-Spins y back-to-back](tasks/0014-t-spins-back-to-back.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Implementada técnicamente |
+| **Fecha de finalización** | 2026-07-31 |
+| **Resultado** | 454 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- `EngineSnapshot` expone `backToBack: number`.
+- `GamePresentationState` expone `backToBack`.
+- Detección de T-Spin: pieza T + `lastActionWasRotation` + ≥3 esquinas ocupadas.
+- Tabla de puntos T-Spin: 400/800/1200/1600 para 0/1/2/3 líneas (sustituye a la ordinaria).
+- Back-to-back: contador `0` (sin cadena), `1` (primera difícil), `≥2` (bonificación 50%).
+- Única fila en `lockAndProcess()` para T-Spin y ordinaria.
+- `lastActionWasRotation` gestionado en todas las acciones del motor.
+- `ScorePanel.vue` muestra back-to-back en tercera fila.
+- Escenario de desarrollo `?tspin-demo=1` para validación manual (dev-only).
+- `createTSpinFixturedEngine` y `DevFixtureOptions` retirados de la API pública.
+- 26 pruebas funcionales directas del motor (detección, semántica, puntuación, back-to-back) + 9 originales + 7 de escenario dev.
+- Sin cambios en `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0014-t-spins-back-to-back.md).
+
 ## Siguiente tarea
 
-La siguiente tarea se decidirá después de validar manualmente la puntuación y combos, y revisar `docs/rautfall.md` frente al estado real del proyecto. Candidatas razonables: T-Spins y back-to-back, energía de combate, o el primer sabotaje real.
+La siguiente tarea se decidirá después de validar manualmente los T-Spins y back-to-back, y revisar `docs/rautfall.md` frente al estado real del proyecto. Candidatas razonables: energía de combate, el primer sabotaje real, o refinamiento del motor.

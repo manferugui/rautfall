@@ -66,6 +66,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       heldPiece: null,
       score: 0,
       combo: 0,
+      backToBack: 0,
     };
     stateUpdateCallback(pausedState);
     await wrapper.vm.$nextTick();
@@ -107,6 +108,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       heldPiece: null,
       score: 0,
       combo: 0,
+      backToBack: 0,
     };
     stateUpdateCallback(gameOverState);
     await wrapper.vm.$nextTick();
@@ -129,12 +131,12 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en paused
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0 });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0, backToBack: 0 });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en gameOver
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0 });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
@@ -159,7 +161,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
     // gameOver — sin overlay
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
@@ -178,6 +180,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       heldPiece: null,
       score: 100,
       combo: 1,
+      backToBack: 0,
     };
     stateUpdateCallback(state);
     await wrapper.vm.$nextTick();
@@ -202,6 +205,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       heldPiece: null,
       score: 450,
       combo: 3,
+      backToBack: 2,
     };
     stateUpdateCallback(state);
     await wrapper.vm.$nextTick();
@@ -210,6 +214,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(scorePanel.exists()).toBe(true);
     expect(scorePanel.props('score')).toBe(450);
     expect(scorePanel.props('combo')).toBe(3);
+    expect(scorePanel.props('backToBack')).toBe(2);
 
     wrapper.unmount();
   });
@@ -289,11 +294,11 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
 
     expect(wrapper.find('.board-bezel--running').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0 });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0, backToBack: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--paused').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--gameOver').exists()).toBe(true);
 

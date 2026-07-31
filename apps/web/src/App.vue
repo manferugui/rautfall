@@ -8,7 +8,7 @@ import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0 });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0 });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -85,9 +85,9 @@ function doTogglePause(): void {
 
             <div class="console-divider"></div>
 
-            <!-- Puntuación y combo reales -->
+            <!-- Puntuación, combo y back-to-back reales -->
             <div class="console-section">
-              <ScorePanel :score="gameState.score" :combo="gameState.combo" />
+              <ScorePanel :score="gameState.score" :combo="gameState.combo" :back-to-back="gameState.backToBack" />
             </div>
 
             <div class="console-divider"></div>

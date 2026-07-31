@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 const WORKSPACE_ROOT = fileURLToPath(new URL('../..', import.meta.url));
-const PORT = 5174;
+const PORT = 5173;
 const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({

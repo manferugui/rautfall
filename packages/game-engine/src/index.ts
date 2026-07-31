@@ -89,6 +89,7 @@ export type EngineSnapshot = Readonly<{
   heldPiece: PieceType | null;
   score: number;
   combo: number;
+  backToBack: number;
 }>;
 
 /**
@@ -209,6 +210,17 @@ const LINE_CLEAR_POINTS: Readonly<Record<1 | 2 | 3 | 4, number>> = Object.freeze
 
 const SOFT_DROP_POINTS_PER_CELL = 1;
 const HARD_DROP_POINTS_PER_CELL = 2;
+
+// ── Constantes de T-Spin ────────────────────────────────────────────────
+
+const T_SPIN_POINTS: Readonly<Record<0 | 1 | 2 | 3, number>> = Object.freeze({
+  0: 400,
+  1: 800,
+  2: 1200,
+  3: 1600,
+});
+
+const BACK_TO_BACK_BONUS_RATIO = 0.5;
 
 // ── Definición de piezas ────────────────────────────────────────────────
 
@@ -353,6 +365,10 @@ function boardToReadonly(board: (PieceType | null)[][]): ReadonlyArray<ReadonlyA
   return Object.freeze(board.map((row) => Object.freeze([...row])));
 }
 
+function cloneBoard(board: (PieceType | null)[][]): (PieceType | null)[][] {
+  return board.map((row) => [...row]);
+}
+
 // ── Comprobación de colisiones ──────────────────────────────────────────
 
 function isCollision(
@@ -369,6 +385,60 @@ function isCollision(
 
 function computeAbsoluteCells(pieceType: PieceType, originX: number, originY: number, orientation: Orientation): Cell[] {
   return PIECE_ORIENTATION_CELLS[pieceType][orientation].map((c) => ({ x: originX + c.x, y: originY + c.y }));
+}
+
+// ── Funciones de detección de T-Spin ────────────────────────────────────
+
+/**
+ * Cuenta cuántas de las cuatro esquinas alrededor del centro de rotación
+ * de la pieza `T` están ocupadas (bloque fijo, pared lateral, suelo o
+ * límite superior).
+ *
+ * El centro de rotación de la T es siempre `(piece.x + 1, piece.y + 1)`
+ * con independencia de la orientación.
+ */
+function countOccupiedCorners(
+  board: (PieceType | null)[][],
+  piece: { x: number; y: number },
+): number {
+  const cx = piece.x + 1;
+  const cy = piece.y + 1;
+  const corners: Cell[] = [
+    { x: cx - 1, y: cy - 1 },
+    { x: cx + 1, y: cy - 1 },
+    { x: cx - 1, y: cy + 1 },
+    { x: cx + 1, y: cy + 1 },
+  ];
+  return corners.filter((c) => isCornerOccupied(board, c)).length;
+}
+
+/**
+ * Determina si una celda de esquina está ocupada.
+ * Reutiliza la misma semántica de límites que `isCollision`:
+ * pared lateral, suelo, límite superior o bloque fijo.
+ */
+function isCornerOccupied(
+  board: (PieceType | null)[][],
+  cell: Cell,
+): boolean {
+  if (cell.x < 0 || cell.x >= BOARD_COLS) return true;
+  if (cell.y < 0 || cell.y >= BOARD_ROWS) return true;
+  return board[cell.y]![cell.x] !== null;
+}
+
+/**
+ * Determina si la fijación actual constituye un T-Spin.
+ * La detección se evalúa antes de escribir la pieza en el tablero
+ * y antes de eliminar líneas.
+ */
+function isTSpin(
+  board: (PieceType | null)[][],
+  activePiece: { type: PieceType; x: number; y: number },
+  lastActionWasRotation: boolean,
+): boolean {
+  if (activePiece.type !== 'T') return false;
+  if (!lastActionWasRotation) return false;
+  return countOccupiedCorners(board, activePiece) >= 3;
 }
 
 // ── Tipo de pieza activa ────────────────────────────────────────────────
@@ -534,7 +604,25 @@ export function getPieceShape(type: PieceType): PieceShape {
 
 // ── Creación del motor ──────────────────────────────────────────────────
 
-export function createGameEngine(options: EngineOptions): GameEngine {
+/**
+ * Estado inicial opcional para el motor, usado únicamente por el escenario
+ * cerrado de T-Spin (dev). No permite cargar ni editar tableros arbitrarios:
+ * solo el escenario nominado `tspin-demo` construye este estado y lo consume
+ * mediante `createGameEngine(options, state)`. El tipo es el contrato mínimo
+ * para que el escenario dev de `apps/web` pueda preparar el tablero cerrado.
+ * @internal
+ */
+export type TSpinDemoInitialState = {
+  board: (PieceType | null)[][];
+  activePiece: ActivePiece;
+  nextPieces: PieceType[];
+  heldPiece: PieceType | null;
+};
+
+export function createGameEngine(
+  options: EngineOptions,
+  initialState?: TSpinDemoInitialState,
+): GameEngine {
   validateSeed(options.seed);
   parseGameConfig(options.config);
 
@@ -542,25 +630,41 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   let currentStep = 0;
   let currentElapsedMs = 0;
   let currentSeed = options.seed;
-  let status: EngineStatus = 'running';
-  let board = createEmptyBoard();
+  let status: 'running' | 'gameOver' = 'running';
+  // Si se proporciona un estado inicial (solo escenario dev nominado), se
+  // usa sin validación adicional: es responsabilidad del escenario.
+  let board = initialState ? cloneBoard(initialState.board) : createEmptyBoard();
   let prng = createPrng(currentSeed);
   let bagState = createBag(prng);
-  let activePiece: ActivePiece | null = null;
+  let activePiece: ActivePiece | null = initialState
+    ? { ...initialState.activePiece }
+    : null;
   /** Cola mutable interna de próximas piezas (longitud siempre 3 tras la creación). */
-  let nextPiecesQueue: PieceType[] = [];
+  let nextPiecesQueue: PieceType[] = initialState
+    ? [...initialState.nextPieces]
+    : [];
   let verticalProgress = 0;
   let clearedLines = 0;
   let lockDelayElapsedMs = 0;
   let lockResetsUsed = 0;
-  let heldPiece: PieceType | null = null;
+  let heldPiece: PieceType | null = initialState ? initialState.heldPiece : null;
   let holdUsed = false;
   let score = 0;
   let combo = 0;
+  let lastActionWasRotation = false;
+  let backToBack = 0;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
   const horizontalState = createHorizontalState();
+
+  /** Reinicia los contadores de estado por pieza (spawn, hold entrante, reset). */
+  function resetPieceState(): void {
+    lockDelayElapsedMs = 0;
+    lockResetsUsed = 0;
+    holdUsed = false;
+    lastActionWasRotation = false;
+  }
 
   /** Genera la pieza activa y rellena la cola con tres próximas piezas. */
   function spawnInitialPieces(): void {
@@ -587,9 +691,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     nextPiecesQueue = queuePieces;
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
-    lockDelayElapsedMs = 0;
-    lockResetsUsed = 0;
-    holdUsed = false;
+    resetPieceState();
   }
 
   function lockActivePiece(): void {
@@ -602,37 +704,117 @@ export function createGameEngine(options: EngineOptions): GameEngine {
   }
 
   /**
-   * Secuencia completa de fijación: escribe la pieza en el tablero, emite
-   * `pieceLocked`, elimina líneas, spawn de la siguiente pieza o game over.
-   * Reinicia los contadores de lock delay para la nueva pieza.
+   * Secuencia completa de fijación: evalúa T-Spin, escribe la pieza en el
+   * tablero, emite `pieceLocked`, elimina líneas, clasifica la jugada,
+   * actualiza combo y back-to-back, calcula puntuación, spawn de la siguiente
+   * pieza o game over. Todo ello una sola vez por fijación.
+   *
+   * Orden exacto (especificación 0014 §22):
+   * 1. Evaluar si la fijación candidata es T-Spin (antes de escribir en tablero)
+   * 2. Escribir la pieza en el tablero
+   * 3. Emitir pieceLocked
+   * 4. Detectar y eliminar líneas
+   * 5. Clasificar la jugada
+   * 6. Actualizar combo
+   * 7. Actualizar back-to-back
+   * 8. Calcular puntuación base + bonificación combo + bonificación back-to-back
+   * 9. Sumar puntos una sola vez
+   * 10. Emitir linesCleared si corresponde
+   * 11. Intentar spawn
+   * 12. Limpiar candidatura de rotación para la nueva pieza
    */
   function lockAndProcess(): void {
+    if (!activePiece) return;
+
+    // 1. Evaluar T-Spin antes de escribir la pieza y antes de eliminar líneas
+    const tSpinDetected = isTSpin(board, activePiece, lastActionWasRotation);
+
+    // 2. Escribir la pieza en el tablero
     lockActivePiece();
 
-    // Eliminación de líneas
+    // 4. Detectar y eliminar líneas
     const lineIndices = clearLines();
-    if (lineIndices.length > 0) {
-      // Puntos base por líneas
-      const linesCount = lineIndices.length as 1 | 2 | 3 | 4;
-      const basePoints = LINE_CLEAR_POINTS[linesCount];
-      // Combo: incrementar y calcular bonificación
-      combo += 1;
-      const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
-      score += basePoints + comboBonus;
+    const linesCount = lineIndices.length as 0 | 1 | 2 | 3 | 4;
 
+    // Variables de clasificación
+    const hasLines = lineIndices.length > 0;
+    let isDifficult = false;
+
+    // 5. Clasificar la jugada
+    if (tSpinDetected) {
+      // linesCount está acotado a 0..3 por geometría (§4.7), pero usamos
+      // Math.min por seguridad para que el cast a 0|1|2|3 sea correcto
+      const tSpinLines = Math.min(linesCount, 3) as 0 | 1 | 2 | 3;
+      const basePoints = T_SPIN_POINTS[tSpinLines];
+
+      // 6. Actualizar combo: T-Spin con líneas incrementa, sin líneas rompe
+      if (hasLines) {
+        combo += 1;
+        isDifficult = true;
+      } else {
+        combo = 0;
+        // T-Spin sin líneas no es difícil, no rompe back-to-back
+      }
+
+      // 7. Actualizar back-to-back
+      if (isDifficult) {
+        backToBack += 1;
+      }
+      // T-Spin sin líneas: backToBack sin cambio
+
+      // 8. Calcular puntuación
+      const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
+      const backToBackBonus = isDifficult && backToBack >= 2
+        ? Math.floor(basePoints * BACK_TO_BACK_BONUS_RATIO)
+        : 0;
+
+      // 9. Sumar puntos una sola vez
+      score += basePoints + comboBonus + backToBackBonus;
+    } else {
+      // Jugada ordinaria
+      if (hasLines) {
+        const ordLines = linesCount as 1 | 2 | 3 | 4;
+        const basePoints = LINE_CLEAR_POINTS[ordLines];
+
+        // 6. Combo
+        combo += 1;
+
+        // 7. Back-to-back: solo Quad es difícil; Single/Double/Triple ordinarios rompen
+        if (ordLines === 4) {
+          isDifficult = true;
+          backToBack += 1;
+        } else {
+          backToBack = 0;
+        }
+
+        // 8. Calcular puntuación
+        const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
+        const backToBackBonus = isDifficult && backToBack >= 2
+          ? Math.floor(basePoints * BACK_TO_BACK_BONUS_RATIO)
+          : 0;
+
+        // 9. Sumar puntos una sola vez
+        score += basePoints + comboBonus + backToBackBonus;
+      } else {
+        // Fijación ordinaria sin líneas: rompe combo, conserva back-to-back
+        combo = 0;
+        // backToBack sin cambio
+      }
+    }
+
+    // 10. Emitir linesCleared si corresponde
+    if (hasLines) {
       eventQueue.push({
         type: 'linesCleared',
         step: currentStep,
         lines: lineIndices.length,
         lineIndices: Object.freeze([...lineIndices]),
       });
-    } else {
-      // Ruptura silenciosa del combo
-      combo = 0;
     }
 
-    // Spawn de la siguiente pieza
+    // 11. Spawn de la siguiente pieza
     spawnNextPiece();
+    // 12. La candidatura de rotación se limpia en spawnNextPiece (resetPieceState)
   }
 
   function clearLines(): number[] {
@@ -689,9 +871,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     activePiece = { type: candidate, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
-    lockDelayElapsedMs = 0;
-    lockResetsUsed = 0;
-    holdUsed = false;
+    resetPieceState();
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: candidate });
   }
 
@@ -720,16 +900,15 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     activePiece = { type: incoming, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
-    lockDelayElapsedMs = 0;
-    lockResetsUsed = 0;
-    holdUsed = true;
+    resetPieceState();
+    holdUsed = true; // La pieza entrante de hold no puede volver a reservar
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: incoming });
   }
 
   /**
    * Intenta mover la pieza activa una celda en la dirección `dir` (-1 = izquierda, +1 = derecha).
    * Si el movimiento es válido, lo aplica, emite `pieceMoved` con motivo `'horizontal'`,
-   * y evalúa el reinicio de lock delay.
+   * invalida la candidatura de rotación, y evalúa el reinicio de lock delay.
    * Devuelve `true` si el movimiento tuvo éxito, `false` si fue bloqueado.
    */
   function tryMoveHorizontal(dir: -1 | 1): boolean {
@@ -743,6 +922,9 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     if (!isCollision(board, cells)) {
       activePiece.x = newX;
       eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'horizontal' });
+
+      // Movimiento horizontal válido: invalida la candidatura de rotación
+      lastActionWasRotation = false;
 
       // Evaluar reinicio de lock delay tras el movimiento
       if (groundedBefore) {
@@ -885,6 +1067,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
    * Procesa el descenso vertical (gravedad o soft drop). Paso 9 del orden lógico.
    * Un intento de descenso bloqueado ya no fija la pieza: consume la unidad de
    * progreso y continúa, para que el lock delay posterior decida la fijación.
+   *
+   * Un descenso real invalida la candidatura de rotación.
    */
   function processVertical(input: StepInput): void {
     if (!activePiece) return;
@@ -912,9 +1096,12 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         if (reason === 'softDrop') {
           score += SOFT_DROP_POINTS_PER_CELL;
         }
+        // Descenso real: invalida la candidatura de rotación
+        lastActionWasRotation = false;
       }
       // Colisión: no fijar, no emitir evento. La unidad de progreso ya se consumió.
       // El lock delay determinará la fijación al final del paso.
+      // La candidatura de rotación se conserva (no hubo movimiento real)
     }
   }
 
@@ -961,6 +1148,9 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         if (rotated) {
           eventQueue.push({ type: 'pieceRotated', step: currentStep, orientation: activePiece.orientation });
 
+          // Rotación válida: establecer la candidatura de rotación
+          lastActionWasRotation = true;
+
           // Evaluar reinicio de lock delay tras la rotación
           if (groundedBefore) {
             const groundedAfter = isGrounded(board, activePiece);
@@ -982,7 +1172,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
           }
           // Si !groundedBefore, no hay interacción con lock delay
         }
-        // Rotación inválida: no muta nada, no interactúa con lock delay
+        // Rotación inválida: no muta nada, no interactúa con lock delay,
+        // no establece lastActionWasRotation a true ni destruye una candidatura válida previa
       }
     }
     if (!continueIfActive()) return;
@@ -994,9 +1185,12 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         activePiece.y += distance;
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'hardDrop' });
         score += distance * HARD_DROP_POINTS_PER_CELL;
+        // Hard drop con distancia positiva: invalida la candidatura de rotación
+        lastActionWasRotation = false;
       }
+      // Hard drop con distancia 0: conserva el valor de lastActionWasRotation
       // Unificar con lockAndProcess() para que la puntuación
-      // por líneas/combo tenga una única implementación
+      // por líneas/combo/t-spin/back-to-back tenga una única implementación
       lockAndProcess();
       return; // Hard drop completa el procesamiento del paso
     }
@@ -1024,7 +1218,9 @@ export function createGameEngine(options: EngineOptions): GameEngine {
     }
   }
 
-  spawnInitialPieces();
+  if (!initialState) {
+    spawnInitialPieces();
+  }
 
   return {
     step(input: StepInput): void {
@@ -1083,6 +1279,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         heldPiece,
         score,
         combo,
+        backToBack,
       });
     },
 
@@ -1113,6 +1310,8 @@ export function createGameEngine(options: EngineOptions): GameEngine {
       holdUsed = false;
       score = 0;
       combo = 0;
+      lastActionWasRotation = false;
+      backToBack = 0;
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 
@@ -1134,9 +1333,7 @@ export function createGameEngine(options: EngineOptions): GameEngine {
         nextPiecesQueue = [secondType, thirdType, fourthType];
         resetHorizontalState(horizontalState);
         verticalProgress = 0;
-        lockDelayElapsedMs = 0;
-        lockResetsUsed = 0;
-        holdUsed = false;
+        resetPieceState();
       }
 
       eventQueue.push({ type: 'engineReset', step: 0 });

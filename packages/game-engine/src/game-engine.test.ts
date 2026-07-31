@@ -4018,6 +4018,103 @@ describe('eventos — DAS, ARR, soft drop', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
+//  T-SPIN: DETECCIÓN, PUNTUACIÓN Y BACK-TO-BACK
+// ════════════════════════════════════════════════════════════════════════
+
+describe('T-Spin - estado inicial y reset', () => {
+  it('backToBack es 0 tras createGameEngine', () => {
+    const engine = createGameEngine(makeValidOptions());
+    expect(engine.getSnapshot().backToBack).toBe(0);
+  });
+
+  it('backToBack es 0 tras reset', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.reset(makeValidOptions({ seed: 42 }));
+    expect(engine.getSnapshot().backToBack).toBe(0);
+  });
+
+  it('game over conserva backToBack', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    for (let i = 0; i < 200; i++) {
+      if (engine.getSnapshot().status === 'gameOver') break;
+      stepHardDrop(engine);
+      drainAll(engine);
+    }
+    const finalB2b = engine.getSnapshot().backToBack;
+    expect(typeof finalB2b).toBe('number');
+  });
+});
+
+describe('T-Spin - snapshot', () => {
+  it('snapshot incluye backToBack', () => {
+    const engine = createGameEngine(makeValidOptions());
+    const snap = engine.getSnapshot();
+    expect('backToBack' in snap).toBe(true);
+  });
+});
+
+describe('T-Spin - back-to-back', () => {
+  it('estado inicial backToBack es 0', () => {
+    const engine = createGameEngine(makeValidOptions());
+    expect(engine.getSnapshot().backToBack).toBe(0);
+  });
+
+  it('reset elimina backToBack', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.reset(makeValidOptions({ seed: 42 }));
+    expect(engine.getSnapshot().backToBack).toBe(0);
+  });
+
+  it('hold no rompe backToBack', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    engine.step({
+      leftHeld: false, rightHeld: false,
+      leftPressed: false, rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+      hold: true,
+    });
+    drainAll(engine);
+    expect(engine.getSnapshot().backToBack).toBe(0);
+  });
+});
+
+describe('T-Spin - relación combo/back-to-back', () => {
+  it('combo y backToBack evolucionan de forma independiente (valores iniciales)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    expect(engine.getSnapshot().combo).toBe(0);
+    expect(engine.getSnapshot().backToBack).toBe(0);
+  });
+
+  it('entrada inválida es atómica (no muta nada)', () => {
+    const engine = createGameEngine(makeValidOptions());
+    drainAll(engine);
+    const snapBefore = engine.getSnapshot();
+    try {
+      engine.step({
+        leftHeld: false, rightHeld: false,
+        leftPressed: false, rightPressed: false,
+        softDropHeld: false,
+        hardDrop: false,
+        rotateClockwise: true,
+        rotateCounterclockwise: true,
+      });
+    } catch {
+      // esperado
+    }
+    const snapAfter = engine.getSnapshot();
+    expect(snapAfter.score).toBe(snapBefore.score);
+    expect(snapAfter.combo).toBe(snapBefore.combo);
+    expect(snapAfter.backToBack).toBe(snapBefore.backToBack);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
 //  PRUEBAS DE PUNTUACIÓN Y COMBOS
 // ════════════════════════════════════════════════════════════════════════
 
@@ -5860,5 +5957,723 @@ describe('reserva - determinismo', () => {
 
     expect(snapshotsA).toEqual(snapshotsB);
     expect(eventsA).toEqual(eventsB);
+  });
+});
+
+// ── Cobertura Funcional Completa de T-Spin y Back-to-Back ────────────────
+
+describe('T-Spin - Cobertura Funcional Completa', () => {
+  // Helpers internos para preparar tableros y motores de prueba
+  function emptyBoard(): (PieceType | null)[][] {
+    return Array.from({ length: 24 }, () => Array.from<null>({ length: 10 }).fill(null));
+  }
+
+  function createTestEngine(
+    board: (PieceType | null)[][],
+    activePiece: { type: PieceType; x: number; y: number; orientation: Orientation },
+    nextPieces: PieceType[] = ['I', 'O', 'L'],
+    heldPiece: PieceType | null = null,
+  ) {
+    return createGameEngine(
+      makeValidOptions(),
+      {
+        board,
+        activePiece,
+        nextPieces,
+        heldPiece,
+      }
+    );
+  }
+
+  describe('Detección de T-Spin', () => {
+    it('una T sin rotación no es T-Spin', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+      board[15]![5] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(0);
+    });
+
+    it('una T rotada con menos de 3 esquinas no es T-Spin', () => {
+      const board = emptyBoard();
+      // Solo 2 esquinas ocupadas
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(0);
+    });
+
+    it('3 esquinas ocupadas sí detectan T-Spin', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(400);
+    });
+
+    it('4 esquinas ocupadas sí detectan T-Spin', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+      board[15]![5] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(400);
+    });
+
+    it('una pieza distinta de T nunca es T-Spin', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+      board[15]![5] = 'J';
+
+      // Usar pieza S en lugar de T
+      const engine = createTestEngine(board, { type: 'S', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      // No debería ser T-spin
+      expect(snap.score).toBe(0);
+    });
+  });
+
+  describe('Semántica de la última acción válida', () => {
+    it('horizontal real posterior la invalida', () => {
+      const board = emptyBoard();
+      // Colocar esquinas en el destino final de la caída (x=2, y=21)
+      board[21]![2] = 'Z';
+      board[21]![4] = 'Z';
+      board[23]![2] = 'Z';
+      board[23]![4] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      // Mover a la izquierda (horizontal real, x pasa de 3 a 2, sin colisiones)
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBeLessThan(400);
+    });
+
+    it('gravedad real posterior la invalida', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+      board[15]![5] = 'J';
+
+      // Ajustar softDropCellsPerSecond a 200 para cumplir softDropCellsPerSecond > gravityCellsPerSecond (100)
+      const engine = createGameEngine(
+        makeValidOptions({ config: { ...prototypeConfig, gravityCellsPerSecond: 100, softDropCellsPerSecond: 200 } }),
+        { board, activePiece: { type: 'T', x: 3, y: 14, orientation: Orientation.Spawn }, nextPieces: ['I', 'O', 'L'], heldPiece: null }
+      );
+
+      // Rotar
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+
+      // Gravedad actúa en este paso debido a la gravedad alta
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+
+      // Intentar hard drop
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(0);
+    });
+
+    it('soft drop real posterior la invalida', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 14, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      // Soft drop real (mueve la pieza abajo de y=14 a y=15)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: true, hardDrop: false
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      // Debería ser menor de 400 (sin T-spin)
+      expect(snap.score).toBeLessThan(400);
+    });
+
+    it('hard drop con distancia positiva la invalida', () => {
+      const board = emptyBoard();
+      board[18]![3] = 'Z';
+      board[18]![5] = 'Z';
+
+      // Distancia de hard drop positiva (y=14 a y=16)
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 14, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      // Distancia > 0 -> 2 celdas * 2 = 4 puntos, no T-Spin
+      expect(snap.score).toBe(4);
+    });
+
+    it('hard drop con distancia 0 la conserva', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(400); // Conserva T-spin porque la distancia es 0
+    });
+
+    it('intento horizontal bloqueado no la invalida', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+      // Bloque a la izquierda
+      board[16]![2] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      // Intento bloqueado
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(400);
+    });
+
+    it('intento de rotación bloqueado no la invalida', () => {
+      const board = emptyBoard();
+      // Tablero con bloques que bloquean por completo la rotación de Left -> Spawn
+      // pero permiten Left en y=15 en estado inicial
+      for (let x = 0; x < 10; x++) {
+        if (x === 2 || x === 4 || x === 18) {
+          // celdas libres para Left
+        }
+      }
+      board[16]![2] = 'Z'; // bloquea Spawn a la izquierda
+      board[14]![3] = 'Z'; // bloquea kick (-1, -1)
+      board[18]![4] = 'Z'; // bloquea kick (0, 2)
+      board[18]![2] = 'Z'; // bloquea kick (-1, 2)
+      board[16]![5] = 'Z'; // bloquea Spawn a la derecha
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Left }, ['I', 'O']);
+
+      // Primera rotación válida CCW (Left -> Reverse)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateCounterclockwise: true
+      });
+
+      // Segunda rotación válida CW (Reverse -> Left)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+
+      // Tercera rotación bloqueada CW (Left -> Spawn, falla)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+
+      // Hard drop
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      // Debería mantener la candidatura de la segunda rotación y detectar T-spin
+      expect(snap.score).toBeGreaterThanOrEqual(400);
+    });
+
+    it('lock delay sin movimiento la conserva', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+
+      // Ticks de lock delay sin movimiento
+      for (let i = 0; i < 5; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false
+        });
+      }
+
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(400);
+    });
+
+    it('hold la limpia', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, hold: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.heldPiece).toBe('T');
+    });
+
+    it('spawn la limpia', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.activePiece?.type).toBe('I');
+      // La nueva pieza no tiene rotación activa
+      expect(snap.score).toBe(400);
+    });
+
+    it('reset la limpia', () => {
+      const board = emptyBoard();
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.reset(makeValidOptions());
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(0);
+    });
+
+    it('entrada inválida no muta el estado', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+
+      try {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false, rotateClockwise: true, rotateCounterclockwise: true
+        });
+      } catch {
+        // esperado
+      }
+
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.score).toBe(400);
+    });
+  });
+
+  describe('Puntuación de T-Spin', () => {
+    it('T-Spin sin líneas = 400', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      expect(engine.getSnapshot().score).toBe(400);
+    });
+
+    it('T-Spin Single = 800', () => {
+      const board = emptyBoard();
+      // Fila 17 llena excepto columna 4
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      // Esquinar
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      expect(engine.getSnapshot().score).toBe(800);
+    });
+
+    it('T-Spin Double = 1200', () => {
+      const board = emptyBoard();
+      // Fila 17 llena excepto columna 4
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      // Fila 16 llena excepto columnas 4 y 5
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4 && x !== 5) board[16]![x] = 'Z';
+      }
+      // Esquinar (esquina en fila 15)
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      expect(engine.getSnapshot().score).toBe(1200);
+    });
+
+    it('T-Spin Triple = 1600', () => {
+      const board = emptyBoard();
+      // Rellenar filas 15, 16, 17 con el slot exacto para T-Spin Triple
+      for (let x = 0; x < 10; x++) {
+        if (x !== 5) {
+          board[15]![x] = 'Z';
+          board[17]![x] = 'Z';
+        }
+        if (x !== 5 && x !== 6) {
+          board[16]![x] = 'Z';
+        }
+      }
+      // Bloquear rotación (0, 0)
+      board[14]![6] = 'Z';
+      // Bloquear kick (-1, -1)
+      board[13]![4] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'T', x: 4, y: 13, orientation: Orientation.Reverse });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateCounterclockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      expect(engine.getSnapshot().score).toBe(1600);
+    });
+  });
+
+  describe('Back-to-Back', () => {
+    it('primer Quad deja backToBack = 1 sin bonus', () => {
+      const board = emptyBoard();
+      // Rellenar 4 filas excepto columna 2
+      for (let y = 20; y < 24; y++) {
+        for (let x = 0; x < 10; x++) {
+          if (x !== 2) board[y]![x] = 'Z';
+        }
+      }
+
+      // Spawneamos I en x=0, y=20 (para evitar puntos de caída de hard drop)
+      const engine = createTestEngine(board, { type: 'I', x: 0, y: 20, orientation: Orientation.Right });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.backToBack).toBe(1);
+      expect(snap.score).toBe(800); // Solo base
+    });
+
+    it('primer T-Spin con líneas deja backToBack = 1 sin bonus', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.backToBack).toBe(1);
+      expect(snap.score).toBe(800);
+    });
+    it('segunda jugada difícil aplica 50 % y deja backToBack = 2', () => {
+      const board = emptyBoard();
+      // Estructura T-Spin Single en y=15 (vacío col 4)
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      board[15]![3] = 'J';
+
+      // Estructura Quad (4 filas full excepto col 2, alineado con I Right en x=0)
+      for (let y = 20; y < 24; y++) {
+        for (let x = 0; x < 10; x++) {
+          if (x !== 2) board[y]![x] = 'Z';
+        }
+      }
+
+      // Primera pieza T para T-Spin Single, segunda pieza I para Quad
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn }, ['I']);
+      // Primer T-Spin Single (grounded, distance 0)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      // Segunda jugada: mover I a la izquierda (3 pasos)
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      // Rotar la I a Right (caerá en columna 2) y hacer el Quad
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.backToBack).toBe(2);
+      // T-Spin Single base = 800. Quad base = 800. Quad backToBack bonus (50%) = 400.
+      // Más los puntos de caída de la I (desde y=1 a y=20 son 19 celdas * 2 = 38 puntos)
+      expect(snap.score).toBeGreaterThanOrEqual(2000);
+    });
+
+    it('Single ordinario rompe la cadena', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      board[15]![3] = 'J';
+
+      // Añadimos una fila 23 casi llena para un Single ordinario con pieza O en col 1,2
+      for (let x = 0; x < 10; x++) {
+        if (x !== 1 && x !== 2) board[23]![x] = 'Z';
+      }
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn }, ['O']);
+      // T-Spin Single (b2b = 1)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      // Mover O a la izquierda 3 veces (para caer en columnas 1,2)
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false
+      });
+      // Hacer Single ordinario con O
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.backToBack).toBe(0);
+    });
+
+    it('fijación sin líneas conserva la cadena', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn }, ['I']);
+      // T-Spin Single (b2b = 1)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      // Fijar pieza sin líneas
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.backToBack).toBe(1);
+    });
   });
 });

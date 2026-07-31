@@ -8,6 +8,10 @@
       <span class="score-panel__label">Combo</span>
       <span class="score-panel__value" data-testid="combo-value">{{ combo >= 1 ? combo : '\u2014' }}</span>
     </div>
+    <div class="score-panel__row">
+      <span class="score-panel__label">Back-to-Back</span>
+      <span class="score-panel__value" data-testid="backToBack-value">{{ backToBack > 0 ? backToBack : '\u2014' }}</span>
+    </div>
   </div>
 </template>
 
@@ -15,6 +19,7 @@
 defineProps<{
   score: number;
   combo: number;
+  backToBack: number;
 }>();
 </script>
 

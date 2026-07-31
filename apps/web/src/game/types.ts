@@ -12,6 +12,7 @@ export type GamePresentationState = Readonly<{
   heldPiece: PieceType | null;
   score: number;
   combo: number;
+  backToBack: number;
 }>;
 
 /**
