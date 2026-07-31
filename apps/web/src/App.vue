@@ -8,7 +8,7 @@ import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [] });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -154,6 +154,7 @@ function doTogglePause(): void {
                 :combat-energy="gameState.combatEnergy"
                 :stored-sabotages="gameState.storedSabotages"
                 :pending-garbage="gameState.pendingGarbage"
+                :active-effects="gameState.activeEffects"
               />
             </div>
           </div>

@@ -4,7 +4,14 @@ import { type GameConfig, parseGameConfig } from '@rautfall/game-config';
 
 export type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
-export type SabotageType = 'residuos';
+export type SabotageType = 'residuos' | 'sobrecarga';
+
+export type ActiveEffectType = 'sobrecarga';
+
+export type ActiveEffectSnapshot = Readonly<{
+  type: ActiveEffectType;
+  remainingMs: number;
+}>;
 
 export type EngineStatus = 'running' | 'gameOver';
 
@@ -41,7 +48,9 @@ export type GameEvent =
   | { type: 'pieceRotated'; step: number; orientation: Orientation }
   | { type: 'pieceHeld'; step: number; piece: PieceType }
   | { type: 'sabotageTriggered'; step: number; sabotage: SabotageType }
-  | { type: 'garbageApplied'; step: number; linesCount: number };
+  | { type: 'garbageApplied'; step: number; linesCount: number }
+  | { type: 'effectStarted'; step: number; effect: ActiveEffectType; durationMs: number }
+  | { type: 'effectExpired'; step: number; effect: ActiveEffectType };
 
 /**
  * Estado inmutable de la pieza activa en un instante dado.
@@ -97,6 +106,7 @@ export type EngineSnapshot = Readonly<{
   combatEnergy: number;
   storedSabotages: readonly SabotageType[];
   pendingGarbage: number;
+  activeEffects: readonly ActiveEffectSnapshot[];
 }>;
 
 /**
@@ -257,6 +267,12 @@ const COMBO_ENERGY_BONUS_PER_STEP = 3;
 const COMBO_ENERGY_BONUS_CAP = 5;
 const BACK_TO_BACK_ENERGY_BONUS_RATIO = 0.25;
 
+// ── Constantes de Sobrecarga y Sabotajes ─────────────────────────────────
+
+const OVERLOAD_GRAVITY_MULTIPLIER = 3;
+const OVERLOAD_DURATION_MS = 10000;
+const ALL_SABOTAGES: readonly SabotageType[] = Object.freeze(['residuos', 'sobrecarga']);
+
 // ── Definición de piezas ────────────────────────────────────────────────
 
 type Cell = { x: number; y: number };
@@ -386,6 +402,36 @@ function nextFromBag(state: { bag: PieceType[]; index: number }, prng: () => num
   const piece = state.bag[state.index]!;
   state.index++;
   return piece;
+}
+
+// ── Bolsa determinista de sabotajes (2-bag) ─────────────────────────────
+
+function shuffleSabotageBag(prng: () => number): SabotageType[] {
+  const bag = [...ALL_SABOTAGES];
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(prng() * (i + 1));
+    const tmp = bag[i]!;
+    bag[i] = bag[j]!;
+    bag[j] = tmp;
+  }
+  return bag;
+}
+
+function createSabotageBag(prng: () => number): { bag: SabotageType[]; index: number } {
+  return { bag: shuffleSabotageBag(prng), index: 0 };
+}
+
+function nextFromSabotageBag(
+  state: { bag: SabotageType[]; index: number },
+  prng: () => number,
+): SabotageType {
+  if (state.index >= state.bag.length) {
+    state.bag = shuffleSabotageBag(prng);
+    state.index = 0;
+  }
+  const sabotage = state.bag[state.index]!;
+  state.index++;
+  return sabotage;
 }
 
 // ── Funciones auxiliares del tablero ────────────────────────────────────
@@ -652,8 +698,10 @@ export type TSpinDemoInitialState = {
   activePiece: ActivePiece;
   nextPieces: PieceType[];
   heldPiece: PieceType | null;
+  combatEnergy?: number;
   storedSabotages?: readonly SabotageType[];
   pendingGarbage?: number;
+  activeEffects?: readonly ActiveEffectSnapshot[];
 };
 
 export function createGameEngine(
@@ -673,6 +721,7 @@ export function createGameEngine(
   let board = initialState ? cloneBoard(initialState.board) : createEmptyBoard();
   let prng = createPrng(currentSeed);
   let bagState = createBag(prng);
+  let sabotageBagState = createSabotageBag(prng);
   let activePiece: ActivePiece | null = initialState
     ? { ...initialState.activePiece }
     : null;
@@ -690,11 +739,15 @@ export function createGameEngine(
   let combo = 0;
   let lastActionWasRotation = false;
   let backToBack = 0;
-  let combatEnergy = 0;
+  let combatEnergy = initialState?.combatEnergy ?? 0;
   let storedSabotages: SabotageType[] = initialState?.storedSabotages
     ? [...initialState.storedSabotages]
     : [];
   let pendingGarbage = initialState?.pendingGarbage ?? 0;
+  type ActiveEffectState = { type: ActiveEffectType; remainingMs: number };
+  let activeEffects: ActiveEffectState[] = initialState?.activeEffects
+    ? initialState.activeEffects.map((e) => ({ ...e }))
+    : [];
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
@@ -802,7 +855,7 @@ export function createGameEngine(
 
       const totalEnergy = combatEnergy + generatedEnergy;
       if (storedSabotages.length < 2 && totalEnergy >= 100) {
-        storedSabotages.push('residuos');
+        storedSabotages.push(nextFromSabotageBag(sabotageBagState, prng));
         combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy - 100);
       } else {
         combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy);
@@ -839,7 +892,7 @@ export function createGameEngine(
 
         const totalEnergy = combatEnergy + generatedEnergy;
         if (storedSabotages.length < 2 && totalEnergy >= 100) {
-          storedSabotages.push('residuos');
+          storedSabotages.push(nextFromSabotageBag(sabotageBagState, prng));
           combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy - 100);
         } else {
           combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy);
@@ -1085,9 +1138,14 @@ export function createGameEngine(
   function processVertical(input: StepInput): void {
     if (!activePiece) return;
 
+    const hasSobrecarga = activeEffects.some((e) => e.type === 'sobrecarga');
+    const activeGravity = hasSobrecarga
+      ? config.gravityCellsPerSecond * OVERLOAD_GRAVITY_MULTIPLIER
+      : config.gravityCellsPerSecond;
+
     const activeCellsPerSecond = input.softDropHeld
       ? config.softDropCellsPerSecond
-      : config.gravityCellsPerSecond;
+      : activeGravity;
 
     verticalProgress += config.fixedStepMs * activeCellsPerSecond;
 
@@ -1219,6 +1277,22 @@ export function createGameEngine(
         eventQueue.push({ type: 'sabotageTriggered', step: currentStep, sabotage });
       }
 
+      // Actualizar temporizador de efectos activos (activeEffects)
+      const nextActiveEffects: ActiveEffectState[] = [];
+      for (const effect of activeEffects) {
+        effect.remainingMs = Math.max(0, effect.remainingMs - config.fixedStepMs);
+        if (effect.remainingMs === 0) {
+          eventQueue.push({
+            type: 'effectExpired',
+            step: currentStep,
+            effect: effect.type,
+          });
+        } else {
+          nextActiveEffects.push(effect);
+        }
+      }
+      activeEffects = nextActiveEffects;
+
       processStep(input);
     },
 
@@ -1261,6 +1335,11 @@ export function createGameEngine(
         combatEnergy,
         storedSabotages: Object.freeze([...storedSabotages]),
         pendingGarbage,
+        activeEffects: Object.freeze(
+          activeEffects.map((e) =>
+            Object.freeze({ type: e.type, remainingMs: e.remainingMs }),
+          ),
+        ),
       });
     },
 
@@ -1273,6 +1352,28 @@ export function createGameEngine(
     receiveSabotage(sabotage: SabotageType): void {
       if (sabotage === 'residuos') {
         pendingGarbage += 2;
+      } else if (sabotage === 'sobrecarga') {
+        const existing = activeEffects.find((e) => e.type === 'sobrecarga');
+        if (existing) {
+          existing.remainingMs = OVERLOAD_DURATION_MS;
+          eventQueue.push({
+            type: 'effectStarted',
+            step: currentStep,
+            effect: 'sobrecarga',
+            durationMs: OVERLOAD_DURATION_MS,
+          });
+        } else {
+          activeEffects.push({
+            type: 'sobrecarga',
+            remainingMs: OVERLOAD_DURATION_MS,
+          });
+          eventQueue.push({
+            type: 'effectStarted',
+            step: currentStep,
+            effect: 'sobrecarga',
+            durationMs: OVERLOAD_DURATION_MS,
+          });
+        }
       }
     },
 
@@ -1286,7 +1387,6 @@ export function createGameEngine(
       status = 'running';
       board = createEmptyBoard();
       prng = createPrng(currentSeed);
-      bagState = createBag(prng);
       activePiece = null;
       nextPiecesQueue = [];
       verticalProgress = 0;
@@ -1302,6 +1402,9 @@ export function createGameEngine(
       combatEnergy = 0;
       storedSabotages = [];
       pendingGarbage = 0;
+      activeEffects = [];
+      bagState = createBag(prng);
+      sabotageBagState = createSabotageBag(prng);
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 

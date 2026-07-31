@@ -8,6 +8,7 @@ import {
   type EngineOptions,
   type PieceType,
   type StepInput,
+  type TSpinDemoInitialState,
 } from './index';
 
 function makeValidOptions(
@@ -5960,30 +5961,43 @@ describe('reserva - determinismo', () => {
   });
 });
 
+// ── Helpers de prueba para T-Spin, Energía y Combat ─────────────────────
+
+function emptyBoard(): (PieceType | 'garbage' | null)[][] {
+  return Array.from({ length: 24 }, () => Array.from<null>({ length: 10 }).fill(null));
+}
+
+function createTestEngine(
+  board: (PieceType | 'garbage' | null)[][],
+  activePiece: { type: PieceType; x: number; y: number; orientation: Orientation },
+  nextPieces: PieceType[] = ['I', 'O', 'L'],
+  heldPiece: PieceType | null = null,
+  initialSnap?: ReturnType<ReturnType<typeof createGameEngine>['getSnapshot']>,
+) {
+  const initialState: TSpinDemoInitialState = {
+    board,
+    activePiece,
+    nextPieces,
+    heldPiece,
+  };
+  if (initialSnap?.combatEnergy !== undefined) {
+    initialState.combatEnergy = initialSnap.combatEnergy;
+  }
+  if (initialSnap?.storedSabotages) {
+    initialState.storedSabotages = initialSnap.storedSabotages;
+  }
+  if (initialSnap?.pendingGarbage !== undefined) {
+    initialState.pendingGarbage = initialSnap.pendingGarbage;
+  }
+  if (initialSnap?.activeEffects) {
+    initialState.activeEffects = initialSnap.activeEffects;
+  }
+  return createGameEngine(makeValidOptions(), initialState);
+}
+
 // ── Cobertura Funcional Completa de T-Spin y Back-to-Back ────────────────
 
 describe('T-Spin - Cobertura Funcional Completa', () => {
-  // Helpers internos para preparar tableros y motores de prueba
-  function emptyBoard(): (PieceType | null)[][] {
-    return Array.from({ length: 24 }, () => Array.from<null>({ length: 10 }).fill(null));
-  }
-
-  function createTestEngine(
-    board: (PieceType | null)[][],
-    activePiece: { type: PieceType; x: number; y: number; orientation: Orientation },
-    nextPieces: PieceType[] = ['I', 'O', 'L'],
-    heldPiece: PieceType | null = null,
-  ) {
-    return createGameEngine(
-      makeValidOptions(),
-      {
-        board,
-        activePiece,
-        nextPieces,
-        heldPiece,
-      }
-    );
-  }
 
   describe('Detección de T-Spin', () => {
     it('una T sin rotación no es T-Spin', () => {
@@ -6871,7 +6885,8 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       // Segundo Quad: base = 70, b2b = 2 -> bonus = floor(70 * 0.25) = 17 -> combo 1 bonus = 3 -> total = 70 + 90 = 160 -> conversión a 1 sabotaje residuos y quedan 60 de energía
       stepHardDrop(engine);
       expect(engine.getSnapshot().backToBack).toBe(2);
-      expect(engine.getSnapshot().storedSabotages).toEqual(['residuos']);
+      expect(engine.getSnapshot().storedSabotages).toHaveLength(1);
+      expect(['residuos', 'sobrecarga']).toContain(engine.getSnapshot().storedSabotages[0]);
       expect(engine.getSnapshot().combatEnergy).toBe(60);
     });
 
@@ -6983,7 +6998,8 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       // Double 4 (+25 + 9 combo 3) -> total 118 -> consumidos 100 -> cartucho = ['residuos'], combatEnergy = 18
       stepHardDrop(engine);
       const snap = engine.getSnapshot();
-      expect(snap.storedSabotages).toEqual(['residuos']);
+      expect(snap.storedSabotages).toHaveLength(1);
+      expect(['residuos', 'sobrecarga']).toContain(snap.storedSabotages[0]);
       expect(snap.combatEnergy).toBe(18);
     });
 
@@ -7055,6 +7071,208 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       expect(snap.combatEnergy).toBe(0);
       expect(snap.storedSabotages).toEqual([]);
       expect(snap.pendingGarbage).toBe(0);
+      expect(snap.activeEffects).toEqual([]);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  TAREA 0017 — BOLSA DE SABOTAJES Y SOBRECARGA
+  // ════════════════════════════════════════════════════════════════════════
+
+  describe('Tarea 0017 — Bolsa de sabotajes y Sobrecarga', () => {
+    it('la bolsa 2-bag genera ambos sabotajes (residuos y sobrecarga) deterministamente por cada ciclo', () => {
+      // Tablero con las filas 20..23 llenas en cols 1..9 (Quad inicial para pieza I vertical en col 0)
+      // y filas 12..19 preparadas con cols 0..2 y 7..9 llenas para que piezas I horizontales en col 3 hagan Single clears
+      const board = emptyBoard();
+      for (let y = 20; y < 24; y++) {
+        for (let x = 1; x < 10; x++) {
+          board[y]![x] = 'J';
+        }
+      }
+      for (let y = 12; y < 20; y++) {
+        for (let x = 0; x < 10; x++) {
+          if (x < 3 || x > 6) board[y]![x] = 'J';
+        }
+      }
+
+      // Motor con combatEnergy = 60
+      const engine = createGameEngine(
+        makeValidOptions({ seed: 42 }),
+        {
+          board,
+          activePiece: { type: 'I', x: -2, y: 20, orientation: Orientation.Right },
+          nextPieces: ['I', 'I', 'I', 'I', 'I', 'I', 'I'],
+          heldPiece: null,
+          combatEnergy: 60,
+        },
+      );
+      drainAll(engine);
+
+      // 1er clear (Quad): 60 + 70 = 130 -> 1ª conversión de 100 energía -> 1er sabotaje en cartucho, combatEnergy = 30
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().storedSabotages).toHaveLength(1);
+
+      // Hacer Single clears adicionales hasta acumular otros 100 de energía (2ª conversión)
+      for (let i = 0; i < 6; i++) {
+        if (engine.getSnapshot().storedSabotages.length >= 2) break;
+        stepHardDrop(engine);
+      }
+
+      const sabotages = engine.getSnapshot().storedSabotages;
+      expect(sabotages).toHaveLength(2);
+      expect(sabotages).toContain('residuos');
+      expect(sabotages).toContain('sobrecarga');
+    });
+
+    it('recepción y activación inmediata de Sobrecarga añade el efecto a activeEffects y emite effectStarted', () => {
+      const engine = createGameEngine(makeValidOptions());
+      drainAll(engine);
+
+      engine.receiveSabotage('sobrecarga');
+
+      const snap = engine.getSnapshot();
+      expect(snap.activeEffects).toHaveLength(1);
+      expect(snap.activeEffects[0]).toEqual({ type: 'sobrecarga', remainingMs: 10000 });
+
+      const events = engine.drainEvents();
+      const startedEvent = events.find((e) => e.type === 'effectStarted');
+      expect(startedEvent).toBeDefined();
+      if (startedEvent && startedEvent.type === 'effectStarted') {
+        expect(startedEvent.effect).toBe('sobrecarga');
+        expect(startedEvent.durationMs).toBe(10000);
+      }
+    });
+
+    it('el temporizador descuenta fixedStepMs por cada paso en running y no baja de 0', () => {
+      const engine = createGameEngine(makeValidOptions());
+      drainAll(engine);
+
+      engine.receiveSabotage('sobrecarga');
+      drainAll(engine);
+
+      stepStationary(engine);
+      expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9990);
+
+      for (let i = 0; i < 99; i++) {
+        stepStationary(engine);
+      }
+      expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9000);
+    });
+
+    it('expiración única de Sobrecarga tras 10.000 ms emite effectExpired y limpia activeEffects', () => {
+      const engine = createGameEngine(makeValidOptions());
+      drainAll(engine);
+
+      engine.receiveSabotage('sobrecarga');
+      drainAll(engine);
+
+      // Avanzar 1000 pasos de 10 ms (10.000 ms)
+      for (let i = 0; i < 1000; i++) {
+        stepStationary(engine);
+      }
+
+      const snap = engine.getSnapshot();
+      expect(snap.activeEffects).toEqual([]);
+
+      const events = engine.drainEvents();
+      const expiredEvents = events.filter((e) => e.type === 'effectExpired');
+      expect(expiredEvents).toHaveLength(1);
+      expect(expiredEvents[0]).toEqual({
+        type: 'effectExpired',
+        step: 1000,
+        effect: 'sobrecarga',
+      });
+    });
+
+    it('renovación de Sobrecarga restablece remainingMs a 10.000 ms, reemite effectStarted y no crea efectos duplicados', () => {
+      const engine = createGameEngine(makeValidOptions());
+      drainAll(engine);
+
+      engine.receiveSabotage('sobrecarga');
+      drainAll(engine);
+
+      // Avanzar 30 pasos (300 ms)
+      for (let i = 0; i < 30; i++) {
+        stepStationary(engine);
+      }
+      expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9700);
+
+      // Recibir Sobrecarga de nuevo
+      engine.receiveSabotage('sobrecarga');
+      const snap = engine.getSnapshot();
+      expect(snap.activeEffects).toHaveLength(1);
+      expect(snap.activeEffects[0]?.remainingMs).toBe(10000);
+
+      const events = engine.drainEvents();
+      const startedEvents = events.filter((e) => e.type === 'effectStarted');
+      expect(startedEvents).toHaveLength(1);
+      expect(startedEvents[0]?.effect).toBe('sobrecarga');
+    });
+
+    it('multiplicación de la gravedad pasiva a 3x durante Sobrecarga', () => {
+      // Con gravityCellsPerSecond = 1 y fixedStepMs = 10:
+      // Sin Sobrecarga: 1 celda cada 100 pasos (1000 ms)
+      const engineNormal = createGameEngine(makeValidOptions({ config: { ...prototypeConfig, gravityCellsPerSecond: 1 } }));
+      drainAll(engineNormal);
+      const startY = engineNormal.getSnapshot().activePiece!.y;
+
+      for (let i = 0; i < 99; i++) {
+        stepStationary(engineNormal);
+      }
+      expect(engineNormal.getSnapshot().activePiece!.y).toBe(startY); // Aún no ha bajado
+
+      stepStationary(engineNormal); // Paso 100
+      expect(engineNormal.getSnapshot().activePiece!.y).toBe(startY + 1); // Bajó 1 celda
+
+      // Con Sobrecarga activa: gravedad es 3 celdas/seg -> 1 celda cada 33.3 ms (34 pasos)
+      const engineOverload = createGameEngine(makeValidOptions({ config: { ...prototypeConfig, gravityCellsPerSecond: 1 } }));
+      drainAll(engineOverload);
+      engineOverload.receiveSabotage('sobrecarga');
+      drainAll(engineOverload);
+
+      const startYOverload = engineOverload.getSnapshot().activePiece!.y;
+      for (let i = 0; i < 34; i++) {
+        stepStationary(engineOverload);
+      }
+      expect(engineOverload.getSnapshot().activePiece!.y).toBe(startYOverload + 1); // Bajó 1 celda a los 34 pasos (340 ms)
+    });
+
+    it('soft drop utiliza exactamente config.softDropCellsPerSecond sin ser alterado por Sobrecarga', () => {
+      // Probar que softDrop con softDropCellsPerSecond = 20 avanza 1 celda cada 5 pasos (50 ms),
+      // tanto con Sobrecarga como sin ella
+      const engineNormal = createGameEngine(makeValidOptions());
+      drainAll(engineNormal);
+      const y0 = engineNormal.getSnapshot().activePiece!.y;
+
+      for (let i = 0; i < 5; i++) {
+        engineNormal.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+      expect(engineNormal.getSnapshot().activePiece!.y).toBe(y0 + 1);
+
+      const engineOverload = createGameEngine(makeValidOptions());
+      drainAll(engineOverload);
+      engineOverload.receiveSabotage('sobrecarga');
+
+      const y0Overload = engineOverload.getSnapshot().activePiece!.y;
+      for (let i = 0; i < 5; i++) {
+        engineOverload.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+      expect(engineOverload.getSnapshot().activePiece!.y).toBe(y0Overload + 1);
+    });
+
+    it('reset limpia activeEffects y resetea la bolsa de sabotajes 2-bag', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('sobrecarga');
+      expect(engine.getSnapshot().activeEffects).toHaveLength(1);
+
+      engine.reset(makeValidOptions());
+      expect(engine.getSnapshot().activeEffects).toEqual([]);
     });
   });
 });

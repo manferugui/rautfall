@@ -127,4 +127,23 @@ describe('CombatStatusPanel.vue', () => {
 
     expect(html2).toBe(html1);
   });
+
+  it('renderiza el bloque de EFECTOS ACTIVOS mostrando NINGUNO cuando no hay efectos', () => {
+    const wrapper = mount(CombatStatusPanel, {
+      props: { activeEffects: [] },
+    });
+    expect(wrapper.find('[data-testid="active-effects"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="active-effects-text"]').text()).toBe('NINGUNO');
+    wrapper.unmount();
+  });
+
+  it('renderiza SOBRECARGA 10s formateando el tiempo en segundos con Math.ceil', () => {
+    const wrapper = mount(CombatStatusPanel, {
+      props: {
+        activeEffects: [{ type: 'sobrecarga', remainingMs: 9500 }],
+      },
+    });
+    expect(wrapper.find('[data-testid="active-effects-text"]').text()).toBe('SOBRECARGA 10s');
+    wrapper.unmount();
+  });
 });

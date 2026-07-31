@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GamePresentationState } from './types';
 
 describe('GamePresentationState', () => {
-  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo, backToBack, combatEnergy, storedSabotages y pendingGarbage', () => {
+  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo, backToBack, combatEnergy, storedSabotages, pendingGarbage y activeEffects', () => {
     const state: GamePresentationState = {
       status: 'running',
       step: 42,
@@ -15,11 +15,12 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
-    // Verificar que solo tiene las 11 propiedades esperadas
+    // Verificar que solo tiene las 12 propiedades esperadas
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(11);
+    expect(keys).toHaveLength(12);
     expect(keys).toContain('status');
     expect(keys).toContain('step');
     expect(keys).toContain('elapsedMs');
@@ -31,6 +32,7 @@ describe('GamePresentationState', () => {
     expect(keys).toContain('combatEnergy');
     expect(keys).toContain('storedSabotages');
     expect(keys).toContain('pendingGarbage');
+    expect(keys).toContain('activeEffects');
   });
 
   it('no contiene el campo singular nextPiece', () => {
@@ -46,6 +48,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect('nextPiece' in state).toBe(false);
@@ -64,6 +67,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     // Verificar que no hay propiedades como board, activePiece, etc.
@@ -89,6 +93,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 50,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(state.status).toBe('gameOver');
@@ -110,11 +115,12 @@ describe('GamePresentationState', () => {
       combatEnergy: 25,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(state.status).toBe('paused');
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(11);
+    expect(keys).toHaveLength(12);
   });
 
   it('nextPieces tiene tres elementos', () => {
@@ -130,6 +136,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(state.nextPieces).toHaveLength(3);
@@ -148,6 +155,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 10,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(state.heldPiece).toBe('L');
@@ -166,6 +174,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(state.heldPiece).toBeNull();
@@ -184,6 +193,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(typeof state.score).toBe('number');
@@ -203,6 +213,7 @@ describe('GamePresentationState', () => {
       combatEnergy: 0,
       storedSabotages: [],
       pendingGarbage: 0,
+      activeEffects: [],
     };
 
     expect(typeof state.backToBack).toBe('number');

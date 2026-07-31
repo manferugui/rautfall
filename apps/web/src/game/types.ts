@@ -1,4 +1,4 @@
-import type { PieceType, SabotageType } from '@rautfall/game-engine';
+import type { ActiveEffectSnapshot, PieceType, SabotageType } from '@rautfall/game-engine';
 import type { SessionStatus } from './session-status';
 
 /**
@@ -16,6 +16,7 @@ export type GamePresentationState = Readonly<{
   combatEnergy: number;
   storedSabotages: readonly SabotageType[];
   pendingGarbage: number;
+  activeEffects: readonly ActiveEffectSnapshot[];
 }>;
 
 /**

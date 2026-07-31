@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
- * Panel de combate (energía real, cartucho real de sabotajes, Residuos encolados).
+ * Panel de combate (energía real, cartucho real de sabotajes, Residuos encolados, efectos activos).
  *
  * Responsabilidades:
  * - Mostrar la energía de combate real con 20 segmentos (5 puntos por segmento).
  * - Mostrar los sabotajes almacenados en el cartucho FIFO (máx 2).
  * - Mostrar la basura pendiente por aplicar (Residuos).
+ * - Mostrar los efectos activos temporales (Sobrecarga) con tiempo restante en segundos.
  * - 4 estados de color estáticos: 0-49 cian, 50-74 cian intenso/azul, 75-99 ámbar, 100 READY.
  */
 
 import { computed } from 'vue';
-import type { SabotageType } from '@rautfall/game-engine';
+import type { ActiveEffectSnapshot, SabotageType } from '@rautfall/game-engine';
 
 const TOTAL_SEGMENTS = 20;
 
@@ -19,11 +20,13 @@ const props = withDefaults(
     combatEnergy?: number;
     storedSabotages?: readonly SabotageType[];
     pendingGarbage?: number;
+    activeEffects?: readonly ActiveEffectSnapshot[];
   }>(),
   {
     combatEnergy: 0,
     storedSabotages: () => [],
     pendingGarbage: 0,
+    activeEffects: () => [],
   },
 );
 
@@ -53,6 +56,15 @@ const cartridgeDisplay = computed(() => {
     return 'VACÍO';
   }
   return props.storedSabotages.join(', ');
+});
+
+const activeEffectsDisplay = computed(() => {
+  if (!props.activeEffects || props.activeEffects.length === 0) {
+    return 'NINGUNO';
+  }
+  return props.activeEffects
+    .map((e) => `${e.type.toUpperCase()} ${Math.ceil(e.remainingMs / 1000)}s`)
+    .join(', ');
 });
 </script>
 
@@ -109,6 +121,18 @@ const cartridgeDisplay = computed(() => {
       </div>
       <div class="residues-indicator">
         <span class="residues-count" data-testid="residues-count">Residuos: {{ props.pendingGarbage }}</span>
+      </div>
+    </div>
+
+    <div class="combat-divider"></div>
+
+    <!-- Efectos activos -->
+    <div class="combat-block" data-testid="active-effects">
+      <div class="block-header">
+        <span class="block-label">EFECTOS ACTIVOS</span>
+      </div>
+      <div class="effects-indicator">
+        <span class="effects-text" data-testid="active-effects-text">{{ activeEffectsDisplay }}</span>
       </div>
     </div>
   </div>
@@ -251,6 +275,18 @@ const cartridgeDisplay = computed(() => {
 .residues-count {
   font-size: 0.8125rem;
   color: var(--rf-color-red, #e74c3c);
+  font-weight: 600;
+}
+
+.effects-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.effects-text {
+  font-size: 0.8125rem;
+  color: var(--rf-color-cyan, #00d4ff);
   font-weight: 600;
 }
 </style>

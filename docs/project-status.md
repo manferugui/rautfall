@@ -416,6 +416,34 @@ Ver [Informe de implementación](implementation/0015-energia-de-combate.md).
 
 Ver [Informe de implementación](implementation/0016-consumo-energia-y-residuos.md).
 
+## Task [0017 — Bolsa de sabotajes y Sobrecarga](tasks/0017-bolsa-sabotajes-y-sobrecarga.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-31 |
+| **Resultado** | 490 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Extensión de `SabotageType` con `'sobrecarga'`.
+- Bolsa determinista de 2 sabotajes (`Sabotage 2-Bag`) (`['residuos', 'sobrecarga']`) mediante PRNG determinista (`prng()`) y algoritmo Fisher–Yates.
+- `ActiveEffectType = 'sobrecarga'` y `ActiveEffectSnapshot` (`{ type: ActiveEffectType, remainingMs: number }`).
+- `EngineSnapshot` y `GamePresentationState` exponen `activeEffects: readonly ActiveEffectSnapshot[]`.
+- `receiveSabotage('sobrecarga')`: activa o renueva la duración a 10.000 ms de tiempo lógico activo y emite el evento de dominio `effectStarted`.
+- La renovación no apila multiplicadores de velocidad ($3\times$ constante) ni crea objetos duplicados en `activeEffects`.
+- Gravedad pasiva acelerada a $3\times$ (`config.gravityCellsPerSecond * 3`) durante Sobrecarga.
+- Soft drop permanece inalterado a `config.softDropCellsPerSecond`. Hard drop, DAS, ARR, SRS y lock delay permanecen inalterados.
+- Descuento temporal determinista de `remainingMs` por `config.fixedStepMs` en `step()`, emitiendo `effectExpired` una sola vez al llegar a 0.
+- `reset()` limpia `activeEffects = []`.
+- `CombatStatusPanel.vue` integra la sección `EFECTOS ACTIVOS` en la consola táctica mostrando `SOBRECARGA Ns` (`Math.ceil(remainingMs / 1000)`).
+- 10 nuevas pruebas deterministas de motor para la Tarea 0017 + pruebas en `types.test.ts` y `CombatStatusPanel.test.ts`.
+- Sin cambios en `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0017-bolsa-sabotajes-y-sobrecarga.md).
+
 ## Siguiente tarea
 
-- **0017 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate o segundo tablero según la hoja de ruta en `docs/rautfall.md`.
+- **0018 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate o segundo tablero según la hoja de ruta en `docs/rautfall.md`.

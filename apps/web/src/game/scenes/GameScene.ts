@@ -23,7 +23,9 @@ import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
 import { computeSessionStatus, canTogglePause } from '../session-status';
 import { isTSpinDemoActive, createTSpinDemoEngine } from '../tspin-demo';
-import { isSabotageDemoActive } from '../sabotage-demo';
+import { isSabotageDemoActive, createSabotageDemoEngine } from '../sabotage-demo';
+import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo';
+import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
   CELL_SIZE,
@@ -367,7 +369,7 @@ export class GameScene extends Phaser.Scene {
     this.renderFrame();
     const frameEvents = this.engine.drainEvents();
     for (const event of frameEvents) {
-      if (event.type === 'sabotageTriggered' && isSabotageDemoActive()) {
+      if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive())) {
         this.engine.receiveSabotage(event.sabotage);
       }
     }
@@ -427,6 +429,15 @@ export class GameScene extends Phaser.Scene {
     if (isTSpinDemoActive()) {
       // Escenario cerrado de desarrollo: tablero preparado + pieza T
       this.engine = createTSpinDemoEngine();
+    } else if (isSabotageDemoActive()) {
+      // Escenario cerrado de desarrollo: demo de Residuos
+      this.engine = createSabotageDemoEngine();
+    } else if (isOverloadDemoActive()) {
+      // Escenario cerrado de desarrollo: demo de Sobrecarga
+      this.engine = createOverloadDemoEngine();
+    } else if (isGarbageDemoActive()) {
+      // Escenario cerrado de desarrollo: demo de Residuos (Garbage Demo)
+      this.engine = createGarbageDemoEngine();
     } else {
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
     }
@@ -580,6 +591,7 @@ export class GameScene extends Phaser.Scene {
       combatEnergy: snap.combatEnergy,
       storedSabotages: [...snap.storedSabotages],
       pendingGarbage: snap.pendingGarbage,
+      activeEffects: [...snap.activeEffects],
     };
 
     if (
@@ -596,7 +608,11 @@ export class GameScene extends Phaser.Scene {
       this.lastState.combatEnergy === newState.combatEnergy &&
       this.lastState.storedSabotages.length === newState.storedSabotages.length &&
       this.lastState.storedSabotages.every((s, i) => s === newState.storedSabotages[i]) &&
-      this.lastState.pendingGarbage === newState.pendingGarbage
+      this.lastState.pendingGarbage === newState.pendingGarbage &&
+      this.lastState.activeEffects.length === newState.activeEffects.length &&
+      this.lastState.activeEffects.every(
+        (e, i) => e.type === newState.activeEffects[i]?.type && e.remainingMs === newState.activeEffects[i]?.remainingMs,
+      )
     ) {
       return;
     }
