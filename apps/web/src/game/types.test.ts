@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GamePresentationState } from './types';
 
 describe('GamePresentationState', () => {
-  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo y backToBack', () => {
+  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo, backToBack y combatEnergy', () => {
     const state: GamePresentationState = {
       status: 'running',
       step: 42,
@@ -12,11 +12,12 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
-    // Verificar que solo tiene las ocho propiedades esperadas
+    // Verificar que solo tiene las nueve propiedades esperadas
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(8);
+    expect(keys).toHaveLength(9);
     expect(keys).toContain('status');
     expect(keys).toContain('step');
     expect(keys).toContain('elapsedMs');
@@ -25,6 +26,7 @@ describe('GamePresentationState', () => {
     expect(keys).toContain('score');
     expect(keys).toContain('combo');
     expect(keys).toContain('backToBack');
+    expect(keys).toContain('combatEnergy');
   });
 
   it('no contiene el campo singular nextPiece', () => {
@@ -37,6 +39,7 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
     expect('nextPiece' in state).toBe(false);
@@ -52,6 +55,7 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
     // Verificar que no hay propiedades como board, activePiece, etc.
@@ -74,11 +78,13 @@ describe('GamePresentationState', () => {
       score: 1234,
       combo: 3,
       backToBack: 0,
+      combatEnergy: 50,
     };
 
     expect(state.status).toBe('gameOver');
     expect(state.score).toBe(1234);
     expect(state.combo).toBe(3);
+    expect(state.combatEnergy).toBe(50);
   });
 
   it('soporta status paused', () => {
@@ -91,11 +97,12 @@ describe('GamePresentationState', () => {
       score: 500,
       combo: 2,
       backToBack: 1,
+      combatEnergy: 25,
     };
 
     expect(state.status).toBe('paused');
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(8);
+    expect(keys).toHaveLength(9);
   });
 
   it('nextPieces tiene tres elementos', () => {
@@ -108,6 +115,7 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
     expect(state.nextPieces).toHaveLength(3);
@@ -123,6 +131,7 @@ describe('GamePresentationState', () => {
       score: 100,
       combo: 1,
       backToBack: 0,
+      combatEnergy: 10,
     };
 
     expect(state.heldPiece).toBe('L');
@@ -138,6 +147,7 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
     expect(state.heldPiece).toBeNull();
@@ -153,13 +163,14 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
     expect(typeof state.score).toBe('number');
     expect(typeof state.combo).toBe('number');
   });
 
-  it('backToBack es un número', () => {
+  it('backToBack y combatEnergy son números', () => {
     const state: GamePresentationState = {
       status: 'running',
       step: 0,
@@ -169,8 +180,10 @@ describe('GamePresentationState', () => {
       score: 0,
       combo: 0,
       backToBack: 0,
+      combatEnergy: 0,
     };
 
     expect(typeof state.backToBack).toBe('number');
+    expect(typeof state.combatEnergy).toBe('number');
   });
 });

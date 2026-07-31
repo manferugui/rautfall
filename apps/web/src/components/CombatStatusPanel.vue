@@ -1,26 +1,47 @@
 <script setup lang="ts">
 /**
- * Panel de combate simulado (energía, cartucho, Residuos).
+ * Panel de combate (energía real, cartucho simulado, Residuos simulados).
  *
  * Responsabilidades:
- * - Mostrar tres indicadores simulados: energía, cartucho y Residuos.
- * - Cada bloque lleva su badge "SIMULADO" y su propio data-testid.
- * - Sin lógica de dominio, sin reactividad basada en el motor, sin animaciones.
- *
- * Ver docs/tasks/0009-marco-tactical-identidad-visual-industrial-dramatic.md §18.
+ * - Mostrar la energía de combate real con 20 segmentos (5 puntos por segmento).
+ * - 4 estados de color estáticos: 0-49 cian, 50-74 cian intenso/azul, 75-99 ámbar, 100 READY.
+ * - Sin animaciones, pulsos ni transiciones.
  */
 
+import { computed } from 'vue';
 import {
-  SIMULATED_ENERGY_SEGMENTS,
-  SIMULATED_ENERGY_ACTIVE,
   SIMULATED_CARTRIDGE_LABEL,
   SIMULATED_RESIDUES_COUNT,
 } from '../presentation/simulated-tactical-data';
 
+const TOTAL_SEGMENTS = 20;
+
+const props = withDefaults(
+  defineProps<{
+    combatEnergy?: number;
+  }>(),
+  {
+    combatEnergy: 0,
+  },
+);
+
+const energyValue = computed(() => Math.max(0, Math.min(100, props.combatEnergy)));
+
+const activeSegmentsCount = computed(() => Math.floor(energyValue.value / 5));
+
+const energyTier = computed(() => {
+  const e = energyValue.value;
+  if (e >= 100) return 'ready';
+  if (e >= 75) return 'amber';
+  if (e >= 50) return 'intense';
+  return 'normal';
+});
+
 function energySegments(): boolean[] {
+  const activeCount = activeSegmentsCount.value;
   const result: boolean[] = [];
-  for (let i = 0; i < SIMULATED_ENERGY_SEGMENTS; i++) {
-    result.push(i < SIMULATED_ENERGY_ACTIVE);
+  for (let i = 0; i < TOTAL_SEGMENTS; i++) {
+    result.push(i < activeCount);
   }
   return result;
 }
@@ -33,18 +54,27 @@ function energySegments(): boolean[] {
       <span class="module-badge">PROTOTIPO</span>
     </div>
 
-    <!-- Energía simulada -->
-    <div class="combat-block" data-testid="simulated-energy">
+    <!-- Energía real -->
+    <div
+      class="combat-block"
+      data-testid="simulated-energy"
+      :data-energy-tier="energyTier"
+    >
       <div class="block-header">
         <span class="block-label">ENERGÍA</span>
-        <span class="simulated-badge">SIMULADO</span>
+        <span
+          v-if="energyTier === 'ready'"
+          class="status-badge status-badge--ready"
+          data-testid="energy-ready-badge"
+        >READY</span>
+        <span v-else class="simulated-badge">SIMULADO</span>
       </div>
-      <div class="energy-bar">
+      <div class="energy-bar" :class="`energy-bar--${energyTier}`">
         <div
           v-for="(active, index) in energySegments()"
           :key="index"
           class="energy-segment"
-          :class="{ active }"
+          :class="[{ active }, active ? `segment--${energyTier}` : '']"
         ></div>
       </div>
     </div>
@@ -148,23 +178,49 @@ function energySegments(): boolean[] {
   border-radius: var(--rf-radius-sm, 3px);
 }
 
+.status-badge--ready {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #0b0b0d;
+  background: #2ecc71;
+  padding: 1px 6px;
+  border-radius: var(--rf-radius-sm, 3px);
+}
+
 .energy-bar {
   display: flex;
-  gap: 3px;
+  gap: 2px;
 }
 
 .energy-segment {
   width: 100%;
   height: 8px;
-  border-radius: var(--rf-radius-sm, 3px);
+  border-radius: 1px;
   background: var(--rf-color-graphite-900, #17181a);
   border: 1px solid var(--rf-color-metal-600, #3a3b3f);
   transition: none;
 }
 
-.energy-segment.active {
+.energy-segment.active.segment--normal {
   background: var(--rf-color-cyan, #00d4ff);
   border-color: var(--rf-color-cyan, #00d4ff);
+}
+
+.energy-segment.active.segment--intense {
+  background: #0077ff;
+  border-color: #0077ff;
+}
+
+.energy-segment.active.segment--amber {
+  background: var(--rf-color-amber, #f39c12);
+  border-color: var(--rf-color-amber, #f39c12);
+}
+
+.energy-segment.active.segment--ready {
+  background: #2ecc71;
+  border-color: #2ecc71;
 }
 
 .cartridge-slot {

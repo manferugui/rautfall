@@ -66,11 +66,11 @@ export const SIMULATED_OPPONENT_SECTOR = 'SECTOR 04';
 /** Canal simulado del monitor rival (señalética secundaria, sin lógica reactiva). */
 export const SIMULATED_OPPONENT_CHANNEL = 'CANAL TAC-2';
 
-/** Número de segmentos totales de la barra de energía simulada. */
-export const SIMULATED_ENERGY_SEGMENTS = 7;
+/** Número de segmentos totales de la barra de energía. */
+export const SIMULATED_ENERGY_SEGMENTS = 20;
 
-/** Número de segmentos activos (encendidos) en la barra de energía simulada. */
-export const SIMULATED_ENERGY_ACTIVE = 3;
+/** Número de segmentos activos iniciales (sin energía). */
+export const SIMULATED_ENERGY_ACTIVE = 0;
 
 /** Texto fijo del cartucho simulado. */
 export const SIMULATED_CARTRIDGE_LABEL = 'Cartucho — prototipo';

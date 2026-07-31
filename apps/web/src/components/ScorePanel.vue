@@ -12,15 +12,25 @@
       <span class="score-panel__label">Back-to-Back</span>
       <span class="score-panel__value" data-testid="backToBack-value">{{ backToBack > 0 ? backToBack : '\u2014' }}</span>
     </div>
+    <div class="score-panel__row">
+      <span class="score-panel__label">Energia</span>
+      <span class="score-panel__value" data-testid="combatEnergy-value">{{ combatEnergy }}</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  score: number;
-  combo: number;
-  backToBack: number;
-}>();
+withDefaults(
+  defineProps<{
+    score: number;
+    combo: number;
+    backToBack: number;
+    combatEnergy?: number;
+  }>(),
+  {
+    combatEnergy: 0,
+  },
+);
 </script>
 
 <style scoped>

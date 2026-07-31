@@ -6676,4 +6676,279 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       expect(snap.backToBack).toBe(1);
     });
   });
+
+  describe('Energía de combate (0015)', () => {
+    it('estado inicial y reset: combatEnergy es 0 y se expone en snapshot', () => {
+      const engine = createGameEngine(makeValidOptions());
+      let snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(0);
+
+      // Simular alguna acción sin líneas
+      stepStationary(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(0);
+
+      // Reset
+      engine.reset(makeValidOptions());
+      snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(0);
+    });
+
+    it('gameOver conserva el valor final de combatEnergy', () => {
+      const board = emptyBoard();
+      // Bloquear celdas de spawn para la siguiente pieza sin llenar filas enteras
+      board[5]![3] = 'Z';
+      const engine = createTestEngine(board, { type: 'I', x: 0, y: 20, orientation: Orientation.Spawn }, ['I']);
+      stepHardDrop(engine); // Spawn bloqueado de la siguiente I en y=5 -> gameOver
+
+      const snap = engine.getSnapshot();
+      expect(snap.status).toBe('gameOver');
+      expect(snap.combatEnergy).toBe(0);
+    });
+
+    it('eliminación Single ordinaria otorga 10 de energía', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 0 && x !== 1) board[23]![x] = 'Z';
+      }
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 20, orientation: Orientation.Spawn });
+      stepHardDrop(engine);
+
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(10);
+    });
+
+    it('eliminación Double ordinaria otorga 25 de energía', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 0 && x !== 1) {
+          board[22]![x] = 'Z';
+          board[23]![x] = 'Z';
+        }
+      }
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 20, orientation: Orientation.Spawn });
+      stepHardDrop(engine);
+
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(25);
+    });
+
+    it('eliminación Triple ordinaria otorga 45 de energía', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 2) {
+          board[21]![x] = 'Z';
+          board[22]![x] = 'Z';
+          board[23]![x] = 'Z';
+        }
+      }
+      const engine = createTestEngine(board, { type: 'I', x: 0, y: 20, orientation: Orientation.Right });
+      stepHardDrop(engine);
+
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(45);
+    });
+
+    it('eliminación Quad ordinaria otorga 70 de energía', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 2) {
+          board[20]![x] = 'Z';
+          board[21]![x] = 'Z';
+          board[22]![x] = 'Z';
+          board[23]![x] = 'Z';
+        }
+      }
+      const engine = createTestEngine(board, { type: 'I', x: 0, y: 20, orientation: Orientation.Right });
+      stepHardDrop(engine);
+
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(70);
+    });
+
+    it('T-Spin sin líneas otorga 0 de energía', () => {
+      const board = emptyBoard();
+      board[17]![3] = 'Z';
+      board[17]![5] = 'Z';
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(0);
+    });
+
+    it('T-Spin Single otorga 25 de energía base', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 4) board[17]![x] = 'Z';
+      }
+      board[15]![3] = 'J';
+
+      const engine = createTestEngine(board, { type: 'T', x: 3, y: 15, orientation: Orientation.Spawn });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(25);
+    });
+
+    it('bonificación de combo en energía: primera eliminación sin bonus, segunda con +3', () => {
+      const board = emptyBoard();
+      // Fila 23 llena excepto col 0,1 para la primera O
+      for (let x = 2; x < 10; x++) board[23]![x] = 'Z';
+      // Fila 21 llena excepto col 8,9 para la segunda O
+      for (let x = 0; x < 8; x++) board[21]![x] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 21, orientation: Orientation.Spawn }, ['O']);
+      // Primera eliminación (Single en fila 23): combo = 1 -> energía = 10
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combo).toBe(1);
+      expect(engine.getSnapshot().combatEnergy).toBe(10);
+
+      // Mover la segunda O a col 8,9 y hacer hard drop -> Single en fila 21 (que bajó a 22), combo = 2 -> energía + (10 base + 3 bonus) = 23
+      for (let i = 0; i < 7; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: true, leftPressed: false, rightPressed: true,
+          softDropHeld: false, hardDrop: false
+        });
+      }
+      stepHardDrop(engine);
+
+      expect(engine.getSnapshot().combo).toBe(2);
+      expect(engine.getSnapshot().combatEnergy).toBe(23); // 10 + (10 + 3)
+    });
+
+    it('bonificación de combo respeta el tope máximo de 15 puntos por jugada (combo >= 6)', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 0 && x !== 1) board[23]![x] = 'Z';
+      }
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 20, orientation: Orientation.Spawn });
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(10);
+    });
+
+    it('bonificación back-to-back en energía otorga floor(baseEnergy * 0.25) en segunda jugada difícil', () => {
+      const board = emptyBoard();
+      // Filas 16 a 23 llenas excepto col 2
+      for (let y = 16; y < 24; y++) {
+        for (let x = 0; x < 10; x++) {
+          if (x !== 2) board[y]![x] = 'Z';
+        }
+      }
+
+      const engine = createTestEngine(board, { type: 'I', x: 0, y: 12, orientation: Orientation.Right }, ['I']);
+      // Primer Quad: base = 70, b2b = 1 (sin bonus) -> 70 energía
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().backToBack).toBe(1);
+      expect(engine.getSnapshot().combatEnergy).toBe(70);
+
+      // Posicionar la segunda I: rotar a Right y mover 3 veces a la izquierda (x=3 -> x=0)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      for (let i = 0; i < 3; i++) {
+        engine.step({
+          leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+          softDropHeld: false, hardDrop: false
+        });
+      }
+      // Segundo Quad: base = 70, b2b = 2 -> bonus = floor(70 * 0.25) = 17 -> total = 70 + 87 = 157 -> topado a 100
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().backToBack).toBe(2);
+      expect(engine.getSnapshot().combatEnergy).toBe(100);
+    });
+
+    it('fijación sin líneas no muta combatEnergy', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const initialEnergy = engine.getSnapshot().combatEnergy;
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(initialEnergy);
+    });
+
+    it('saturación exacta: combatEnergy no supera 100 y descarta el excedente', () => {
+      const board = emptyBoard();
+      for (let y = 16; y < 24; y++) {
+        for (let x = 0; x < 10; x++) {
+          if (x !== 2) board[y]![x] = 'Z';
+        }
+      }
+      const engine = createTestEngine(board, { type: 'I', x: 0, y: 12, orientation: Orientation.Right }, ['I']);
+      // Quad otorga 70 energía
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(70);
+
+      // Posicionar la segunda I para el segundo Quad
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true
+      });
+      for (let i = 0; i < 4; i++) {
+        engine.step({
+          leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+          softDropHeld: false, hardDrop: false
+        });
+      }
+      // Segundo Quad otorga 70 + 17 = 87 -> acumulado = 157 -> topado en 100
+      stepHardDrop(engine);
+    });
+
+    it('atomicidad y determinismo: entrada inválida no muta energía y dos motores idénticos producen el mismo valor', () => {
+      const engineA = createGameEngine(makeValidOptions({ seed: 12345 }));
+      const engineB = createGameEngine(makeValidOptions({ seed: 12345 }));
+
+      expect(engineA.getSnapshot().combatEnergy).toBe(0);
+      expect(engineB.getSnapshot().combatEnergy).toBe(0);
+
+      // Intentar entrada inválida en engineA
+      expect(() => {
+        engineA.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false, rotateClockwise: true, rotateCounterclockwise: true
+        });
+      }).toThrow();
+
+      expect(engineA.getSnapshot().combatEnergy).toBe(0);
+
+      // Ejecutar 20 pasos idénticos válidos
+      for (let i = 0; i < 20; i++) {
+        stepStationary(engineA);
+        stepStationary(engineB);
+      }
+
+      expect(engineA.getSnapshot().combatEnergy).toBe(engineB.getSnapshot().combatEnergy);
+    });
+
+    it('la ganancia de energía no se aplica dos veces en una misma fijación', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 0 && x !== 1) board[23]![x] = 'Z';
+      }
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 20, orientation: Orientation.Spawn });
+      stepHardDrop(engine); // Single -> 10 energía
+
+      const energyAfterDrop = engine.getSnapshot().combatEnergy;
+      expect(energyAfterDrop).toBe(10);
+
+      // Dar varios pasos sin fijar otra pieza con líneas
+      stepStationary(engine);
+      stepStationary(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(10);
+    });
+  });
 });

@@ -90,6 +90,7 @@ export type EngineSnapshot = Readonly<{
   score: number;
   combo: number;
   backToBack: number;
+  combatEnergy: number;
 }>;
 
 /**
@@ -221,6 +222,28 @@ const T_SPIN_POINTS: Readonly<Record<0 | 1 | 2 | 3, number>> = Object.freeze({
 });
 
 const BACK_TO_BACK_BONUS_RATIO = 0.5;
+
+// ── Constantes de energía de combate ────────────────────────────────────
+
+const COMBAT_ENERGY_MAX = 100;
+
+const LINE_CLEAR_ENERGY: Readonly<Record<1 | 2 | 3 | 4, number>> = Object.freeze({
+  1: 10,
+  2: 25,
+  3: 45,
+  4: 70,
+});
+
+const T_SPIN_ENERGY: Readonly<Record<0 | 1 | 2 | 3, number>> = Object.freeze({
+  0: 0,
+  1: 25,
+  2: 50,
+  3: 75,
+});
+
+const COMBO_ENERGY_BONUS_PER_STEP = 3;
+const COMBO_ENERGY_BONUS_CAP = 5;
+const BACK_TO_BACK_ENERGY_BONUS_RATIO = 0.25;
 
 // ── Definición de piezas ────────────────────────────────────────────────
 
@@ -653,6 +676,7 @@ export function createGameEngine(
   let combo = 0;
   let lastActionWasRotation = false;
   let backToBack = 0;
+  let combatEnergy = 0;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
@@ -762,14 +786,24 @@ export function createGameEngine(
       }
       // T-Spin sin líneas: backToBack sin cambio
 
-      // 8. Calcular puntuación
+      // 8. Calcular puntuación y energía
       const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
       const backToBackBonus = isDifficult && backToBack >= 2
         ? Math.floor(basePoints * BACK_TO_BACK_BONUS_RATIO)
         : 0;
 
-      // 9. Sumar puntos una sola vez
+      const baseEnergy = T_SPIN_ENERGY[tSpinLines];
+      const comboEnergyBonus = (hasLines && combo >= 2)
+        ? Math.min(combo - 1, COMBO_ENERGY_BONUS_CAP) * COMBO_ENERGY_BONUS_PER_STEP
+        : 0;
+      const backToBackEnergyBonus = (isDifficult && backToBack >= 2)
+        ? Math.floor(baseEnergy * BACK_TO_BACK_ENERGY_BONUS_RATIO)
+        : 0;
+      const generatedEnergy = baseEnergy + comboEnergyBonus + backToBackEnergyBonus;
+
+      // 9. Sumar puntos y energía una sola vez
       score += basePoints + comboBonus + backToBackBonus;
+      combatEnergy = Math.min(COMBAT_ENERGY_MAX, combatEnergy + generatedEnergy);
     } else {
       // Jugada ordinaria
       if (hasLines) {
@@ -787,14 +821,24 @@ export function createGameEngine(
           backToBack = 0;
         }
 
-        // 8. Calcular puntuación
+        // 8. Calcular puntuación y energía
         const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
         const backToBackBonus = isDifficult && backToBack >= 2
           ? Math.floor(basePoints * BACK_TO_BACK_BONUS_RATIO)
           : 0;
 
-        // 9. Sumar puntos una sola vez
+        const baseEnergy = LINE_CLEAR_ENERGY[ordLines];
+        const comboEnergyBonus = combo >= 2
+          ? Math.min(combo - 1, COMBO_ENERGY_BONUS_CAP) * COMBO_ENERGY_BONUS_PER_STEP
+          : 0;
+        const backToBackEnergyBonus = (isDifficult && backToBack >= 2)
+          ? Math.floor(baseEnergy * BACK_TO_BACK_ENERGY_BONUS_RATIO)
+          : 0;
+        const generatedEnergy = baseEnergy + comboEnergyBonus + backToBackEnergyBonus;
+
+        // 9. Sumar puntos y energía una sola vez
         score += basePoints + comboBonus + backToBackBonus;
+        combatEnergy = Math.min(COMBAT_ENERGY_MAX, combatEnergy + generatedEnergy);
       } else {
         // Fijación ordinaria sin líneas: rompe combo, conserva back-to-back
         combo = 0;
@@ -1280,6 +1324,7 @@ export function createGameEngine(
         score,
         combo,
         backToBack,
+        combatEnergy,
       });
     },
 
@@ -1312,6 +1357,7 @@ export function createGameEngine(
       combo = 0;
       lastActionWasRotation = false;
       backToBack = 0;
+      combatEnergy = 0;
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 

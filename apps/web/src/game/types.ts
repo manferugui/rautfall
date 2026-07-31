@@ -13,6 +13,7 @@ export type GamePresentationState = Readonly<{
   score: number;
   combo: number;
   backToBack: number;
+  combatEnergy: number;
 }>;
 
 /**

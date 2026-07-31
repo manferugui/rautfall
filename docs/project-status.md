@@ -341,7 +341,7 @@ Ver [Informe de implementación](implementation/0013-puntuacion-combos.md).
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | ✅ Implementada técnicamente |
+| **Estado** | ✅ Completada |
 | **Fecha de finalización** | 2026-07-31 |
 | **Resultado** | 454 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
 
@@ -364,6 +364,32 @@ Ver [Informe de implementación](implementation/0013-puntuacion-combos.md).
 
 Ver [Informe de implementación](implementation/0014-t-spins-back-to-back.md).
 
+## Task [0015 — Energía de combate](tasks/0015-energia-de-combate.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-31 |
+| **Resultado** | 471 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- `EngineSnapshot` expone `combatEnergy: number`.
+- `GamePresentationState` expone `combatEnergy`.
+- Tabla base de energía: Single (10), Double (25), Triple (45), Quad (70), T-Spin Single (25), T-Spin Double (50), T-Spin Triple (75), T-Spin sin líneas (0), Fijación sin líneas (0).
+- Bonificación de combo: `min(combo - 1, 5) * 3` (máximo 15 por jugada).
+- Bonificación back-to-back: `floor(baseEnergy * 0.25)` sobre energía base.
+- Acumulación determinista y atómica en `lockAndProcess()`.
+- Saturación en `COMBAT_ENERGY_MAX = 100` con excedente descartado.
+- `ScorePanel.vue` muestra el valor numérico en una cuarta fila (`data-testid="combatEnergy-value"`).
+- `CombatStatusPanel.vue` renderiza la barra de 7 segmentos en función de `combatEnergy` real (`Math.floor(combatEnergy / 100 * 7)`).
+- 13 pruebas deterministas del motor + pruebas de componentes Vue y tipos.
+- Sin cambios en `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0015-energia-de-combate.md).
+
 ## Siguiente tarea
 
-La siguiente tarea se decidirá después de validar manualmente los T-Spins y back-to-back, y revisar `docs/rautfall.md` frente al estado real del proyecto. Candidatas razonables: energía de combate, el primer sabotaje real, o refinamiento del motor.
+- **0016 — Consumo de energía y sabotajes funcionales**: Mecanismo de descarga de la barra de energía, cola de sabotajes con bolsa equilibrada y efectos sobre el tablero/partida.

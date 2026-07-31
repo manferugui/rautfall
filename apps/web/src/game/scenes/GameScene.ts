@@ -563,6 +563,7 @@ export class GameScene extends Phaser.Scene {
       score: snap.score,
       combo: snap.combo,
       backToBack: snap.backToBack,
+      combatEnergy: snap.combatEnergy,
     };
 
     if (
@@ -575,7 +576,8 @@ export class GameScene extends Phaser.Scene {
       this.lastState.heldPiece === newState.heldPiece &&
       this.lastState.score === newState.score &&
       this.lastState.combo === newState.combo &&
-      this.lastState.backToBack === newState.backToBack
+      this.lastState.backToBack === newState.backToBack &&
+      this.lastState.combatEnergy === newState.combatEnergy
     ) {
       return;
     }
