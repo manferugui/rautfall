@@ -1,27 +1,29 @@
 <script setup lang="ts">
 /**
- * Panel de combate (energía real, cartucho simulado, Residuos simulados).
+ * Panel de combate (energía real, cartucho real de sabotajes, Residuos encolados).
  *
  * Responsabilidades:
  * - Mostrar la energía de combate real con 20 segmentos (5 puntos por segmento).
+ * - Mostrar los sabotajes almacenados en el cartucho FIFO (máx 2).
+ * - Mostrar la basura pendiente por aplicar (Residuos).
  * - 4 estados de color estáticos: 0-49 cian, 50-74 cian intenso/azul, 75-99 ámbar, 100 READY.
- * - Sin animaciones, pulsos ni transiciones.
  */
 
 import { computed } from 'vue';
-import {
-  SIMULATED_CARTRIDGE_LABEL,
-  SIMULATED_RESIDUES_COUNT,
-} from '../presentation/simulated-tactical-data';
+import type { SabotageType } from '@rautfall/game-engine';
 
 const TOTAL_SEGMENTS = 20;
 
 const props = withDefaults(
   defineProps<{
     combatEnergy?: number;
+    storedSabotages?: readonly SabotageType[];
+    pendingGarbage?: number;
   }>(),
   {
     combatEnergy: 0,
+    storedSabotages: () => [],
+    pendingGarbage: 0,
   },
 );
 
@@ -45,6 +47,13 @@ function energySegments(): boolean[] {
   }
   return result;
 }
+
+const cartridgeDisplay = computed(() => {
+  if (!props.storedSabotages || props.storedSabotages.length === 0) {
+    return 'VACÍO';
+  }
+  return props.storedSabotages.join(', ');
+});
 </script>
 
 <template>
@@ -81,27 +90,25 @@ function energySegments(): boolean[] {
 
     <div class="combat-divider"></div>
 
-    <!-- Cartucho simulado -->
+    <!-- Cartucho real -->
     <div class="combat-block" data-testid="simulated-cartridge">
       <div class="block-header">
         <span class="block-label">CARTUCHO</span>
-        <span class="simulated-badge">SIMULADO</span>
       </div>
       <div class="cartridge-slot">
-        <span class="cartridge-text">{{ SIMULATED_CARTRIDGE_LABEL }}</span>
+        <span class="cartridge-text" data-testid="cartridge-text">{{ cartridgeDisplay }}</span>
       </div>
     </div>
 
     <div class="combat-divider"></div>
 
-    <!-- Residuos simulados -->
+    <!-- Residuos reales -->
     <div class="combat-block" data-testid="simulated-residues">
       <div class="block-header">
         <span class="block-label">RESIDUOS</span>
-        <span class="simulated-badge">SIMULADO</span>
       </div>
       <div class="residues-indicator">
-        <span class="residues-count">Residuos: {{ SIMULATED_RESIDUES_COUNT }}</span>
+        <span class="residues-count" data-testid="residues-count">Residuos: {{ props.pendingGarbage }}</span>
       </div>
     </div>
   </div>

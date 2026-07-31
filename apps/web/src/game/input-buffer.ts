@@ -21,6 +21,7 @@ export type KeyState = {
   justPressedZ: boolean;
   justPressedSpace: boolean;
   justPressedC: boolean;
+  justPressedA: boolean;
   softDropHeld: boolean;
 };
 
@@ -40,8 +41,9 @@ export function buildStepInput(
     counterclockwise: boolean;
     hardDrop: boolean;
     hold: boolean;
+    triggerSabotage: boolean;
   },
-): [StepInput, { horizontal: boolean; clockwise: boolean; counterclockwise: boolean; hardDrop: boolean; hold: boolean }] {
+): [StepInput, { horizontal: boolean; clockwise: boolean; counterclockwise: boolean; hardDrop: boolean; hold: boolean; triggerSabotage: boolean }] {
   // Estado mantenido horizontal (siempre el real, independientemente de consumed)
   const leftHeld = keys.leftHeld;
   const rightHeld = keys.rightHeld;
@@ -95,9 +97,12 @@ export function buildStepInput(
   }
 
   // Reserva (C)
-  // Reserva (C)
   const hold = !consumedThisFrame.hold && keys.justPressedC;
   const consumedHold = consumedThisFrame.hold || hold;
+
+  // Lanzamiento de sabotaje (A)
+  const triggerSabotage = !consumedThisFrame.triggerSabotage && keys.justPressedA;
+  const consumedTriggerSabotage = consumedThisFrame.triggerSabotage || triggerSabotage;
 
   const stepInput: StepInput = {
     leftHeld, rightHeld, leftPressed, rightPressed, softDropHeld, hardDrop,
@@ -105,6 +110,9 @@ export function buildStepInput(
   };
   if (hold) {
     stepInput.hold = true;
+  }
+  if (triggerSabotage) {
+    stepInput.triggerSabotage = true;
   }
 
   return [
@@ -115,6 +123,7 @@ export function buildStepInput(
       counterclockwise: consumedCounterclockwise,
       hardDrop: consumedHardDrop,
       hold: consumedHold,
+      triggerSabotage: consumedTriggerSabotage,
     },
   ];
 }

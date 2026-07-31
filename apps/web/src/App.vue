@@ -8,7 +8,7 @@ import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0 });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -141,15 +141,20 @@ function doTogglePause(): void {
                   <li><kbd>R</kbd> Reiniciar</li>
                   <li><kbd>Esc</kbd> Pausar/Reanudar</li>
                   <li><kbd>C</kbd> Reserva</li>
+                  <li><kbd>A</kbd> Lanzar sabotaje</li>
                 </ul>
               </div>
             </div>
 
             <div class="console-divider"></div>
 
-            <!-- Panel de combate simulado -->
+            <!-- Panel de combate real -->
             <div class="console-section">
-              <CombatStatusPanel :combat-energy="gameState.combatEnergy" />
+              <CombatStatusPanel
+                :combat-energy="gameState.combatEnergy"
+                :stored-sabotages="gameState.storedSabotages"
+                :pending-garbage="gameState.pendingGarbage"
+              />
             </div>
           </div>
 

@@ -23,6 +23,7 @@ import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
 import { computeSessionStatus, canTogglePause } from '../session-status';
 import { isTSpinDemoActive, createTSpinDemoEngine } from '../tspin-demo';
+import { isSabotageDemoActive } from '../sabotage-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
   CELL_SIZE,
@@ -34,7 +35,7 @@ import {
 
 const FIXED_SEED = 42;
 
-const PIECE_COLORS: Record<PieceType, number> = {
+const PIECE_COLORS: Record<PieceType | 'garbage', number> = {
   I: 0x00d4ff,
   O: 0xffd700,
   T: 0x9b59b6,
@@ -42,6 +43,7 @@ const PIECE_COLORS: Record<PieceType, number> = {
   Z: 0xe74c3c,
   J: 0x3498db,
   L: 0xf39c12,
+  garbage: 0x555555,
 };
 
 type ConsumedFlags = {
@@ -50,6 +52,7 @@ type ConsumedFlags = {
   counterclockwise: boolean;
   hardDrop: boolean;
   hold: boolean;
+  triggerSabotage: boolean;
 };
 
 export type GameSceneCallbacks = {
@@ -68,6 +71,7 @@ export class GameScene extends Phaser.Scene {
     counterclockwise: false,
     hardDrop: false,
     hold: false,
+    triggerSabotage: false,
   };
 
   private cursors!: {
@@ -80,6 +84,7 @@ export class GameScene extends Phaser.Scene {
     r: Phaser.Input.Keyboard.Key;
     esc: Phaser.Input.Keyboard.Key;
     c: Phaser.Input.Keyboard.Key;
+    a: Phaser.Input.Keyboard.Key;
   };
 
   /** true mientras la sesión web está pausada. El motor no recibe step() durante la pausa. */
@@ -128,6 +133,7 @@ export class GameScene extends Phaser.Scene {
       r: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
       esc: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
       c: kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
+      a: kb.addKey(Phaser.Input.Keyboard.KeyCodes.A),
     };
 
     this.resetEngine();
@@ -136,7 +142,7 @@ export class GameScene extends Phaser.Scene {
     this.graphics.setPosition(0, 0);
 
     this.accumulator = 0;
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     this.lastState = null;
     this.pendingHorizontal = null;
 
@@ -220,7 +226,7 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     // Reiniciar banderas de consumo al empezar el frame
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
 
     // R tiene prioridad máxima: funciona en cualquier estado (running, paused, gameOver)
     if (Phaser.Input.Keyboard.JustDown(this.cursors.r)) {
@@ -269,6 +275,7 @@ export class GameScene extends Phaser.Scene {
           keys.justPressedZ ||
           keys.justPressedSpace ||
           keys.justPressedC ||
+          keys.justPressedA ||
           keys.leftHeld ||
           keys.rightHeld ||
           keys.softDropHeld;
@@ -287,7 +294,7 @@ export class GameScene extends Phaser.Scene {
         i === 0 ? keys : this.emptyInput(),
         i === 0
           ? this.consumedThisFrame
-          : { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true },
+          : { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true, triggerSabotage: true },
       );
 
       if (i === 0) {
@@ -359,6 +366,11 @@ export class GameScene extends Phaser.Scene {
 
     this.renderFrame();
     const frameEvents = this.engine.drainEvents();
+    for (const event of frameEvents) {
+      if (event.type === 'sabotageTriggered' && isSabotageDemoActive()) {
+        this.engine.receiveSabotage(event.sabotage);
+      }
+    }
     const frameEventTypes = frameEvents.map(e => e.type);
     if (hasImportantEngineEvent(frameEventTypes)) {
       const snap = this.engine.getSnapshot();
@@ -375,7 +387,7 @@ export class GameScene extends Phaser.Scene {
   resetGame(): void {
     this.resetEngine();
     this.accumulator = 0;
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     this.notifyState();
     logDebug({ source: 'lifecycle', event: 'reset – resetGame' });
   }
@@ -420,7 +432,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.engine.drainEvents();
     this.accumulator = 0;
-    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     this.pendingHorizontal = null;
     this.isPaused = false;                       // el reinicio siempre deja la sesión en running
     this.releaseGuard = armReleaseGuard({
@@ -471,6 +483,7 @@ export class GameScene extends Phaser.Scene {
       justPressedZ: Phaser.Input.Keyboard.JustDown(this.cursors.z),
       justPressedSpace: Phaser.Input.Keyboard.JustDown(this.cursors.space),
       justPressedC: Phaser.Input.Keyboard.JustDown(this.cursors.c),
+      justPressedA: Phaser.Input.Keyboard.JustDown(this.cursors.a),
       softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
     };
   }
@@ -494,6 +507,7 @@ export class GameScene extends Phaser.Scene {
       justPressedZ: false,
       justPressedSpace: false,
       justPressedC: false,
+      justPressedA: false,
       softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
     };
   }
@@ -510,7 +524,7 @@ export class GameScene extends Phaser.Scene {
           const canvasX = boardXToCanvas(x);
           const canvasY = boardYToCanvas(y);
           if (cell !== null) {
-            this.graphics.fillStyle(PIECE_COLORS[cell as PieceType], 1);
+            this.graphics.fillStyle(PIECE_COLORS[cell as PieceType | 'garbage'], 1);
             this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
             this.graphics.lineStyle(1, 0x000000, 0.3);
             this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
@@ -564,6 +578,8 @@ export class GameScene extends Phaser.Scene {
       combo: snap.combo,
       backToBack: snap.backToBack,
       combatEnergy: snap.combatEnergy,
+      storedSabotages: [...snap.storedSabotages],
+      pendingGarbage: snap.pendingGarbage,
     };
 
     if (
@@ -577,7 +593,10 @@ export class GameScene extends Phaser.Scene {
       this.lastState.score === newState.score &&
       this.lastState.combo === newState.combo &&
       this.lastState.backToBack === newState.backToBack &&
-      this.lastState.combatEnergy === newState.combatEnergy
+      this.lastState.combatEnergy === newState.combatEnergy &&
+      this.lastState.storedSabotages.length === newState.storedSabotages.length &&
+      this.lastState.storedSabotages.every((s, i) => s === newState.storedSabotages[i]) &&
+      this.lastState.pendingGarbage === newState.pendingGarbage
     ) {
       return;
     }

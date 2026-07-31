@@ -4,11 +4,13 @@ import { type GameConfig, parseGameConfig } from '@rautfall/game-config';
 
 export type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
+export type SabotageType = 'residuos';
+
 export type EngineStatus = 'running' | 'gameOver';
 
 export type MoveReason = 'horizontal' | 'gravity' | 'hardDrop' | 'softDrop';
 
-export type GameOverReason = 'spawnBlocked';
+export type GameOverReason = 'spawnBlocked' | 'garbageOverflow';
 
 /**
  * Orientación de rotación SRS de la pieza activa (los cuatro estados 0/R/2/L
@@ -37,7 +39,9 @@ export type GameEvent =
     }
   | { type: 'gameOver'; step: number; reason: GameOverReason }
   | { type: 'pieceRotated'; step: number; orientation: Orientation }
-  | { type: 'pieceHeld'; step: number; piece: PieceType };
+  | { type: 'pieceHeld'; step: number; piece: PieceType }
+  | { type: 'sabotageTriggered'; step: number; sabotage: SabotageType }
+  | { type: 'garbageApplied'; step: number; linesCount: number };
 
 /**
  * Estado inmutable de la pieza activa en un instante dado.
@@ -82,7 +86,7 @@ export type EngineSnapshot = Readonly<{
   status: EngineStatus;
   seed: number;
   configVersion: string;
-  board: ReadonlyArray<ReadonlyArray<PieceType | null>>;
+  board: ReadonlyArray<ReadonlyArray<PieceType | 'garbage' | null>>;
   activePiece: ActivePieceSnapshot | null;
   nextPieces: readonly PieceType[];
   clearedLines: number;
@@ -91,6 +95,8 @@ export type EngineSnapshot = Readonly<{
   combo: number;
   backToBack: number;
   combatEnergy: number;
+  storedSabotages: readonly SabotageType[];
+  pendingGarbage: number;
 }>;
 
 /**
@@ -119,6 +125,7 @@ export type StepInput = {
   rotateClockwise?: boolean;
   rotateCounterclockwise?: boolean;
   hold?: boolean;
+  triggerSabotage?: boolean;
 };
 
 export type EngineOptions = {
@@ -151,6 +158,11 @@ export type GameEngine = {
    * consume la cola: una llamada inmediatamente posterior devuelve vacío.
    */
   drainEvents(): readonly GameEvent[];
+  /**
+   * Encola un sabotaje entrante en el motor para su posterior aplicación
+   * determinista en la siguiente fijación de pieza.
+   */
+  receiveSabotage(sabotage: SabotageType): void;
   /**
    * Reinicia el motor a un estado limpio (tablero vacío, contador de paso a
    * 0, nueva bolsa) con la semilla y configuración indicadas. Válido incluso
@@ -378,24 +390,24 @@ function nextFromBag(state: { bag: PieceType[]; index: number }, prng: () => num
 
 // ── Funciones auxiliares del tablero ────────────────────────────────────
 
-function createEmptyBoard(): (PieceType | null)[][] {
+function createEmptyBoard(): (PieceType | 'garbage' | null)[][] {
   return Array.from({ length: BOARD_ROWS }, () =>
     Array.from({ length: BOARD_COLS }, () => null),
   );
 }
 
-function boardToReadonly(board: (PieceType | null)[][]): ReadonlyArray<ReadonlyArray<PieceType | null>> {
+function boardToReadonly(board: (PieceType | 'garbage' | null)[][]): ReadonlyArray<ReadonlyArray<PieceType | 'garbage' | null>> {
   return Object.freeze(board.map((row) => Object.freeze([...row])));
 }
 
-function cloneBoard(board: (PieceType | null)[][]): (PieceType | null)[][] {
+function cloneBoard(board: (PieceType | 'garbage' | null)[][]): (PieceType | 'garbage' | null)[][] {
   return board.map((row) => [...row]);
 }
 
 // ── Comprobación de colisiones ──────────────────────────────────────────
 
 function isCollision(
-  board: (PieceType | null)[][],
+  board: (PieceType | 'garbage' | null)[][],
   cells: Cell[],
 ): boolean {
   for (const cell of cells) {
@@ -421,7 +433,7 @@ function computeAbsoluteCells(pieceType: PieceType, originX: number, originY: nu
  * con independencia de la orientación.
  */
 function countOccupiedCorners(
-  board: (PieceType | null)[][],
+  board: (PieceType | 'garbage' | null)[][],
   piece: { x: number; y: number },
 ): number {
   const cx = piece.x + 1;
@@ -441,7 +453,7 @@ function countOccupiedCorners(
  * pared lateral, suelo, límite superior o bloque fijo.
  */
 function isCornerOccupied(
-  board: (PieceType | null)[][],
+  board: (PieceType | 'garbage' | null)[][],
   cell: Cell,
 ): boolean {
   if (cell.x < 0 || cell.x >= BOARD_COLS) return true;
@@ -455,7 +467,7 @@ function isCornerOccupied(
  * y antes de eliminar líneas.
  */
 function isTSpin(
-  board: (PieceType | null)[][],
+  board: (PieceType | 'garbage' | null)[][],
   activePiece: { type: PieceType; x: number; y: number },
   lastActionWasRotation: boolean,
 ): boolean {
@@ -484,7 +496,7 @@ function activePieceCells(piece: ActivePiece): Cell[] {
  * actuales, sin efectos secundarios.
  */
 function isGrounded(
-  board: (PieceType | null)[][],
+  board: (PieceType | 'garbage' | null)[][],
   activePiece: ActivePiece | null,
 ): boolean {
   if (!activePiece) return false;
@@ -529,7 +541,7 @@ function calculateSpawnY(pieceType: PieceType): number {
 
 // ── Funciones auxiliares ────────────────────────────────────────────────
 
-function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): number {
+function hardDropDistance(board: (PieceType | 'garbage' | null)[][], piece: ActivePiece): number {
   const cells = activePieceCells(piece);
   let distance = 0;
   while (true) {
@@ -540,7 +552,7 @@ function hardDropDistance(board: (PieceType | null)[][], piece: ActivePiece): nu
   return distance;
 }
 
-function computeLandingCells(board: (PieceType | null)[][], activePiece: ActivePiece): Cell[] {
+function computeLandingCells(board: (PieceType | 'garbage' | null)[][], activePiece: ActivePiece): Cell[] {
   const distance = hardDropDistance(board, activePiece);
   return computeAbsoluteCells(
     activePiece.type,
@@ -563,7 +575,7 @@ function getTransitionKey(from: Orientation, to: Orientation): string {
 }
 
 function tryRotate(
-  board: (PieceType | null)[][],
+  board: (PieceType | 'garbage' | null)[][],
   activePiece: ActivePiece,
   clockwise: boolean,
 ): boolean {
@@ -636,10 +648,12 @@ export function getPieceShape(type: PieceType): PieceShape {
  * @internal
  */
 export type TSpinDemoInitialState = {
-  board: (PieceType | null)[][];
+  board: (PieceType | 'garbage' | null)[][];
   activePiece: ActivePiece;
   nextPieces: PieceType[];
   heldPiece: PieceType | null;
+  storedSabotages?: readonly SabotageType[];
+  pendingGarbage?: number;
 };
 
 export function createGameEngine(
@@ -677,6 +691,10 @@ export function createGameEngine(
   let lastActionWasRotation = false;
   let backToBack = 0;
   let combatEnergy = 0;
+  let storedSabotages: SabotageType[] = initialState?.storedSabotages
+    ? [...initialState.storedSabotages]
+    : [];
+  let pendingGarbage = initialState?.pendingGarbage ?? 0;
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
   // Estado de temporización horizontal
@@ -730,22 +748,8 @@ export function createGameEngine(
   /**
    * Secuencia completa de fijación: evalúa T-Spin, escribe la pieza en el
    * tablero, emite `pieceLocked`, elimina líneas, clasifica la jugada,
-   * actualiza combo y back-to-back, calcula puntuación, spawn de la siguiente
-   * pieza o game over. Todo ello una sola vez por fijación.
-   *
-   * Orden exacto (especificación 0014 §22):
-   * 1. Evaluar si la fijación candidata es T-Spin (antes de escribir en tablero)
-   * 2. Escribir la pieza en el tablero
-   * 3. Emitir pieceLocked
-   * 4. Detectar y eliminar líneas
-   * 5. Clasificar la jugada
-   * 6. Actualizar combo
-   * 7. Actualizar back-to-back
-   * 8. Calcular puntuación base + bonificación combo + bonificación back-to-back
-   * 9. Sumar puntos una sola vez
-   * 10. Emitir linesCleared si corresponde
-   * 11. Intentar spawn
-   * 12. Limpiar candidatura de rotación para la nueva pieza
+   * actualiza combo y back-to-back, calcula puntuación y energía, aplica basura
+   * pendiente (Residuos), spawn de la siguiente pieza o game over. Todo ello una sola vez por fijación.
    */
   function lockAndProcess(): void {
     if (!activePiece) return;
@@ -766,27 +770,20 @@ export function createGameEngine(
 
     // 5. Clasificar la jugada
     if (tSpinDetected) {
-      // linesCount está acotado a 0..3 por geometría (§4.7), pero usamos
-      // Math.min por seguridad para que el cast a 0|1|2|3 sea correcto
       const tSpinLines = Math.min(linesCount, 3) as 0 | 1 | 2 | 3;
       const basePoints = T_SPIN_POINTS[tSpinLines];
 
-      // 6. Actualizar combo: T-Spin con líneas incrementa, sin líneas rompe
       if (hasLines) {
         combo += 1;
         isDifficult = true;
       } else {
         combo = 0;
-        // T-Spin sin líneas no es difícil, no rompe back-to-back
       }
 
-      // 7. Actualizar back-to-back
       if (isDifficult) {
         backToBack += 1;
       }
-      // T-Spin sin líneas: backToBack sin cambio
 
-      // 8. Calcular puntuación y energía
       const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
       const backToBackBonus = isDifficult && backToBack >= 2
         ? Math.floor(basePoints * BACK_TO_BACK_BONUS_RATIO)
@@ -801,19 +798,22 @@ export function createGameEngine(
         : 0;
       const generatedEnergy = baseEnergy + comboEnergyBonus + backToBackEnergyBonus;
 
-      // 9. Sumar puntos y energía una sola vez
       score += basePoints + comboBonus + backToBackBonus;
-      combatEnergy = Math.min(COMBAT_ENERGY_MAX, combatEnergy + generatedEnergy);
+
+      const totalEnergy = combatEnergy + generatedEnergy;
+      if (storedSabotages.length < 2 && totalEnergy >= 100) {
+        storedSabotages.push('residuos');
+        combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy - 100);
+      } else {
+        combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy);
+      }
     } else {
-      // Jugada ordinaria
       if (hasLines) {
         const ordLines = linesCount as 1 | 2 | 3 | 4;
         const basePoints = LINE_CLEAR_POINTS[ordLines];
 
-        // 6. Combo
         combo += 1;
 
-        // 7. Back-to-back: solo Quad es difícil; Single/Double/Triple ordinarios rompen
         if (ordLines === 4) {
           isDifficult = true;
           backToBack += 1;
@@ -821,7 +821,6 @@ export function createGameEngine(
           backToBack = 0;
         }
 
-        // 8. Calcular puntuación y energía
         const comboBonus = combo >= 2 ? 50 * (combo - 1) : 0;
         const backToBackBonus = isDifficult && backToBack >= 2
           ? Math.floor(basePoints * BACK_TO_BACK_BONUS_RATIO)
@@ -836,17 +835,21 @@ export function createGameEngine(
           : 0;
         const generatedEnergy = baseEnergy + comboEnergyBonus + backToBackEnergyBonus;
 
-        // 9. Sumar puntos y energía una sola vez
         score += basePoints + comboBonus + backToBackBonus;
-        combatEnergy = Math.min(COMBAT_ENERGY_MAX, combatEnergy + generatedEnergy);
+
+        const totalEnergy = combatEnergy + generatedEnergy;
+        if (storedSabotages.length < 2 && totalEnergy >= 100) {
+          storedSabotages.push('residuos');
+          combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy - 100);
+        } else {
+          combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy);
+        }
       } else {
-        // Fijación ordinaria sin líneas: rompe combo, conserva back-to-back
         combo = 0;
-        // backToBack sin cambio
       }
     }
 
-    // 10. Emitir linesCleared si corresponde
+    // 8. Emitir linesCleared si corresponde
     if (hasLines) {
       eventQueue.push({
         type: 'linesCleared',
@@ -856,9 +859,50 @@ export function createGameEngine(
       });
     }
 
-    // 11. Spawn de la siguiente pieza
+    // 9. Aplicar basura pendiente (Residuos)
+    if (pendingGarbage > 0) {
+      const linesToApply = Math.min(pendingGarbage, 2);
+
+      let overflow = false;
+      for (let y = 0; y < linesToApply; y++) {
+        if (board[y]!.some((cell) => cell !== null)) {
+          overflow = true;
+          break;
+        }
+      }
+
+      if (overflow) {
+        status = 'gameOver';
+        activePiece = null;
+        eventQueue.push({ type: 'gameOver', step: currentStep, reason: 'garbageOverflow' });
+        return;
+      }
+
+      const newBoard = createEmptyBoard();
+      for (let y = linesToApply; y < BOARD_ROWS; y++) {
+        newBoard[y - linesToApply] = [...board[y]!];
+      }
+
+      for (let r = 0; r < linesToApply; r++) {
+        const rowY = BOARD_ROWS - linesToApply + r;
+        const holeCol = Math.floor(prng() * 10);
+        const garbageRow = Array.from({ length: 10 }, (_, col) =>
+          col === holeCol ? null : ('garbage' as const),
+        );
+        newBoard[rowY] = garbageRow;
+      }
+
+      board = newBoard;
+      pendingGarbage -= linesToApply;
+      eventQueue.push({
+        type: 'garbageApplied',
+        step: currentStep,
+        linesCount: linesToApply,
+      });
+    }
+
+    // 10. Spawn de la siguiente pieza
     spawnNextPiece();
-    // 12. La candidatura de rotación se limpia en spawnNextPiece (resetPieceState)
   }
 
   function clearLines(): number[] {
@@ -885,26 +929,14 @@ export function createGameEngine(
     return completeLineIndices;
   }
 
-  /**
-   * Extrae la candidata del frente de la cola, repone la cola con una nueva
-   * pieza de la bolsa e intenta el spawn. Si el spawn es válido, activa la
-   * pieza; si está bloqueado, establece game over.
-   *
-   * Orden: extraer candidata, reponer cola, intentar spawn, activar o finalizar.
-   */
   function spawnNextPiece(): void {
-    // 1. Extraer candidata del frente
     const candidate = nextPiecesQueue.shift()!;
-
-    // 2. Reponer cola con una nueva pieza de la bolsa
     nextPiecesQueue.push(nextFromBag(bagState, prng));
 
-    // 3. Intentar spawn
     const spawnX = calculateSpawnX(candidate);
     const spawnY = calculateSpawnY(candidate);
     const cells = computeAbsoluteCells(candidate, spawnX, spawnY, Orientation.Spawn);
 
-    // 4. Activar o finalizar
     if (isCollision(board, cells)) {
       status = 'gameOver';
       activePiece = null;
@@ -919,16 +951,6 @@ export function createGameEngine(
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: candidate });
   }
 
-  /**
-   * Intenta activar una pieza como resultado de un hold.
-   * La pieza entrante se spawnea con `holdUsed = true` (no puede volver a
-   * reservar hasta que se fije y aparezca la siguiente pieza).
-   * Reutiliza las funciones de spawn existentes.
-   *
-   * Si el spawn está bloqueado, la partida termina con `spawnBlocked`.
-   * `heldPiece` ya se ha actualizado antes de llamar a esta función y no
-   * se revierte si el spawn falla.
-   */
   function attemptIncomingSpawn(incoming: PieceType): void {
     const spawnX = calculateSpawnX(incoming);
     const spawnY = calculateSpawnY(incoming);
@@ -945,20 +967,13 @@ export function createGameEngine(
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
     resetPieceState();
-    holdUsed = true; // La pieza entrante de hold no puede volver a reservar
+    holdUsed = true;
     eventQueue.push({ type: 'pieceSpawned', step: currentStep, piece: incoming });
   }
 
-  /**
-   * Intenta mover la pieza activa una celda en la dirección `dir` (-1 = izquierda, +1 = derecha).
-   * Si el movimiento es válido, lo aplica, emite `pieceMoved` con motivo `'horizontal'`,
-   * invalida la candidatura de rotación, y evalúa el reinicio de lock delay.
-   * Devuelve `true` si el movimiento tuvo éxito, `false` si fue bloqueado.
-   */
   function tryMoveHorizontal(dir: -1 | 1): boolean {
     if (!activePiece) return false;
 
-    // Evaluar apoyo antes del movimiento (para reinicio de lock delay)
     const groundedBefore = isGrounded(board, activePiece);
 
     const newX = activePiece.x + dir;
@@ -966,89 +981,56 @@ export function createGameEngine(
     if (!isCollision(board, cells)) {
       activePiece.x = newX;
       eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'horizontal' });
-
-      // Movimiento horizontal válido: invalida la candidatura de rotación
       lastActionWasRotation = false;
 
-      // Evaluar reinicio de lock delay tras el movimiento
       if (groundedBefore) {
         const groundedAfter = isGrounded(board, activePiece);
         if (groundedAfter) {
-          // Reinicia temporizador y consume un reinicio
           lockDelayElapsedMs = 0;
           lockResetsUsed += 1;
 
-          // Verificar límite de reinicios
           if (lockResetsUsed >= config.maxLockResets) {
-            // Fijar inmediatamente (la pieza ya está en su nueva posición)
             lockAndProcess();
-            // Detener el paso (quien llama debe comprobar si activePiece es null)
             return true;
           }
         } else {
-          // Movimiento válido que deja la pieza en el aire: tiempo a 0, sin consumir reinicio
           lockDelayElapsedMs = 0;
         }
       }
-      // Si !groundedBefore, no hay interacción con lock delay (lockDelayElapsedMs ya es 0)
       return true;
     }
 
-    // Movimiento bloqueado: no muta nada
     return false;
   }
 
-  /**
-   * Activa una dirección horizontal como prioritaria:
-   * establece la prioridad, reinicia acumuladores e intenta un movimiento inmediato.
-   */
   function activateDirection(dir: 'left' | 'right'): void {
     horizontalState.priority = dir;
     horizontalState.accumulatorMs = 0;
     horizontalState.hasReachedDas = false;
-    // Movimiento inmediato
     tryMoveHorizontal(dir === 'left' ? -1 : 1);
-    // Si el movimiento consumió el último reinicio y fijó, detenemos la propagación
-    // — el resto del motor comprueba activePiece
   }
 
-  /**
-   * Limpia la prioridad horizontal y sus acumuladores.
-   */
   function clearPriority(): void {
     horizontalState.priority = null;
     horizontalState.accumulatorMs = 0;
     horizontalState.hasReachedDas = false;
   }
 
-  /**
-   * Comprueba si la pieza activa sigue existiendo tras una posible fijación
-   * por límite de reinicios. Si se fijó, detiene el procesamiento del paso.
-   */
   function continueIfActive(): boolean {
     return activePiece !== null && status !== 'gameOver';
   }
 
-  /**
-   * Resuelve la dirección horizontal efectiva del paso y ejecuta las acciones
-   * correspondientes (activación, DAS, ARR). Paso 6 del orden lógico.
-   */
   function processHorizontal(input: StepInput): void {
-    // Reglas 1-6 del §9.1 de la especificación
-
-    // 1. Flanco izquierdo
     if (input.leftPressed) {
       activateDirection('left');
       return;
     }
 
-    // 2. Flanco derecho
     if (input.rightPressed) {
       activateDirection('right');
       return;
     }
 
-    // 3. Prioridad izquierda pero left ya no está mantenida
     if (horizontalState.priority === 'left' && !input.leftHeld) {
       if (input.rightHeld) {
         activateDirection('right');
@@ -1058,7 +1040,6 @@ export function createGameEngine(
       return;
     }
 
-    // 4. Prioridad derecha pero right ya no está mantenida
     if (horizontalState.priority === 'right' && !input.rightHeld) {
       if (input.leftHeld) {
         activateDirection('left');
@@ -1068,7 +1049,6 @@ export function createGameEngine(
       return;
     }
 
-    // 5. Sin prioridad: evaluar estado mantenido
     if (horizontalState.priority === null) {
       if (input.leftHeld && !input.rightHeld) {
         activateDirection('left');
@@ -1078,12 +1058,9 @@ export function createGameEngine(
         activateDirection('right');
         return;
       }
-      // Ninguna mantenida, o ambas sin flanco: no hacer nada
       return;
     }
 
-    // 6. Continuar la secuencia DAS/ARR en curso
-    // (la prioridad actual sigue manteniéndose, sin flanco de cambio)
     if (horizontalState.priority !== null) {
       horizontalState.accumulatorMs += config.fixedStepMs;
 
@@ -1093,27 +1070,18 @@ export function createGameEngine(
         horizontalState.accumulatorMs -= config.dasMs;
         horizontalState.hasReachedDas = true;
         tryMoveHorizontal(dir);
-        // Si el movimiento fijó por límite de reinicios, no continuar con ARR
-        // (activePiece es null, el bucle while no se ejecuta)
       }
 
       if (horizontalState.hasReachedDas && activePiece) {
         while (horizontalState.accumulatorMs >= config.arrMs) {
           horizontalState.accumulatorMs -= config.arrMs;
           tryMoveHorizontal(dir);
-          if (!activePiece) break; // Fijado por límite de reinicios, detener
+          if (!activePiece) break;
         }
       }
     }
   }
 
-  /**
-   * Procesa el descenso vertical (gravedad o soft drop). Paso 9 del orden lógico.
-   * Un intento de descenso bloqueado ya no fija la pieza: consume la unidad de
-   * progreso y continúa, para que el lock delay posterior decida la fijación.
-   *
-   * Un descenso real invalida la candidatura de rotación.
-   */
   function processVertical(input: StepInput): void {
     if (!activePiece) return;
 
@@ -1124,126 +1092,94 @@ export function createGameEngine(
     verticalProgress += config.fixedStepMs * activeCellsPerSecond;
 
     while (verticalProgress >= VERTICAL_CELL_UNIT) {
-      if (!activePiece) break; // Seguridad por si se fijó en la iteración anterior
+      if (!activePiece) break;
       const nextY = activePiece.y + 1;
       const cells = computeAbsoluteCells(activePiece.type, activePiece.x, nextY, activePiece.orientation);
 
-      // Restar la unidad de progreso antes de comprobar colisión, para que
-      // incluso un intento bloqueado consuma la unidad (evita acumulación infinita)
       verticalProgress -= VERTICAL_CELL_UNIT;
 
       if (!isCollision(board, cells)) {
         activePiece.y = nextY;
         const reason = input.softDropHeld ? 'softDrop' : 'gravity';
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason });
-        // Puntuación por soft drop: 1 punto por celda realmente descendida
         if (reason === 'softDrop') {
           score += SOFT_DROP_POINTS_PER_CELL;
         }
-        // Descenso real: invalida la candidatura de rotación
         lastActionWasRotation = false;
       }
-      // Colisión: no fijar, no emitir evento. La unidad de progreso ya se consumió.
-      // El lock delay determinará la fijación al final del paso.
-      // La candidatura de rotación se conserva (no hubo movimiento real)
     }
   }
 
   function processStep(input: StepInput): void {
-    // 5. Reserva (hold) — procesar antes que cualquier otra acción
     if (input.hold === true && activePiece) {
       if (!holdUsed) {
-        // El hold se ejecuta: guardar la pieza saliente e intentar spawn de la entrante
         const outgoing = activePiece.type;
 
         if (heldPiece === null) {
-          // Ranura vacía: extraer de nextPieces y reponer cola
           const incoming = nextPiecesQueue.shift()!;
           nextPiecesQueue.push(nextFromBag(bagState, prng));
           heldPiece = outgoing;
           eventQueue.push({ type: 'pieceHeld', step: currentStep, piece: outgoing });
           attemptIncomingSpawn(incoming);
         } else {
-          // Ranura ocupada: intercambiar sin tocar nextPieces ni la bolsa
           const incoming = heldPiece;
           heldPiece = outgoing;
           eventQueue.push({ type: 'pieceHeld', step: currentStep, piece: outgoing });
           attemptIncomingSpawn(incoming);
         }
-        return; // Hold ejecutado: termina el paso inmediatamente
+        return;
       }
-      // holdUsed === true: ignorar la solicitud de hold, continuar con el resto del paso
     }
 
-    // 6. Movimiento horizontal
     processHorizontal(input);
     if (!continueIfActive()) return;
 
-    // 7. Rotación
     if (activePiece) {
       const rotateCW = input.rotateClockwise === true;
       const rotateCCW = input.rotateCounterclockwise === true;
 
       if (rotateCW || rotateCCW) {
-        // Evaluar apoyo antes de la rotación
         const groundedBefore = isGrounded(board, activePiece);
 
         const rotated = tryRotate(board, activePiece, rotateCW);
         if (rotated) {
           eventQueue.push({ type: 'pieceRotated', step: currentStep, orientation: activePiece.orientation });
-
-          // Rotación válida: establecer la candidatura de rotación
           lastActionWasRotation = true;
 
-          // Evaluar reinicio de lock delay tras la rotación
           if (groundedBefore) {
             const groundedAfter = isGrounded(board, activePiece);
             if (groundedAfter) {
-              // Reinicia temporizador y consume un reinicio
               lockDelayElapsedMs = 0;
               lockResetsUsed += 1;
 
-              // Verificar límite de reinicios
               if (lockResetsUsed >= config.maxLockResets) {
-                // Fijar inmediatamente (la pieza ya está en su nueva posición/orientación)
                 lockAndProcess();
-                return; // Detener el paso
+                return;
               }
             } else {
-              // Rotación que deja la pieza en el aire: tiempo a 0, sin consumir reinicio
               lockDelayElapsedMs = 0;
             }
           }
-          // Si !groundedBefore, no hay interacción con lock delay
         }
-        // Rotación inválida: no muta nada, no interactúa con lock delay,
-        // no establece lastActionWasRotation a true ni destruye una candidatura válida previa
       }
     }
     if (!continueIfActive()) return;
 
-    // 8. Hard drop
     if (input.hardDrop && activePiece) {
       const distance = hardDropDistance(board, activePiece);
       if (distance >= 1) {
         activePiece.y += distance;
         eventQueue.push({ type: 'pieceMoved', step: currentStep, reason: 'hardDrop' });
         score += distance * HARD_DROP_POINTS_PER_CELL;
-        // Hard drop con distancia positiva: invalida la candidatura de rotación
         lastActionWasRotation = false;
       }
-      // Hard drop con distancia 0: conserva el valor de lastActionWasRotation
-      // Unificar con lockAndProcess() para que la puntuación
-      // por líneas/combo/t-spin/back-to-back tenga una única implementación
       lockAndProcess();
-      return; // Hard drop completa el procesamiento del paso
+      return;
     }
 
-    // 9. Gravedad o soft drop (solo si no hubo hard drop)
     processVertical(input);
     if (!continueIfActive()) return;
 
-    // 10. Detección final de apoyo y avance del lock delay
     if (activePiece) {
       const groundedAtEndOfStep = isGrounded(board, activePiece);
 
@@ -1251,13 +1187,11 @@ export function createGameEngine(
         lockDelayElapsedMs += config.fixedStepMs;
 
         if (lockDelayElapsedMs >= config.lockDelayMs) {
-          // Fijar por expiración del temporizador
           lockAndProcess();
           return;
         }
       } else {
         lockDelayElapsedMs = 0;
-        // lockResetsUsed se conserva (no se reinicia al salir del contacto)
       }
     }
   }
@@ -1268,7 +1202,6 @@ export function createGameEngine(
 
   return {
     step(input: StepInput): void {
-      // 1. Comprobar el estado del motor
       if (status === 'gameOver') {
         throw new EngineStepError(
           'ENGINE_NOT_RUNNING',
@@ -1276,14 +1209,15 @@ export function createGameEngine(
         );
       }
 
-      // 2. Validar la entrada
       validateInput(input);
 
-      // 3. Incrementar el contador de paso
       currentStep++;
-
-      // 4. Incrementar el tiempo lógico
       currentElapsedMs += config.fixedStepMs;
+
+      if (input.triggerSabotage === true && storedSabotages.length > 0) {
+        const sabotage = storedSabotages.shift()!;
+        eventQueue.push({ type: 'sabotageTriggered', step: currentStep, sabotage });
+      }
 
       processStep(input);
     },
@@ -1325,6 +1259,8 @@ export function createGameEngine(
         combo,
         backToBack,
         combatEnergy,
+        storedSabotages: Object.freeze([...storedSabotages]),
+        pendingGarbage,
       });
     },
 
@@ -1332,6 +1268,12 @@ export function createGameEngine(
       const events = eventQueue.slice();
       eventQueue.length = 0;
       return Object.freeze(events);
+    },
+
+    receiveSabotage(sabotage: SabotageType): void {
+      if (sabotage === 'residuos') {
+        pendingGarbage += 2;
+      }
     },
 
     reset(options: EngineOptions): void {
@@ -1358,6 +1300,8 @@ export function createGameEngine(
       lastActionWasRotation = false;
       backToBack = 0;
       combatEnergy = 0;
+      storedSabotages = [];
+      pendingGarbage = 0;
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 
@@ -1400,7 +1344,11 @@ function validateInput(input: unknown): asserts input is StepInput {
   const obj = input as Record<string, unknown>;
 
   // Comprobar propiedades desconocidas
-  const allowedKeys = ['leftHeld', 'rightHeld', 'leftPressed', 'rightPressed', 'softDropHeld', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise', 'hold'];
+  const allowedKeys = [
+    'leftHeld', 'rightHeld', 'leftPressed', 'rightPressed',
+    'softDropHeld', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise',
+    'hold', 'triggerSabotage',
+  ];
   for (const key of Object.keys(obj)) {
     if (!allowedKeys.includes(key)) {
       throw new EngineStepError(
@@ -1471,6 +1419,11 @@ function validateInput(input: unknown): asserts input is StepInput {
   // Comprobar hold si está presente
   if ('hold' in obj && typeof obj.hold !== 'boolean') {
     throw new EngineStepError('INVALID_GAME_INPUT', `hold must be boolean, got ${typeof obj.hold}`);
+  }
+
+  // Comprobar triggerSabotage si está presente
+  if ('triggerSabotage' in obj && typeof obj.triggerSabotage !== 'boolean') {
+    throw new EngineStepError('INVALID_GAME_INPUT', `triggerSabotage must be boolean, got ${typeof obj.triggerSabotage}`);
   }
 
   // pressed sin held

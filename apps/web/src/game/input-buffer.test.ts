@@ -10,12 +10,13 @@ function emptyKeys(): KeyState {
     justPressedZ: false,
     justPressedSpace: false,
     justPressedC: false,
+    justPressedA: false,
     softDropHeld: false,
   };
 }
 
 function noConsumed() {
-  return { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+  return { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
 }
 
 describe('buildStepInput — flanco horizontal único', () => {
@@ -47,7 +48,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('flanco se consume una sola vez (consumido=true no lo entrega)', () => {
     const keys = { ...emptyKeys(), horizontalPressed: 'left' as const, leftHeld: true };
-    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     const [input] = buildStepInput(keys, consumed);
     expect(input.leftPressed).toBe(false);
     expect(input.leftHeld).toBe(true);
@@ -55,7 +56,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('mantener izquierda produce leftHeld=true sin flanco si consumed=true', () => {
     const keys = { ...emptyKeys(), horizontalPressed: null, leftHeld: true };
-    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     const [input] = buildStepInput(keys, consumed);
     expect(input.leftHeld).toBe(true);
     expect(input.leftPressed).toBe(false);
@@ -63,7 +64,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('mantener derecha produce rightHeld=true sin flanco si consumed=true', () => {
     const keys = { ...emptyKeys(), horizontalPressed: null, rightHeld: true };
-    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false };
+    const consumed = { horizontal: true, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     const [input] = buildStepInput(keys, consumed);
     expect(input.rightHeld).toBe(true);
     expect(input.rightPressed).toBe(false);
@@ -91,7 +92,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
   it('soft drop mantenido no se consume (no tiene consumed)', () => {
     const keys = { ...emptyKeys(), softDropHeld: true };
-    const [input] = buildStepInput(keys, { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true });
+    const [input] = buildStepInput(keys, { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true, triggerSabotage: true });
     expect(input.softDropHeld).toBe(true);
   });
 
@@ -135,7 +136,7 @@ describe('buildStepInput — flanco horizontal único', () => {
 
     it('se consume una sola vez (consumido=true no lo entrega)', () => {
       const keys = { ...emptyKeys(), justPressedC: true };
-      const consumed = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: true };
+      const consumed = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: true, triggerSabotage: false };
       const [input] = buildStepInput(keys, consumed);
       expect(input.hold).toBeUndefined();
     });
@@ -149,6 +150,27 @@ describe('buildStepInput — flanco horizontal único', () => {
     });
   });
 
+  describe('triggerSabotage (A)', () => {
+    it('justPressedA produce triggerSabotage: true una sola vez', () => {
+      const keys = { ...emptyKeys(), justPressedA: true };
+      const [input] = buildStepInput(keys, noConsumed());
+      expect(input.triggerSabotage).toBe(true);
+    });
+
+    it('sin flanco produce triggerSabotage ausente (undefined)', () => {
+      const keys = { ...emptyKeys(), justPressedA: false };
+      const [input] = buildStepInput(keys, noConsumed());
+      expect(input.triggerSabotage).toBeUndefined();
+    });
+
+    it('se consume una sola vez (consumido=true no lo entrega)', () => {
+      const keys = { ...emptyKeys(), justPressedA: true };
+      const consumed = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: true };
+      const [input] = buildStepInput(keys, consumed);
+      expect(input.triggerSabotage).toBeUndefined();
+    });
+  });
+
   it('acciones no repetidas en pasos adicionales del mismo frame (todo consumido)', () => {
     const keys = {
       ...emptyKeys(),
@@ -158,7 +180,7 @@ describe('buildStepInput — flanco horizontal único', () => {
       justPressedSpace: false,
       softDropHeld: true,
     };
-    const consumed = { horizontal: true, clockwise: true, counterclockwise: false, hardDrop: true, hold: true };
+    const consumed = { horizontal: true, clockwise: true, counterclockwise: false, hardDrop: true, hold: true, triggerSabotage: true };
     const [input] = buildStepInput(keys, consumed);
     expect(input.leftPressed).toBe(false);
     expect(input.leftHeld).toBe(true);

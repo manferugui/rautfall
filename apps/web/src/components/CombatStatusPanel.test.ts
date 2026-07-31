@@ -9,11 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import CombatStatusPanel from './CombatStatusPanel.vue';
-import {
-  SIMULATED_ENERGY_SEGMENTS,
-  SIMULATED_CARTRIDGE_LABEL,
-  SIMULATED_RESIDUES_COUNT,
-} from '../presentation/simulated-tactical-data';
+import { SIMULATED_ENERGY_SEGMENTS } from '../presentation/simulated-tactical-data';
 
 describe('CombatStatusPanel.vue', () => {
   it('renderiza los tres bloques con sus data-testid', () => {
@@ -29,24 +25,27 @@ describe('CombatStatusPanel.vue', () => {
     const moduleBadge = wrapper.find('.module-badge');
     expect(moduleBadge.exists()).toBe(true);
     expect(moduleBadge.text()).toBe('PROTOTIPO');
-    // El badge general no debe contarse como uno de los tres badges SIMULADO por bloque
-    expect(wrapper.findAll('.simulated-badge')).toHaveLength(3);
+    // En la tarea 0016, solo el bloque de energía conserva el badge SIMULADO (cuando combatEnergy < 100)
+    expect(wrapper.findAll('.simulated-badge')).toHaveLength(1);
     wrapper.unmount();
   });
 
-  it('cada bloque muestra su badge SIMULADO', () => {
+  it('los bloques de cartucho y residuos no muestran badge SIMULADO', () => {
     const wrapper = mount(CombatStatusPanel);
-    const badges = wrapper.findAll('.simulated-badge');
-    expect(badges.length).toBe(3);
-    for (const badge of badges) {
-      expect(badge.text()).toBe('SIMULADO');
-    }
+    const cartridgeBlock = wrapper.find('[data-testid="simulated-cartridge"]');
+    const residuesBlock = wrapper.find('[data-testid="simulated-residues"]');
+    expect(cartridgeBlock.find('.simulated-badge').exists()).toBe(false);
+    expect(residuesBlock.find('.simulated-badge').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it('los valores mostrados coinciden con las constantes simuladas y la prop combatEnergy', () => {
+  it('los valores mostrados coinciden con las props reales de energía, cartucho y residuos', () => {
     const wrapper = mount(CombatStatusPanel, {
-      props: { combatEnergy: 50 },
+      props: {
+        combatEnergy: 50,
+        storedSabotages: ['residuos'],
+        pendingGarbage: 2,
+      },
     });
 
     // Energía: segmentos activos con 50 puntos = 10 de 20
@@ -55,12 +54,20 @@ describe('CombatStatusPanel.vue', () => {
     const activeSegments = energySegments.filter((s) => s.classes().includes('active'));
     expect(activeSegments.length).toBe(10);
 
-    // Cartucho
-    expect(wrapper.text()).toContain(SIMULATED_CARTRIDGE_LABEL);
+    // Cartucho real
+    expect(wrapper.find('[data-testid="cartridge-text"]').text()).toBe('residuos');
 
-    // Residuos
-    expect(wrapper.text()).toContain(`Residuos: ${SIMULATED_RESIDUES_COUNT}`);
+    // Residuos reales
+    expect(wrapper.find('[data-testid="residues-count"]').text()).toBe('Residuos: 2');
 
+    wrapper.unmount();
+  });
+
+  it('cartucho vacío muestra VACÍO', () => {
+    const wrapper = mount(CombatStatusPanel, {
+      props: { storedSabotages: [] },
+    });
+    expect(wrapper.find('[data-testid="cartridge-text"]').text()).toBe('VACÍO');
     wrapper.unmount();
   });
 

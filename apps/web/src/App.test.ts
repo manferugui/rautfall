@@ -68,6 +68,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
+      storedSabotages: [],
+      pendingGarbage: 0,
     };
     stateUpdateCallback(pausedState);
     await wrapper.vm.$nextTick();
@@ -111,6 +113,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
+      storedSabotages: [],
+      pendingGarbage: 0,
     };
     stateUpdateCallback(gameOverState);
     await wrapper.vm.$nextTick();
@@ -133,12 +137,12 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en paused
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0 });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
     // Verificar en gameOver
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
     await wrapper.vm.$nextTick();
     expect(resetButton.attributes('disabled')).toBeUndefined();
 
@@ -163,7 +167,7 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
     // gameOver — sin overlay
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.pause-overlay').exists()).toBe(false);
 
@@ -184,6 +188,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       combo: 1,
       backToBack: 0,
       combatEnergy: 0,
+      storedSabotages: [],
+      pendingGarbage: 0,
     };
     stateUpdateCallback(state);
     await wrapper.vm.$nextTick();
@@ -210,6 +216,8 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
       combo: 3,
       backToBack: 2,
       combatEnergy: 25,
+      storedSabotages: [],
+      pendingGarbage: 0,
     };
     stateUpdateCallback(state);
     await wrapper.vm.$nextTick();
@@ -299,11 +307,11 @@ describe('App.vue — pausa, reanudación y reinicio', () => {
 
     expect(wrapper.find('.board-bezel--running').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0 });
+    stateUpdateCallback({ status: 'paused', step: 50, elapsedMs: 2500, nextPieces: ['S', 'Z', 'J'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--paused').exists()).toBe(true);
 
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0 });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.board-bezel--gameOver').exists()).toBe(true);
 

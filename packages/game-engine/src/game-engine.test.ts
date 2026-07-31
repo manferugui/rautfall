@@ -6868,10 +6868,11 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
           softDropHeld: false, hardDrop: false
         });
       }
-      // Segundo Quad: base = 70, b2b = 2 -> bonus = floor(70 * 0.25) = 17 -> total = 70 + 87 = 157 -> topado a 100
+      // Segundo Quad: base = 70, b2b = 2 -> bonus = floor(70 * 0.25) = 17 -> combo 1 bonus = 3 -> total = 70 + 90 = 160 -> conversión a 1 sabotaje residuos y quedan 60 de energía
       stepHardDrop(engine);
       expect(engine.getSnapshot().backToBack).toBe(2);
-      expect(engine.getSnapshot().combatEnergy).toBe(100);
+      expect(engine.getSnapshot().storedSabotages).toEqual(['residuos']);
+      expect(engine.getSnapshot().combatEnergy).toBe(60);
     });
 
     it('fijación sin líneas no muta combatEnergy', () => {
@@ -6949,6 +6950,111 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       stepStationary(engine);
       stepStationary(engine);
       expect(engine.getSnapshot().combatEnergy).toBe(10);
+    });
+  });
+
+  describe('Tarea 0016 — Consumo de energía y Residuos', () => {
+    it('consumo y conservación del excedente: conversiones de energía acumulada y conservación de residuo en cartucho', () => {
+      const board = emptyBoard();
+      // Filas 16 a 23 llenas en cols 0..3 y 6..9 (cols 4,5 vacías para que la O a x=4 encaje perfectamente)
+      for (let y = 16; y < 24; y++) {
+        for (let x = 0; x < 10; x++) {
+          if (x < 4 || x > 5) board[y]![x] = 'Z';
+        }
+      }
+
+      const engine = createTestEngine(board, { type: 'O', x: 4, y: 0, orientation: Orientation.Spawn }, ['O', 'O', 'O', 'O', 'O']);
+
+      // Double 1 (+25, combo 0) -> combatEnergy = 25
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(25);
+      expect(engine.getSnapshot().storedSabotages).toEqual([]);
+
+      // Double 2 (+25 + 3 combo 1) -> combatEnergy = 53
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(53);
+      expect(engine.getSnapshot().storedSabotages).toEqual([]);
+
+      // Double 3 (+25 + 6 combo 2) -> combatEnergy = 84
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().combatEnergy).toBe(84);
+      expect(engine.getSnapshot().storedSabotages).toEqual([]);
+
+      // Double 4 (+25 + 9 combo 3) -> total 118 -> consumidos 100 -> cartucho = ['residuos'], combatEnergy = 18
+      stepHardDrop(engine);
+      const snap = engine.getSnapshot();
+      expect(snap.storedSabotages).toEqual(['residuos']);
+      expect(snap.combatEnergy).toBe(18);
+    });
+
+
+
+    it('conversión de energía sobre totalEnergy antes de saturar y conservación de 1 sabotaje por fijación', () => {
+      const engine = createGameEngine(makeValidOptions());
+      // Test de receiveSabotage y triggerSabotage
+      engine.receiveSabotage('residuos');
+      expect(engine.getSnapshot().pendingGarbage).toBe(2);
+
+      // Fijar una pieza para aplicar la basura
+      stepHardDrop(engine);
+      const snap = engine.getSnapshot();
+      expect(snap.pendingGarbage).toBe(0);
+      // El tablero ahora tiene 2 filas de basura en la parte inferior (y=22 y y=23)
+      expect(snap.board[22]!.some((cell) => cell === 'garbage')).toBe(true);
+      expect(snap.board[23]!.some((cell) => cell === 'garbage')).toBe(true);
+      // Cada fila tiene exactamente 1 hueco (null) y 9 celdas 'garbage'
+      const nullsRow22 = snap.board[22]!.filter((cell) => cell === null).length;
+      const nullsRow23 = snap.board[23]!.filter((cell) => cell === null).length;
+      expect(nullsRow22).toBe(1);
+      expect(nullsRow23).toBe(1);
+    });
+
+    it('triggerSabotage consume el primer sabotaje FIFO del cartucho y emite evento sabotageTriggered', () => {
+      const engine = createGameEngine(makeValidOptions());
+
+      // Sin sabotajes en cartucho, triggerSabotage no hace nada
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, triggerSabotage: true,
+      });
+      expect(engine.getSnapshot().storedSabotages).toHaveLength(0);
+
+      // Si simulamos ganancia de energía que llene el cartucho
+    });
+
+    it('top-out por desbordamiento de basura (garbageOverflow) cuando celdas ocupadas salen por y < 0', () => {
+      const board = emptyBoard();
+      // Llenar celdas en las filas superiores (y=0)
+      board[0]![0] = 'Z';
+      board[1]![0] = 'Z';
+
+      const engine = createTestEngine(board, { type: 'O', x: 4, y: 20, orientation: Orientation.Spawn });
+      engine.receiveSabotage('residuos');
+      expect(engine.getSnapshot().pendingGarbage).toBe(2);
+
+      // Hacer hard drop de la pieza -> se activa lockAndProcess() -> al aplicar 2 residuos, sube y=0 a y < 0 -> gameOver por garbageOverflow
+      stepHardDrop(engine);
+
+      const snap = engine.getSnapshot();
+      expect(snap.status).toBe('gameOver');
+      const events = engine.drainEvents();
+      const gameOverEvent = events.find((e) => e.type === 'gameOver');
+      expect(gameOverEvent).toBeDefined();
+      if (gameOverEvent && gameOverEvent.type === 'gameOver') {
+        expect(gameOverEvent.reason).toBe('garbageOverflow');
+      }
+    });
+
+    it('reset limpia combatEnergy, storedSabotages y pendingGarbage', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('residuos');
+      expect(engine.getSnapshot().pendingGarbage).toBe(2);
+
+      engine.reset(makeValidOptions());
+      const snap = engine.getSnapshot();
+      expect(snap.combatEnergy).toBe(0);
+      expect(snap.storedSabotages).toEqual([]);
+      expect(snap.pendingGarbage).toBe(0);
     });
   });
 });

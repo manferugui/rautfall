@@ -390,6 +390,32 @@ Ver [Informe de implementación](implementation/0014-t-spins-back-to-back.md).
 
 Ver [Informe de implementación](implementation/0015-energia-de-combate.md).
 
+## Task [0016 — Consumo de energía y Residuos](tasks/0016-consumo-energia-y-residuos.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-31 |
+| **Resultado** | 480 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- `EngineSnapshot` expone `storedSabotages: readonly SabotageType[]` y `pendingGarbage: number`.
+- `GamePresentationState` expone `storedSabotages` y `pendingGarbage`.
+- Conversión atómica de energía en `lockAndProcess()`: si `storedSabotages.length < 2` y `totalEnergy >= 100`, se almacena `'residuos'` y la energía restante es `Math.min(100, totalEnergy - 100)`. Excedente descartado si el cartucho está lleno (2/2). Máximo 1 conversión por fijación.
+- Cartucho FIFO capacidad 2. Tecla `A` (`JustDown`) mapeada a `StepInput.triggerSabotage` que extrae el primer sabotaje y emite evento `sabotageTriggered`.
+- `receiveSabotage('residuos')` encola +2 filas de basura pendiente (`pendingGarbage`) sin alterar el tablero activo inmediatamente.
+- Aplicación determinista en `lockAndProcess()` tras clear del jugador y antes de spawn: desplaza tablero arriba, inserta celdas `'garbage'` con 1 hueco independiente por fila (`Math.floor(prng() * 10)`), decrementa `pendingGarbage` y emite `garbageApplied`.
+- Condición `garbageOverflow`: si la basura desplaza celdas ocupadas por encima de $y < 0$, se produce `gameOver` inmediato.
+- Integración en `CombatStatusPanel.vue` (cartucho real y residuos reales encolados, eliminación de badges `SIMULADO` en cartucho y residuos).
+- Modo demo `?sabotage-demo=1` en bucle cerrado para desarrollo (dev-only).
+- 9 pruebas de motor para la Tarea 0016 + pruebas en `input-buffer`, `types`, `CombatStatusPanel` y `App`.
+- Sin cambios en `packages/game-config`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0016-consumo-energia-y-residuos.md).
+
 ## Siguiente tarea
 
-- **0016 — Consumo de energía y sabotajes funcionales**: Mecanismo de descarga de la barra de energía, cola de sabotajes con bolsa equilibrada y efectos sobre el tablero/partida.
+- **0017 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate o segundo tablero según la hoja de ruta en `docs/rautfall.md`.
