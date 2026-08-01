@@ -63,7 +63,16 @@ const activeEffectsDisplay = computed(() => {
     return 'NINGUNO';
   }
   return props.activeEffects
-    .map((e) => `${e.type.toUpperCase()} ${Math.ceil(e.remainingMs / 1000)}s`)
+    .map((e) => {
+      if (e.type === 'sobrecarga') {
+        return `SOBRECARGA ${Math.ceil(e.remainingMs / 1000)}s`;
+      }
+      if (e.type === 'polaridad') {
+        const pText = e.remainingPieces === 1 ? 'PIEZA' : 'PIEZAS';
+        return `POLARIDAD · ${e.remainingPieces} ${pText}`;
+      }
+      return (e as ActiveEffectSnapshot).type.toUpperCase();
+    })
     .join(', ');
 });
 </script>

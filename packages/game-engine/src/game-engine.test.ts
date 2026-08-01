@@ -6892,7 +6892,7 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       stepHardDrop(engine);
       expect(engine.getSnapshot().backToBack).toBe(2);
       expect(engine.getSnapshot().storedSabotages).toHaveLength(1);
-      expect(['residuos', 'sobrecarga']).toContain(engine.getSnapshot().storedSabotages[0]);
+      expect(['residuos', 'sobrecarga', 'polaridad']).toContain(engine.getSnapshot().storedSabotages[0]);
       expect(engine.getSnapshot().combatEnergy).toBe(60);
     });
 
@@ -7005,7 +7005,7 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       stepHardDrop(engine);
       const snap = engine.getSnapshot();
       expect(snap.storedSabotages).toHaveLength(1);
-      expect(['residuos', 'sobrecarga']).toContain(snap.storedSabotages[0]);
+      expect(['residuos', 'sobrecarga', 'polaridad']).toContain(snap.storedSabotages[0]);
       expect(snap.combatEnergy).toBe(18);
     });
 
@@ -7126,8 +7126,9 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
 
       const sabotages = engine.getSnapshot().storedSabotages;
       expect(sabotages).toHaveLength(2);
-      expect(sabotages).toContain('residuos');
-      expect(sabotages).toContain('sobrecarga');
+      expect(['residuos', 'sobrecarga', 'polaridad']).toContain(sabotages[0]);
+      expect(['residuos', 'sobrecarga', 'polaridad']).toContain(sabotages[1]);
+      expect(sabotages[0]).not.toBe(sabotages[1]);
     });
 
     it('recepción y activación inmediata de Sobrecarga añade el efecto a activeEffects y emite effectStarted', () => {
@@ -7143,8 +7144,7 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       const events = engine.drainEvents();
       const startedEvent = events.find((e) => e.type === 'effectStarted');
       expect(startedEvent).toBeDefined();
-      if (startedEvent && startedEvent.type === 'effectStarted') {
-        expect(startedEvent.effect).toBe('sobrecarga');
+      if (startedEvent && startedEvent.type === 'effectStarted' && startedEvent.effect === 'sobrecarga') {
         expect(startedEvent.durationMs).toBe(10000);
       }
     });
@@ -7157,12 +7157,14 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       drainAll(engine);
 
       stepStationary(engine);
-      expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9990);
+      const eff1 = engine.getSnapshot().activeEffects[0];
+      expect(eff1?.type === 'sobrecarga' ? eff1.remainingMs : null).toBe(9990);
 
       for (let i = 0; i < 99; i++) {
         stepStationary(engine);
       }
-      expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9000);
+      const eff2 = engine.getSnapshot().activeEffects[0];
+      expect(eff2?.type === 'sobrecarga' ? eff2.remainingMs : null).toBe(9000);
     });
 
     it('expiración única de Sobrecarga tras 10.000 ms emite effectExpired y limpia activeEffects', () => {
@@ -7201,13 +7203,15 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       for (let i = 0; i < 30; i++) {
         stepStationary(engine);
       }
-      expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9700);
+      const eff3 = engine.getSnapshot().activeEffects[0];
+      expect(eff3?.type === 'sobrecarga' ? eff3.remainingMs : null).toBe(9700);
 
       // Recibir Sobrecarga de nuevo
       engine.receiveSabotage('sobrecarga');
       const snap = engine.getSnapshot();
       expect(snap.activeEffects).toHaveLength(1);
-      expect(snap.activeEffects[0]?.remainingMs).toBe(10000);
+      const eff4 = snap.activeEffects[0];
+      expect(eff4?.type === 'sobrecarga' ? eff4.remainingMs : null).toBe(10000);
 
       const events = engine.drainEvents();
       const startedEvents = events.filter((e) => e.type === 'effectStarted');
@@ -7574,6 +7578,320 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       expect(snap2.level).toBe(2);
       expect(snap2.baseGravityCellsPerSecond).toBe(1.25);
       expect(snap2.activeGravityCellsPerSecond).toBe(1.25);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  TAREA 0019 — SABOTAJE POLARIDAD INVERSA
+  // ════════════════════════════════════════════════════════════════════════
+
+  describe('Tarea 0019 — Sabotaje Polaridad inversa', () => {
+    it('activación inicial expone exactamente { type: "polaridad", remainingPieces: 1 } y emite durationPieces: 1', () => {
+      const engine = createGameEngine(makeValidOptions());
+      drainAll(engine);
+
+      engine.receiveSabotage('polaridad');
+      const snap = engine.getSnapshot();
+      const events = engine.drainEvents();
+
+      expect(snap.activeEffects).toHaveLength(1);
+      expect(snap.activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+
+      const effectEvents = events.filter((e) => e.type === 'effectStarted');
+      expect(effectEvents).toHaveLength(1);
+      expect(effectEvents[0]).toEqual({
+        type: 'effectStarted',
+        step: 0,
+        effect: 'polaridad',
+        durationPieces: 1,
+      });
+    });
+
+    it('renovación expone exactamente remainingPieces: 2 y emite durationPieces: 2', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      drainAll(engine);
+
+      engine.receiveSabotage('polaridad');
+      const snap = engine.getSnapshot();
+      const events = engine.drainEvents();
+
+      expect(snap.activeEffects).toHaveLength(1);
+      expect(snap.activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 2 });
+
+      const effectEvents = events.filter((e) => e.type === 'effectStarted');
+      expect(effectEvents).toHaveLength(1);
+      expect(effectEvents[0]).toEqual({
+        type: 'effectStarted',
+        step: 0,
+        effect: 'polaridad',
+        durationPieces: 2,
+      });
+    });
+
+    it('tercera recepción mantiene remainingPieces: 2 y re-emite durationPieces: 2 sin apilar efectos', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      engine.receiveSabotage('polaridad');
+      drainAll(engine);
+
+      engine.receiveSabotage('polaridad');
+      const snap = engine.getSnapshot();
+      const events = engine.drainEvents();
+
+      expect(snap.activeEffects).toHaveLength(1);
+      expect(snap.activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 2 });
+
+      const effectEvents = events.filter((e) => e.type === 'effectStarted');
+      expect(effectEvents).toHaveLength(1);
+      expect(effectEvents[0]).toEqual({
+        type: 'effectStarted',
+        step: 0,
+        effect: 'polaridad',
+        durationPieces: 2,
+      });
+    });
+
+    it('aplica una sola inversión independientemente de si el contador es 1 o 2 (no hay inversión doble)', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      engine.receiveSabotage('polaridad'); // remainingPieces = 2
+
+      const x0 = engine.getSnapshot().activePiece!.x;
+      // Pulsar física izquierda -> se transforma en derecha (+1)
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+
+      expect(engine.getSnapshot().activePiece!.x).toBe(x0 + 1);
+    });
+
+    it('inversión de flancos y estados mantenidos horizontales (izquierda ↔ derecha)', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+
+      const x0 = engine.getSnapshot().activePiece!.x;
+
+      // Pulsar física derecha -> se transforma en izquierda (-1)
+      engine.step({
+        leftHeld: false, rightHeld: true, leftPressed: false, rightPressed: true,
+        softDropHeld: false, hardDrop: false,
+      });
+      expect(engine.getSnapshot().activePiece!.x).toBe(x0 - 1);
+
+      // Pulsar física izquierda -> se transforma en derecha (+1)
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+      expect(engine.getSnapshot().activePiece!.x).toBe(x0);
+    });
+
+    it('DAS y ARR procesan la dirección efectiva invertida', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+
+      const x0 = engine.getSnapshot().activePiece!.x;
+
+      // Mantener físicamente izquierda (leftHeld: true)
+      // Frame 1: flanco izquierdo -> efectivo derecho (+1)
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+      expect(engine.getSnapshot().activePiece!.x).toBe(x0 + 1);
+
+      // Avanzar 15 pasos mantenidos (DAS es 150 ms = 15 pasos de 10 ms)
+      for (let i = 0; i < 15; i++) {
+        engine.step({
+          leftHeld: true, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+        });
+      }
+
+      // En el paso 15 del DAS (paso 15 desde inicio de mantención), auto-shift a la derecha (+1)
+      expect(engine.getSnapshot().activePiece!.x).toBe(x0 + 2);
+    });
+
+    it('giro horario se transforma en antihorario y viceversa', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+
+      // Pieza inicial en Orientation.Spawn (0)
+      expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Spawn);
+
+      // Pulsar rotateClockwise: true -> se transforma en CCW -> Orientation.Left (3)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true,
+      });
+      expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Left);
+
+      // Pulsar rotateCounterclockwise: true -> se transforma en CW -> Orientation.Spawn (0)
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateCounterclockwise: true,
+      });
+      expect(engine.getSnapshot().activePiece!.orientation).toBe(Orientation.Spawn);
+    });
+
+    it('soft drop, hard drop y hold permanecen inalterados y no se invierten', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+
+      const y0 = engine.getSnapshot().activePiece!.y;
+
+      // Soft drop avanza verticalmente hacia abajo (+y) tras 5 pasos (50 ms * 20 c/s = 1 celda = 1000 unidades)
+      for (let i = 0; i < 5; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+      expect(engine.getSnapshot().activePiece!.y).toBeGreaterThan(y0);
+
+      // Hold funciona normalmente
+      const activeBeforeHold = engine.getSnapshot().activePiece!.type;
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, hold: true,
+      });
+      expect(engine.getSnapshot().heldPiece).toBe(activeBeforeHold);
+    });
+
+    it('hold no reduce ni consume remainingPieces', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, hold: true,
+      });
+
+      // La Polaridad sigue activa en la nueva pieza tras el hold con remainingPieces: 1
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+    });
+
+    it('primera fijación reduce remainingPieces de 2 a 1 sin emitir effectExpired', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      engine.receiveSabotage('polaridad');
+      drainAll(engine);
+
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 2 });
+
+      // Fijar primera pieza
+      stepHardDrop(engine);
+      const events = engine.drainEvents();
+
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+      expect(events.filter((e) => e.type === 'effectExpired')).toHaveLength(0);
+    });
+
+    it('segunda fijación reduce a 0, elimina el efecto de activeEffects y emite un único effectExpired', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      engine.receiveSabotage('polaridad');
+
+      // Primera fijación
+      stepHardDrop(engine);
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+
+      // Segunda fijación
+      drainAll(engine);
+      stepHardDrop(engine);
+      const events = engine.drainEvents();
+
+      expect(engine.getSnapshot().activeEffects).toEqual([]);
+      const expiredEvents = events.filter((e) => e.type === 'effectExpired');
+      expect(expiredEvents).toHaveLength(1);
+      expect(expiredEvents[0]).toEqual({
+        type: 'effectExpired',
+        step: engine.getSnapshot().step,
+        effect: 'polaridad',
+      });
+    });
+
+    it('activación con 1 pieza expira tras su primera fijación y nunca expone remainingPieces: 0', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+
+      drainAll(engine);
+      stepHardDrop(engine);
+      const events = engine.drainEvents();
+
+      expect(engine.getSnapshot().activeEffects).toEqual([]);
+      expect(events.filter((e) => e.type === 'effectExpired')).toHaveLength(1);
+    });
+
+    it('entrada inválida lanza INVALID_GAME_INPUT antes de transformar y no muta step, pieza, efectos ni emite eventos', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      engine.drainEvents(); // limpiar eventos previos de activación
+
+      const snapBefore = engine.getSnapshot();
+
+      // Entrada inválida: leftPressed sin leftHeld (violación de contrato de entrada)
+      let thrownError: unknown = null;
+      try {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: true, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+        });
+      } catch (err) {
+        thrownError = err;
+      }
+
+      expect(thrownError).toBeInstanceOf(EngineStepError);
+      expect((thrownError as EngineStepError).code).toBe('INVALID_GAME_INPUT');
+
+      const snapAfter = engine.getSnapshot();
+      expect(snapAfter.step).toBe(snapBefore.step);
+      expect(snapAfter.activePiece).toEqual(snapBefore.activePiece);
+      expect(snapAfter.activeEffects).toEqual(snapBefore.activeEffects);
+      expect(engine.drainEvents()).toHaveLength(0);
+    });
+
+    it('pausa congela el contador de piezas y reset elimina Polaridad sin emitir effectExpired', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+      expect(engine.getSnapshot().activeEffects[0]).toEqual({ type: 'polaridad', remainingPieces: 1 });
+
+      // Reset elimina el efecto
+      engine.reset(makeValidOptions());
+      const events = engine.drainEvents();
+
+      expect(engine.getSnapshot().activeEffects).toEqual([]);
+      expect(events.filter((e) => e.type === 'effectExpired')).toHaveLength(0);
+    });
+
+    it('en gameOver, receiveSabotage("polaridad") se ignora y no muta snapshot ni eventos', () => {
+      const engine = createGameEngine(makeValidOptions());
+
+      // Forzar gameOver
+      while (engine.getSnapshot().status === 'running') {
+        try {
+          stepHardDrop(engine);
+        } catch {
+          break;
+        }
+      }
+      expect(engine.getSnapshot().status).toBe('gameOver');
+
+      const snapBefore = engine.getSnapshot();
+      drainAll(engine);
+
+      // Invocación en gameOver
+      engine.receiveSabotage('polaridad');
+
+      const snapAfter = engine.getSnapshot();
+      const events = engine.drainEvents();
+
+      expect(snapAfter).toEqual(snapBefore);
+      expect(events).toHaveLength(0);
     });
   });
 });

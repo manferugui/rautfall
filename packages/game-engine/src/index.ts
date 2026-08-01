@@ -4,14 +4,19 @@ import { type GameConfig, parseGameConfig } from '@rautfall/game-config';
 
 export type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
-export type SabotageType = 'residuos' | 'sobrecarga';
+export type SabotageType = 'residuos' | 'sobrecarga' | 'polaridad';
 
-export type ActiveEffectType = 'sobrecarga';
+export type ActiveEffectType = 'sobrecarga' | 'polaridad';
 
-export type ActiveEffectSnapshot = Readonly<{
-  type: ActiveEffectType;
-  remainingMs: number;
-}>;
+export type ActiveEffectSnapshot =
+  | Readonly<{
+      type: 'sobrecarga';
+      remainingMs: number;
+    }>
+  | Readonly<{
+      type: 'polaridad';
+      remainingPieces: 1 | 2;
+    }>;
 
 export type EngineStatus = 'running' | 'gameOver';
 
@@ -32,6 +37,26 @@ export enum Orientation {
   Left = 3,
 }
 
+export type EffectStartedEvent =
+  | Readonly<{
+      type: 'effectStarted';
+      step: number;
+      effect: 'sobrecarga';
+      durationMs: number;
+    }>
+  | Readonly<{
+      type: 'effectStarted';
+      step: number;
+      effect: 'polaridad';
+      durationPieces: 1 | 2;
+    }>;
+
+export type EffectExpiredEvent = Readonly<{
+  type: 'effectExpired';
+  step: number;
+  effect: ActiveEffectType;
+}>;
+
 export type GameEvent =
   | { type: 'engineStarted'; step: number }
   | { type: 'engineReset'; step: number }
@@ -49,8 +74,8 @@ export type GameEvent =
   | { type: 'pieceHeld'; step: number; piece: PieceType }
   | { type: 'sabotageTriggered'; step: number; sabotage: SabotageType }
   | { type: 'garbageApplied'; step: number; linesCount: number }
-  | { type: 'effectStarted'; step: number; effect: ActiveEffectType; durationMs: number }
-  | { type: 'effectExpired'; step: number; effect: ActiveEffectType }
+  | EffectStartedEvent
+  | EffectExpiredEvent
   | LevelUpEvent;
 
 export interface LevelUpEvent {
@@ -283,7 +308,7 @@ const BACK_TO_BACK_ENERGY_BONUS_RATIO = 0.25;
 
 const OVERLOAD_GRAVITY_MULTIPLIER = 3;
 const OVERLOAD_DURATION_MS = 10000;
-const ALL_SABOTAGES: readonly SabotageType[] = Object.freeze(['residuos', 'sobrecarga']);
+const ALL_SABOTAGES: readonly SabotageType[] = Object.freeze(['residuos', 'sobrecarga', 'polaridad']);
 
 const MAX_LEVEL = 10;
 const BASE_GRAVITY_TABLE: readonly number[] = [
@@ -774,9 +799,15 @@ export function createGameEngine(
     ? [...initialState.storedSabotages]
     : [];
   let pendingGarbage = initialState?.pendingGarbage ?? 0;
-  type ActiveEffectState = { type: ActiveEffectType; remainingMs: number };
+  type ActiveEffectState =
+    | { type: 'sobrecarga'; remainingMs: number }
+    | { type: 'polaridad'; remainingPieces: 1 | 2 };
   let activeEffects: ActiveEffectState[] = initialState?.activeEffects
-    ? initialState.activeEffects.map((e) => ({ ...e }))
+    ? initialState.activeEffects.map((e) =>
+        e.type === 'sobrecarga'
+          ? { type: 'sobrecarga', remainingMs: e.remainingMs }
+          : { type: 'polaridad', remainingPieces: e.remainingPieces },
+      )
     : [];
   const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
 
@@ -998,6 +1029,22 @@ export function createGameEngine(
         linesCount: linesToApply,
       });
     }
+
+      // 9.5. Decrementar duración de Polaridad si está activa
+      const polaridadIndex = activeEffects.findIndex((e) => e.type === 'polaridad');
+      if (polaridadIndex !== -1) {
+        const polaridadEffect = activeEffects[polaridadIndex] as { type: 'polaridad'; remainingPieces: 1 | 2 };
+        if (polaridadEffect.remainingPieces === 2) {
+          polaridadEffect.remainingPieces = 1;
+        } else {
+          activeEffects.splice(polaridadIndex, 1);
+          eventQueue.push({
+            type: 'effectExpired',
+            step: currentStep,
+            effect: 'polaridad',
+          });
+        }
+      }
 
     // 10. Spawn de la siguiente pieza
     spawnNextPiece();
@@ -1317,7 +1364,20 @@ export function createGameEngine(
       currentStep++;
       currentElapsedMs += config.fixedStepMs;
 
-      if (input.triggerSabotage === true && storedSabotages.length > 0) {
+      const hasPolaridad = activeEffects.some((e) => e.type === 'polaridad');
+      const effectiveInput: StepInput = hasPolaridad
+        ? {
+            ...input,
+            leftHeld: input.rightHeld,
+            rightHeld: input.leftHeld,
+            leftPressed: input.rightPressed,
+            rightPressed: input.leftPressed,
+            rotateClockwise: input.rotateCounterclockwise === true,
+            rotateCounterclockwise: input.rotateClockwise === true,
+          }
+        : input;
+
+      if (effectiveInput.triggerSabotage === true && storedSabotages.length > 0) {
         const sabotage = storedSabotages.shift()!;
         eventQueue.push({ type: 'sabotageTriggered', step: currentStep, sabotage });
       }
@@ -1325,20 +1385,24 @@ export function createGameEngine(
       // Actualizar temporizador de efectos activos (activeEffects)
       const nextActiveEffects: ActiveEffectState[] = [];
       for (const effect of activeEffects) {
-        effect.remainingMs = Math.max(0, effect.remainingMs - config.fixedStepMs);
-        if (effect.remainingMs === 0) {
-          eventQueue.push({
-            type: 'effectExpired',
-            step: currentStep,
-            effect: effect.type,
-          });
+        if (effect.type === 'sobrecarga') {
+          effect.remainingMs = Math.max(0, effect.remainingMs - config.fixedStepMs);
+          if (effect.remainingMs === 0) {
+            eventQueue.push({
+              type: 'effectExpired',
+              step: currentStep,
+              effect: 'sobrecarga',
+            });
+          } else {
+            nextActiveEffects.push(effect);
+          }
         } else {
           nextActiveEffects.push(effect);
         }
       }
       activeEffects = nextActiveEffects;
 
-      processStep(input);
+      processStep(effectiveInput);
     },
 
     getSnapshot(): EngineSnapshot {
@@ -1387,7 +1451,9 @@ export function createGameEngine(
         pendingGarbage,
         activeEffects: Object.freeze(
           activeEffects.map((e) =>
-            Object.freeze({ type: e.type, remainingMs: e.remainingMs }),
+            e.type === 'sobrecarga'
+              ? Object.freeze({ type: 'sobrecarga', remainingMs: e.remainingMs })
+              : Object.freeze({ type: 'polaridad', remainingPieces: e.remainingPieces }),
           ),
         ),
         level,
@@ -1403,10 +1469,14 @@ export function createGameEngine(
     },
 
     receiveSabotage(sabotage: SabotageType): void {
+      if (status === 'gameOver') return;
+
       if (sabotage === 'residuos') {
         pendingGarbage += 2;
       } else if (sabotage === 'sobrecarga') {
-        const existing = activeEffects.find((e) => e.type === 'sobrecarga');
+        const existing = activeEffects.find((e) => e.type === 'sobrecarga') as
+          | { type: 'sobrecarga'; remainingMs: number }
+          | undefined;
         if (existing) {
           existing.remainingMs = OVERLOAD_DURATION_MS;
           eventQueue.push({
@@ -1425,6 +1495,31 @@ export function createGameEngine(
             step: currentStep,
             effect: 'sobrecarga',
             durationMs: OVERLOAD_DURATION_MS,
+          });
+        }
+      } else if (sabotage === 'polaridad') {
+        const existing = activeEffects.find((e) => e.type === 'polaridad') as
+          | { type: 'polaridad'; remainingPieces: 1 | 2 }
+          | undefined;
+        if (existing) {
+          const newRemaining = Math.min(2, existing.remainingPieces + 1) as 1 | 2;
+          existing.remainingPieces = newRemaining;
+          eventQueue.push({
+            type: 'effectStarted',
+            step: currentStep,
+            effect: 'polaridad',
+            durationPieces: newRemaining,
+          });
+        } else {
+          activeEffects.push({
+            type: 'polaridad',
+            remainingPieces: 1,
+          });
+          eventQueue.push({
+            type: 'effectStarted',
+            step: currentStep,
+            effect: 'polaridad',
+            durationPieces: 1,
           });
         }
       }

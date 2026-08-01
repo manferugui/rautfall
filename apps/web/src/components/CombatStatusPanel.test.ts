@@ -146,4 +146,22 @@ describe('CombatStatusPanel.vue', () => {
     expect(wrapper.find('[data-testid="active-effects-text"]').text()).toBe('SOBRECARGA 10s');
     wrapper.unmount();
   });
+
+  it('renderiza POLARIDAD · 1 PIEZA y POLARIDAD · 2 PIEZAS según remainingPieces', () => {
+    const wrapper1 = mount(CombatStatusPanel, {
+      props: {
+        activeEffects: [{ type: 'polaridad', remainingPieces: 1 }],
+      },
+    });
+    expect(wrapper1.find('[data-testid="active-effects-text"]').text()).toBe('POLARIDAD · 1 PIEZA');
+    wrapper1.unmount();
+
+    const wrapper2 = mount(CombatStatusPanel, {
+      props: {
+        activeEffects: [{ type: 'polaridad', remainingPieces: 2 }],
+      },
+    });
+    expect(wrapper2.find('[data-testid="active-effects-text"]').text()).toBe('POLARIDAD · 2 PIEZAS');
+    wrapper2.unmount();
+  });
 });

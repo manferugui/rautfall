@@ -468,6 +468,32 @@ Ver [Informe de implementación](implementation/0017-bolsa-sabotajes-y-sobrecarg
 
 Ver [Informe de implementación](implementation/0018-progresion-determinista-de-nivel-y-gravedad.md).
 
+## Task [0019 — Sabotaje Polaridad inversa](tasks/0019-sabotaje-polaridad-inversa.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-08-01 |
+| **Resultado** | 554 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Inversión determinista de intenciones de movimiento horizontal (`leftHeld` $\leftrightarrow$ `rightHeld`, `leftPressed` $\leftrightarrow$ `rightPressed`) y rotación (`rotateClockwise` $\leftrightarrow$ `rotateCounterclockwise`) en `packages/game-engine`.
+- Los controles de Soft Drop, Hard Drop, Hold y activación de sabotajes (`triggerSabotage`) no sufren transformación alguna.
+- Bolsa determinista ampliada a 3 sabotajes (**Sabotage 3-Bag**) (`['residuos', 'sobrecarga', 'polaridad']`).
+- Duración por contador de piezas (`remainingPieces: 1 | 2`). Activación inicial con 1 pieza (`durationPieces: 1`), renovación hasta tope de 2 piezas (`durationPieces: 2`).
+- Las acciones de Hold no decrementan `remainingPieces`.
+- Al fijar una pieza en el tablero (`lockAndProcess`), `remainingPieces` decrementa en 1. Al alcanzar 0, el efecto es eliminado antes de tomar el snapshot y se emite un único `effectExpired`.
+- `ActiveEffectSnapshot` y `EffectStartedEvent` refactorizados como uniones discriminadas estrictas.
+- `receiveSabotage()` ignora llamadas en estado `gameOver` mediante guarda al inicio.
+- Presentación en `CombatStatusPanel.vue` (`POLARIDAD · 1 PIEZA` y `POLARIDAD · 2 PIEZAS`).
+- Modo demo de desarrollo `?polarity-demo=1` para validación manual en entorno DEV.
+- 16 pruebas deterministas de motor para la Tarea 0019 + 8 de `polarity-demo` + 2 de `CombatStatusPanel`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0019-sabotaje-polaridad-inversa.md).
+
 ## Siguiente tarea
 
-- **0019 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate (Polaridad Inversa o Muerte Súbita) según la hoja de ruta en `docs/rautfall.md`.
+- **0020 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate (Muerte Súbita o Bot IA) según la hoja de ruta en `docs/rautfall.md`.

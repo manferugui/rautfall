@@ -58,7 +58,8 @@ describe('getOverloadDemoState & createOverloadDemoEngine', () => {
         softDropHeld: false, hardDrop: false,
       });
     }
-    expect(engine.getSnapshot().activeEffects[0]?.remainingMs).toBe(9500);
+    const eff1 = engine.getSnapshot().activeEffects[0];
+    expect(eff1?.type === 'sobrecarga' ? eff1.remainingMs : undefined).toBe(9500);
 
     // Simular pulsación de A (triggerSabotage) que consume el sabotaje del cartucho
     engine.step({
@@ -69,7 +70,8 @@ describe('getOverloadDemoState & createOverloadDemoEngine', () => {
 
     const snap = engine.getSnapshot();
     expect(snap.activeEffects).toHaveLength(1);
-    expect(snap.activeEffects[0]?.remainingMs).toBe(10000);
+    const eff2 = snap.activeEffects[0];
+    expect(eff2?.type === 'sobrecarga' ? eff2.remainingMs : undefined).toBe(10000);
   });
 
   it('el paso de tiempo descuenta el temporizador y al expirar deja activeEffects en vacio', () => {
@@ -102,7 +104,8 @@ describe('getOverloadDemoState & createOverloadDemoEngine', () => {
 
     // Reset en modo demo recrea el estado limpio de la demo
     const resetEngine = createOverloadDemoEngine();
-    expect(resetEngine.getSnapshot().activeEffects[0]?.remainingMs).toBe(10000);
+    const eff3 = resetEngine.getSnapshot().activeEffects[0];
+    expect(eff3?.type === 'sobrecarga' ? eff3.remainingMs : undefined).toBe(10000);
   });
 
   it('sin el parámetro, el estado inicial normal no cambia (activeEffects vacio y cartucho vacio)', () => {

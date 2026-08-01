@@ -26,6 +26,7 @@ import { isTSpinDemoActive, createTSpinDemoEngine } from '../tspin-demo';
 import { isSabotageDemoActive, createSabotageDemoEngine } from '../sabotage-demo';
 import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo';
 import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
+import { isPolarityDemoActive, createPolarityDemoEngine } from '../polarity-demo';
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
@@ -370,7 +371,7 @@ export class GameScene extends Phaser.Scene {
     this.renderFrame();
     const frameEvents = this.engine.drainEvents();
     for (const event of frameEvents) {
-      if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive())) {
+      if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive() || isPolarityDemoActive())) {
         this.engine.receiveSabotage(event.sabotage);
       }
     }
@@ -443,6 +444,9 @@ export class GameScene extends Phaser.Scene {
     } else if (isGarbageDemoActive()) {
       // Escenario cerrado de desarrollo: demo de Residuos (Garbage Demo)
       this.engine = createGarbageDemoEngine();
+    } else if (isPolarityDemoActive()) {
+      // Escenario cerrado de desarrollo: demo de Polaridad inversa
+      this.engine = createPolarityDemoEngine();
     } else {
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
     }
@@ -618,9 +622,13 @@ export class GameScene extends Phaser.Scene {
       this.lastState.storedSabotages.every((s, i) => s === newState.storedSabotages[i]) &&
       this.lastState.pendingGarbage === newState.pendingGarbage &&
       this.lastState.activeEffects.length === newState.activeEffects.length &&
-      this.lastState.activeEffects.every(
-        (e, i) => e.type === newState.activeEffects[i]?.type && e.remainingMs === newState.activeEffects[i]?.remainingMs,
-      ) &&
+      this.lastState.activeEffects.every((e, i) => {
+        const n = newState.activeEffects[i];
+        if (!n || e.type !== n.type) return false;
+        if (e.type === 'sobrecarga' && n.type === 'sobrecarga') return e.remainingMs === n.remainingMs;
+        if (e.type === 'polaridad' && n.type === 'polaridad') return e.remainingPieces === n.remainingPieces;
+        return false;
+      }) &&
       this.lastState.level === newState.level &&
       this.lastState.baseGravityCellsPerSecond === newState.baseGravityCellsPerSecond &&
       this.lastState.activeGravityCellsPerSecond === newState.activeGravityCellsPerSecond
