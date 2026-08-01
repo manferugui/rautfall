@@ -517,6 +517,29 @@ Ver [Informe de implementación](implementation/0019-sabotaje-polaridad-inversa.
 
 Ver [Informe de implementación](implementation/0020-capa-de-batalla-local-determinista.md).
 
+## Task [0021 — Integración visual del segundo tablero real](tasks/0021-integracion-visual-segundo-tablero-real.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-08-01 |
+| **Resultado** | Integración visual del segundo tablero real (Player 2) en `OpponentMonitor.vue` consumiendo la instantánea `BattleSnapshot.playerTwo`. Renderizado de celdas 10×20 (fijas, basura, pieza activa y pieza fantasma con prioridad visual `activePiece` > `landingCells` > `board`), eliminación de la insignia `SIMULADO` únicamente en batalla real (`?battle-demo=1`), conservación del monitor simulado fuera de batalla, telemetría táctica real (nivel, energía, sabotajes, efectos, basura pendiente), velo de `PAUSA`, reset coordinado e indicadores de terminalidad (`DERROTA RIVAL`, `VICTORIA RIVAL`, `EMPATE`). 597 tests Vitest y 2 tests E2E Playwright en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Mapeador puro desacoplado `mapEngineToOpponentPresentation` en `apps/web/src/game/opponent-mapper.ts`.
+- Proyección de coordenadas 10×24 $\to$ 10×20 descartando filas ocultas ($y_{engine} < 4$), con prioridad estricta `activePiece` > `landingCells` (fantasma) > `board`.
+- `OpponentMonitor.vue` soporta modo real (detrás de `?battle-demo=1`) y modo simulado estático en el juego normal 1P.
+- Eliminación del distintivo `SIMULADO` únicamente durante batallas reales.
+- Telemetría táctica real de P2 (Nivel, Energía, Sabotajes almacenados, Efectos activos y Basura pendiente).
+- Velo sutil `PAUSA` en pausa, reinicio coordinado con `R` e indicadores terminales (`DERROTA RIVAL`, `VICTORIA RIVAL`, `EMPATE`).
+- Sin segundo canvas Phaser ni lógica de dominio en Vue.
+- 7 pruebas unitarias de mapeador, 10 pruebas de componente Vue y 1 test E2E Playwright en `?battle-demo=1`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0021-integracion-visual-segundo-tablero-real.md).
+
 ## Siguiente tarea
 
-- **0021 — Integración visual del rival y Bot IA**: Integrar la representación real del segundo tablero en `OpponentMonitor.vue` y añadir el bot heurístico según `docs/rautfall.md`.
+- **0022 — Bot IA heurístico para el rival**: Diseñar e implementar el rival controlado por IA heurística según `docs/rautfall.md`.

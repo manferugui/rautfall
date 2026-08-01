@@ -2,16 +2,30 @@ import type { ActiveEffectSnapshot, PieceType, SabotageType } from '@rautfall/ga
 import type { BattleStatus, BattleWinner } from '@rautfall/battle-engine';
 import type { SessionStatus } from './session-status';
 
+export type CellPresentation = Readonly<{
+  x: number;
+  y: number;
+  type: PieceType | 'garbage';
+  appearance: 'fixed' | 'active' | 'ghost';
+  color: string;
+}>;
+
+export type OpponentPresentationState = Readonly<{
+  status: 'running' | 'gameOver';
+  level: number;
+  combatEnergy: number;
+  storedSabotages: readonly SabotageType[];
+  activeEffects: readonly ActiveEffectSnapshot[];
+  pendingGarbage: number;
+  visibleCells: readonly CellPresentation[];
+}>;
+
 export type BattlePresentationState = Readonly<{
   status: BattleStatus;
   winner: BattleWinner;
   step: number;
-  playerTwoStatus: string;
-  playerTwoLevel: number;
-  playerTwoCombatEnergy: number;
-  playerTwoStoredSabotages: readonly SabotageType[];
-  playerTwoActiveEffects: readonly ActiveEffectSnapshot[];
   lastSabotageRouted: string | null;
+  playerTwo: OpponentPresentationState;
 }>;
 
 /**

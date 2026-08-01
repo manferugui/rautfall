@@ -133,15 +133,15 @@ function doTogglePause(): void {
                 </div>
                 <div class="session-item">
                   <span class="session-label">P2 Status</span>
-                  <span class="session-value" data-testid="p2-status">{{ gameState.battleState.playerTwoStatus }}</span>
+                  <span class="session-value" data-testid="p2-status">{{ gameState.battleState.playerTwo.status }}</span>
                 </div>
                 <div class="session-item">
                   <span class="session-label">P2 Lvl / Energy</span>
-                  <span class="session-value" data-testid="p2-level-energy">Lvl {{ gameState.battleState.playerTwoLevel }} / {{ gameState.battleState.playerTwoCombatEnergy }} E</span>
+                  <span class="session-value" data-testid="p2-level-energy">Lvl {{ gameState.battleState.playerTwo.level }} / {{ gameState.battleState.playerTwo.combatEnergy }} E</span>
                 </div>
                 <div class="session-item">
                   <span class="session-label">P2 Sabotajes</span>
-                  <span class="session-value" data-testid="p2-sabotages">{{ gameState.battleState.playerTwoStoredSabotages.join(', ') || 'VACÍO' }}</span>
+                  <span class="session-value" data-testid="p2-sabotages">{{ gameState.battleState.playerTwo.storedSabotages.join(', ') || 'VACÍO' }}</span>
                 </div>
                 <div v-if="gameState.battleState.lastSabotageRouted" class="session-item">
                   <span class="session-label">Último Enrutado</span>
@@ -204,7 +204,12 @@ function doTogglePause(): void {
 
         <!-- Zona 3: Monitor rival -->
         <div class="opponent-column" data-testid="opponent-column">
-          <OpponentMonitor />
+          <OpponentMonitor
+            :player-two="gameState.battleState?.playerTwo ?? null"
+            :battle-status="gameState.battleState?.status ?? null"
+            :winner="gameState.battleState?.winner ?? null"
+            :is-paused="gameState.status === 'paused'"
+          />
         </div>
       </div>
     </div>

@@ -38,6 +38,7 @@ import {
   boardYToCanvas,
   isRowVisible,
 } from '../coordinates';
+import { mapEngineToOpponentPresentation } from '../opponent-mapper';
 
 const FIXED_SEED = 42;
 
@@ -657,12 +658,8 @@ export class GameScene extends Phaser.Scene {
           status: bSnap.status,
           winner: bSnap.winner,
           step: bSnap.step,
-          playerTwoStatus: bSnap.playerTwo.status,
-          playerTwoLevel: bSnap.playerTwo.level,
-          playerTwoCombatEnergy: bSnap.playerTwo.combatEnergy,
-          playerTwoStoredSabotages: [...bSnap.playerTwo.storedSabotages],
-          playerTwoActiveEffects: [...bSnap.playerTwo.activeEffects],
           lastSabotageRouted: this.lastSabotageRouted,
+          playerTwo: mapEngineToOpponentPresentation(bSnap.playerTwo),
         },
       };
     }
@@ -699,8 +696,7 @@ export class GameScene extends Phaser.Scene {
         this.lastState.battleState.winner === newState.battleState.winner &&
         this.lastState.battleState.step === newState.battleState.step &&
         this.lastState.battleState.lastSabotageRouted === newState.battleState.lastSabotageRouted &&
-        this.lastState.battleState.playerTwoCombatEnergy === newState.battleState.playerTwoCombatEnergy &&
-        this.lastState.battleState.playerTwoLevel === newState.battleState.playerTwoLevel)
+        this.lastState.battleState.playerTwo === newState.battleState.playerTwo)
     ) {
       return;
     }
