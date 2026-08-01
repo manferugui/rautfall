@@ -78,6 +78,8 @@ export type GameEvent =
   | EffectExpiredEvent
   | LevelUpEvent;
 
+export type EngineEvent = GameEvent;
+
 export interface LevelUpEvent {
   type: 'levelUp';
   step: number;
@@ -429,6 +431,12 @@ function createPrng(seed: number): () => number {
   };
 }
 
+function deriveSeed(seed: number, purpose: 'pieces' | 'effects'): number {
+  const state = seed | 0;
+  const salt = purpose === 'pieces' ? 0x1f3d5b79 : 0x7c5a3e1b;
+  return (state ^ salt) >>> 0;
+}
+
 // ── Bolsa de siete (seven-bag) ──────────────────────────────────────────
 
 function shuffleBag(prng: () => number): PieceType[] {
@@ -456,7 +464,7 @@ function nextFromBag(state: { bag: PieceType[]; index: number }, prng: () => num
   return piece;
 }
 
-// ── Bolsa determinista de sabotajes (2-bag) ─────────────────────────────
+// ── Bolsa determinista de sabotajes (3-bag) ─────────────────────────────
 
 function shuffleSabotageBag(prng: () => number): SabotageType[] {
   const bag = [...ALL_SABOTAGES];
@@ -772,9 +780,10 @@ export function createGameEngine(
   // Si se proporciona un estado inicial (solo escenario dev nominado), se
   // usa sin validación adicional: es responsabilidad del escenario.
   let board = initialState ? cloneBoard(initialState.board) : createEmptyBoard();
-  let prng = createPrng(currentSeed);
-  let bagState = createBag(prng);
-  let sabotageBagState = createSabotageBag(prng);
+  let piecePrng = createPrng(deriveSeed(currentSeed, 'pieces'));
+  let effectsPrng = createPrng(deriveSeed(currentSeed, 'effects'));
+  let bagState = createBag(piecePrng);
+  let sabotageBagState = createSabotageBag(effectsPrng);
   let activePiece: ActivePiece | null = initialState
     ? { ...initialState.activePiece }
     : null;
@@ -824,12 +833,12 @@ export function createGameEngine(
 
   /** Genera la pieza activa y rellena la cola con tres próximas piezas. */
   function spawnInitialPieces(): void {
-    const firstType = nextFromBag(bagState, prng);
+    const firstType = nextFromBag(bagState, piecePrng);
     // Consumir tres piezas adicionales para la cola
     const queuePieces = [
-      nextFromBag(bagState, prng),
-      nextFromBag(bagState, prng),
-      nextFromBag(bagState, prng),
+      nextFromBag(bagState, piecePrng),
+      nextFromBag(bagState, piecePrng),
+      nextFromBag(bagState, piecePrng),
     ];
     const spawnX = calculateSpawnX(firstType);
     const spawnY = calculateSpawnY(firstType);
@@ -931,7 +940,7 @@ export function createGameEngine(
 
       const totalEnergy = combatEnergy + generatedEnergy;
       if (storedSabotages.length < 2 && totalEnergy >= 100) {
-        storedSabotages.push(nextFromSabotageBag(sabotageBagState, prng));
+        storedSabotages.push(nextFromSabotageBag(sabotageBagState, effectsPrng));
         combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy - 100);
       } else {
         combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy);
@@ -968,7 +977,7 @@ export function createGameEngine(
 
         const totalEnergy = combatEnergy + generatedEnergy;
         if (storedSabotages.length < 2 && totalEnergy >= 100) {
-          storedSabotages.push(nextFromSabotageBag(sabotageBagState, prng));
+          storedSabotages.push(nextFromSabotageBag(sabotageBagState, effectsPrng));
           combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy - 100);
         } else {
           combatEnergy = Math.min(COMBAT_ENERGY_MAX, totalEnergy);
@@ -1014,7 +1023,7 @@ export function createGameEngine(
 
       for (let r = 0; r < linesToApply; r++) {
         const rowY = BOARD_ROWS - linesToApply + r;
-        const holeCol = Math.floor(prng() * 10);
+        const holeCol = Math.floor(effectsPrng() * 10);
         const garbageRow = Array.from({ length: 10 }, (_, col) =>
           col === holeCol ? null : ('garbage' as const),
         );
@@ -1076,7 +1085,7 @@ export function createGameEngine(
 
   function spawnNextPiece(): void {
     const candidate = nextPiecesQueue.shift()!;
-    nextPiecesQueue.push(nextFromBag(bagState, prng));
+    nextPiecesQueue.push(nextFromBag(bagState, piecePrng));
 
     const spawnX = calculateSpawnX(candidate);
     const spawnY = calculateSpawnY(candidate);
@@ -1267,7 +1276,7 @@ export function createGameEngine(
 
         if (heldPiece === null) {
           const incoming = nextPiecesQueue.shift()!;
-          nextPiecesQueue.push(nextFromBag(bagState, prng));
+          nextPiecesQueue.push(nextFromBag(bagState, piecePrng));
           heldPiece = outgoing;
           eventQueue.push({ type: 'pieceHeld', step: currentStep, piece: outgoing });
           attemptIncomingSpawn(incoming);
@@ -1359,7 +1368,7 @@ export function createGameEngine(
         );
       }
 
-      validateInput(input);
+      validateStepInput(input);
 
       currentStep++;
       currentElapsedMs += config.fixedStepMs;
@@ -1534,7 +1543,8 @@ export function createGameEngine(
       currentSeed = options.seed;
       status = 'running';
       board = createEmptyBoard();
-      prng = createPrng(currentSeed);
+      piecePrng = createPrng(deriveSeed(currentSeed, 'pieces'));
+      effectsPrng = createPrng(deriveSeed(currentSeed, 'effects'));
       activePiece = null;
       nextPiecesQueue = [];
       verticalProgress = 0;
@@ -1553,15 +1563,15 @@ export function createGameEngine(
       storedSabotages = [];
       pendingGarbage = 0;
       activeEffects = [];
-      bagState = createBag(prng);
-      sabotageBagState = createSabotageBag(prng);
+      bagState = createBag(piecePrng);
+      sabotageBagState = createSabotageBag(effectsPrng);
       resetHorizontalState(horizontalState);
       eventQueue.length = 0;
 
-      const firstType = nextFromBag(bagState, prng);
-      const secondType = nextFromBag(bagState, prng);
-      const thirdType = nextFromBag(bagState, prng);
-      const fourthType = nextFromBag(bagState, prng);
+      const firstType = nextFromBag(bagState, piecePrng);
+      const secondType = nextFromBag(bagState, piecePrng);
+      const thirdType = nextFromBag(bagState, piecePrng);
+      const fourthType = nextFromBag(bagState, piecePrng);
       const spawnX = calculateSpawnX(firstType);
       const spawnY = calculateSpawnY(firstType);
       const cells = computeAbsoluteCells(firstType, spawnX, spawnY, Orientation.Spawn);
@@ -1586,7 +1596,7 @@ export function createGameEngine(
 
 // ── Validación de entrada ───────────────────────────────────────────────
 
-function validateInput(input: unknown): asserts input is StepInput {
+export function validateStepInput(input: unknown): asserts input is StepInput {
   if (typeof input !== 'object' || input === null) {
     throw new EngineStepError(
       'INVALID_GAME_INPUT',

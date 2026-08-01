@@ -27,6 +27,8 @@ import { isSabotageDemoActive, createSabotageDemoEngine } from '../sabotage-demo
 import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo';
 import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
 import { isPolarityDemoActive, createPolarityDemoEngine } from '../polarity-demo';
+import { isBattleDemoActive, createBattleDemoSession } from '../battle-demo';
+import type { BattleSession } from '@rautfall/battle-engine';
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
@@ -65,6 +67,8 @@ export type GameSceneCallbacks = {
 
 export class GameScene extends Phaser.Scene {
   private engine!: GameEngine;
+  private battleSession: BattleSession | null = null;
+  private lastSabotageRouted: string | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
   private lastState: GamePresentationState | null = null;
@@ -305,85 +309,101 @@ export class GameScene extends Phaser.Scene {
         this.consumedThisFrame = updatedConsumed;
       }
 
-      if (this.engine.getSnapshot().status === 'running') {
-        const snapBefore = this.engine.getSnapshot();
-        const xBefore = snapBefore.activePiece?.x ?? 0;
-        const yBefore = snapBefore.activePiece?.y ?? 0;
+        if (this.battleSession) {
+          if (this.battleSession.getSnapshot().status === 'running') {
+            this.battleSession.step({
+              playerOne: input,
+              playerTwo: this.emptyStepInput(),
+            });
+          }
+        } else if (this.engine.getSnapshot().status === 'running') {
+          const snapBefore = this.engine.getSnapshot();
+          const xBefore = snapBefore.activePiece?.x ?? 0;
+          const yBefore = snapBefore.activePiece?.y ?? 0;
 
-        const adapterEntry = {
-          source: 'adapter' as const,
-          logicalStep: snapBefore.step,
-          stepIndex: i,
-          totalSteps: stepsToExecute,
-          leftHeld: input.leftHeld,
-          rightHeld: input.rightHeld,
-          leftPressed: input.leftPressed,
-          rightPressed: input.rightPressed,
-          softDropHeld: input.softDropHeld,
-          rotateClockwise: input.rotateClockwise ?? false,
-          rotateCounterclockwise: input.rotateCounterclockwise ?? false,
-          hardDrop: input.hardDrop,
-          pendingHorizontal: keys.horizontalPressed,
-          consumedHorizontal: this.consumedThisFrame.horizontal,
-        };
+          const adapterEntry = {
+            source: 'adapter' as const,
+            logicalStep: snapBefore.step,
+            stepIndex: i,
+            totalSteps: stepsToExecute,
+            leftHeld: input.leftHeld,
+            rightHeld: input.rightHeld,
+            leftPressed: input.leftPressed,
+            rightPressed: input.rightPressed,
+            softDropHeld: input.softDropHeld,
+            rotateClockwise: input.rotateClockwise ?? false,
+            rotateCounterclockwise: input.rotateCounterclockwise ?? false,
+            hardDrop: input.hardDrop,
+            pendingHorizontal: keys.horizontalPressed,
+            consumedHorizontal: this.consumedThisFrame.horizontal,
+          };
 
-        const hadRelevantInput = isAdapterRelevant(adapterEntry);
+          const hadRelevantInput = isAdapterRelevant(adapterEntry);
 
-        if (hadRelevantInput) {
-          logDebug(adapterEntry);
-        }
+          if (hadRelevantInput) {
+            logDebug(adapterEntry);
+          }
 
-        this.engine.step(input);
+          this.engine.step(input);
 
-        const snapAfter = this.engine.getSnapshot();
-        const pieceAfter = snapAfter.activePiece?.type ?? null;
-        const xAfter = snapAfter.activePiece?.x ?? xBefore;
-        const yAfter = snapAfter.activePiece?.y ?? yBefore;
+          const snapAfter = this.engine.getSnapshot();
+          const pieceAfter = snapAfter.activePiece?.type ?? null;
+          const xAfter = snapAfter.activePiece?.x ?? xBefore;
+          const yAfter = snapAfter.activePiece?.y ?? yBefore;
 
-        if (shouldLogEngineResult({
-          hadRelevantInput,
-          softDropHeld: input.softDropHeld,
-          hardDrop: input.hardDrop,
-          xBefore,
-          xAfter,
-          yBefore,
-          yAfter,
-          pieceBefore: snapBefore.activePiece?.type ?? null,
-          pieceAfter,
-          statusBefore: snapBefore.status,
-          statusAfter: snapAfter.status,
-          hadEdgeAction: input.leftPressed || input.rightPressed || input.rotateClockwise === true || input.rotateCounterclockwise === true || input.hardDrop,
-        })) {
-          logDebug(snapshotResult(
-            snapAfter.step,
-            pieceAfter,
+          if (shouldLogEngineResult({
+            hadRelevantInput,
+            softDropHeld: input.softDropHeld,
+            hardDrop: input.hardDrop,
             xBefore,
             xAfter,
             yBefore,
             yAfter,
-            snapAfter.status,
-          ));
+            pieceBefore: snapBefore.activePiece?.type ?? null,
+            pieceAfter,
+            statusBefore: snapBefore.status,
+            statusAfter: snapAfter.status,
+            hadEdgeAction: input.leftPressed || input.rightPressed || input.rotateClockwise === true || input.rotateCounterclockwise === true || input.hardDrop,
+          })) {
+            logDebug(snapshotResult(
+              snapAfter.step,
+              pieceAfter,
+              xBefore,
+              xAfter,
+              yBefore,
+              yAfter,
+              snapAfter.status,
+            ));
+          }
         }
       }
     }
-    }
 
     this.renderFrame();
-    const frameEvents = this.engine.drainEvents();
-    for (const event of frameEvents) {
-      if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive() || isPolarityDemoActive())) {
-        this.engine.receiveSabotage(event.sabotage);
+    if (this.battleSession) {
+      const battleEvents = this.battleSession.drainEvents();
+      for (const event of battleEvents) {
+        if (event.type === 'sabotageRouted') {
+          this.lastSabotageRouted = `${event.sabotage} (${event.source} -> ${event.target})`;
+        }
       }
-    }
-    const frameEventTypes = frameEvents.map(e => e.type);
-    if (hasImportantEngineEvent(frameEventTypes)) {
-      const snap = this.engine.getSnapshot();
-      logDebug(snapshotFrameEvents(
-        snap.step,
-        frameEventTypes,
-        snap.activePiece?.type ?? null,
-        snap.status,
-      ));
+    } else {
+      const frameEvents = this.engine.drainEvents();
+      for (const event of frameEvents) {
+        if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive() || isPolarityDemoActive())) {
+          this.engine.receiveSabotage(event.sabotage);
+        }
+      }
+      const frameEventTypes = frameEvents.map(e => e.type);
+      if (hasImportantEngineEvent(frameEventTypes)) {
+        const snap = this.engine.getSnapshot();
+        logDebug(snapshotFrameEvents(
+          snap.step,
+          frameEventTypes,
+          snap.activePiece?.type ?? null,
+          snap.status,
+        ));
+      }
     }
     this.notifyState();
   }
@@ -429,25 +449,37 @@ export class GameScene extends Phaser.Scene {
 
   private resetEngine(): void {
     const levelDemoTarget = getLevelDemoTarget();
-    if (levelDemoTarget !== null) {
+    if (isBattleDemoActive()) {
+      // Escenario cerrado de desarrollo: Capa de Batalla Local (2P)
+      this.battleSession = createBattleDemoSession();
+      this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
+      this.lastSabotageRouted = null;
+    } else if (levelDemoTarget !== null) {
+      this.battleSession = null;
       // Escenario cerrado de desarrollo: demo de Nivel y Gravedad
       this.engine = createLevelDemoEngine(levelDemoTarget);
     } else if (isTSpinDemoActive()) {
+      this.battleSession = null;
       // Escenario cerrado de desarrollo: tablero preparado + pieza T
       this.engine = createTSpinDemoEngine();
     } else if (isSabotageDemoActive()) {
+      this.battleSession = null;
       // Escenario cerrado de desarrollo: demo de Residuos
       this.engine = createSabotageDemoEngine();
     } else if (isOverloadDemoActive()) {
+      this.battleSession = null;
       // Escenario cerrado de desarrollo: demo de Sobrecarga
       this.engine = createOverloadDemoEngine();
     } else if (isGarbageDemoActive()) {
+      this.battleSession = null;
       // Escenario cerrado de desarrollo: demo de Residuos (Garbage Demo)
       this.engine = createGarbageDemoEngine();
     } else if (isPolarityDemoActive()) {
+      this.battleSession = null;
       // Escenario cerrado de desarrollo: demo de Polaridad inversa
       this.engine = createPolarityDemoEngine();
     } else {
+      this.battleSession = null;
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
     }
     this.engine.drainEvents();
@@ -532,8 +564,19 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-   private renderFrame(): void {
-      const snap = this.engine.getSnapshot();
+  private emptyStepInput(): import('@rautfall/game-engine').StepInput {
+    return {
+      leftHeld: false,
+      rightHeld: false,
+      leftPressed: false,
+      rightPressed: false,
+      softDropHeld: false,
+      hardDrop: false,
+    };
+  }
+
+  private renderFrame(): void {
+      const snap = this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot();
 
       this.graphics.clear();
 
@@ -587,8 +630,8 @@ export class GameScene extends Phaser.Scene {
     }
 
   private notifyState(): void {
-    const snap = this.engine.getSnapshot();
-    const newState: GamePresentationState = {
+    const snap = this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot();
+    let newState: GamePresentationState = {
       status: computeSessionStatus(snap.status, this.isPaused),
       step: snap.step,
       elapsedMs: snap.elapsedMs,
@@ -605,6 +648,24 @@ export class GameScene extends Phaser.Scene {
       baseGravityCellsPerSecond: snap.baseGravityCellsPerSecond,
       activeGravityCellsPerSecond: snap.activeGravityCellsPerSecond,
     };
+
+    if (this.battleSession) {
+      const bSnap = this.battleSession.getSnapshot();
+      newState = {
+        ...newState,
+        battleState: {
+          status: bSnap.status,
+          winner: bSnap.winner,
+          step: bSnap.step,
+          playerTwoStatus: bSnap.playerTwo.status,
+          playerTwoLevel: bSnap.playerTwo.level,
+          playerTwoCombatEnergy: bSnap.playerTwo.combatEnergy,
+          playerTwoStoredSabotages: [...bSnap.playerTwo.storedSabotages],
+          playerTwoActiveEffects: [...bSnap.playerTwo.activeEffects],
+          lastSabotageRouted: this.lastSabotageRouted,
+        },
+      };
+    }
 
     if (
       this.lastState &&
@@ -631,7 +692,15 @@ export class GameScene extends Phaser.Scene {
       }) &&
       this.lastState.level === newState.level &&
       this.lastState.baseGravityCellsPerSecond === newState.baseGravityCellsPerSecond &&
-      this.lastState.activeGravityCellsPerSecond === newState.activeGravityCellsPerSecond
+      this.lastState.activeGravityCellsPerSecond === newState.activeGravityCellsPerSecond &&
+      (!this.lastState.battleState && !newState.battleState ||
+        this.lastState.battleState && newState.battleState &&
+        this.lastState.battleState.status === newState.battleState.status &&
+        this.lastState.battleState.winner === newState.battleState.winner &&
+        this.lastState.battleState.step === newState.battleState.step &&
+        this.lastState.battleState.lastSabotageRouted === newState.battleState.lastSabotageRouted &&
+        this.lastState.battleState.playerTwoCombatEnergy === newState.battleState.playerTwoCombatEnergy &&
+        this.lastState.battleState.playerTwoLevel === newState.battleState.playerTwoLevel)
     ) {
       return;
     }

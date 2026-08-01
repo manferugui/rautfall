@@ -5,8 +5,10 @@ import {
   createGameEngine,
   EngineStepError,
   Orientation,
+  validateStepInput,
   type EngineOptions,
   type PieceType,
+  type SabotageType,
   type StepInput,
   type TSpinDemoInitialState,
 } from './index';
@@ -7892,6 +7894,170 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
 
       expect(snapAfter).toEqual(snapBefore);
       expect(events).toHaveLength(0);
+    });
+  });
+
+  describe('Tarea 0020 — Separación determinista de PRNG y validación pública', () => {
+    it('misma semilla produce exactamente la misma secuencia de piezas en dos motores', () => {
+      const engine1 = createGameEngine(makeValidOptions({ seed: 12345 }));
+      const engine2 = createGameEngine(makeValidOptions({ seed: 12345 }));
+
+      expect(engine1.getSnapshot().nextPieces).toEqual(engine2.getSnapshot().nextPieces);
+      expect(engine1.getSnapshot().activePiece?.type).toBe(engine2.getSnapshot().activePiece?.type);
+    });
+
+    it('recibir Residuos en un motor no altera la secuencia futura de piezas respecto a otro motor sin Residuos', () => {
+      const engine1 = createGameEngine(makeValidOptions({ seed: 9999 }));
+      const engine2 = createGameEngine(makeValidOptions({ seed: 9999 }));
+
+      // Engine 1 recibe 1 vez Residuos (+2 filas basura)
+      engine1.receiveSabotage('residuos');
+
+      // Ambas piezas iniciales y colas de proximidad coinciden
+      expect(engine1.getSnapshot().nextPieces).toEqual(engine2.getSnapshot().nextPieces);
+
+      // Ejecutar 1 fijación en ambos
+      stepHardDrop(engine1);
+      stepHardDrop(engine2);
+
+      // La siguiente cola de próximas piezas sigue siendo idéntica en ambos motores
+      expect(engine1.getSnapshot().nextPieces).toEqual(engine2.getSnapshot().nextPieces);
+      expect(engine1.getSnapshot().activePiece?.type).toBe(engine2.getSnapshot().activePiece?.type);
+    });
+
+    it('los huecos de basura siguen siendo deterministas mediante el PRNG de efectos', () => {
+      const engine1 = createGameEngine(makeValidOptions({ seed: 777 }));
+      const engine2 = createGameEngine(makeValidOptions({ seed: 777 }));
+
+      engine1.receiveSabotage('residuos');
+      engine2.receiveSabotage('residuos');
+
+      stepHardDrop(engine1);
+      stepHardDrop(engine2);
+
+      expect(engine1.getSnapshot().board).toEqual(engine2.getSnapshot().board);
+    });
+
+    it('reset reproduce fielmente la secuencia de piezas y efectos', () => {
+      const engine = createGameEngine(makeValidOptions({ seed: 888 }));
+      const initialNextPieces = [...engine.getSnapshot().nextPieces];
+
+      // Avanzar pasos y recibir basura
+      engine.receiveSabotage('residuos');
+      stepHardDrop(engine);
+
+      // Reiniciar
+      engine.reset(makeValidOptions({ seed: 888 }));
+      expect(engine.getSnapshot().nextPieces).toEqual(initialNextPieces);
+    });
+
+    it('motores con semillas distintas pueden divergir', () => {
+      const engine1 = createGameEngine(makeValidOptions({ seed: 100 }));
+      const engine2 = createGameEngine(makeValidOptions({ seed: 200 }));
+
+      // Es extremadamente probable que la bolsa varíe
+      const p1 = engine1.getSnapshot().nextPieces;
+      const p2 = engine2.getSnapshot().nextPieces;
+      expect(p1).not.toEqual(p2);
+    });
+
+    it('validateStepInput valida correctamente entradas válidas e inválidas', () => {
+      // Entrada válida
+      const valid: StepInput = {
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      };
+      expect(() => validateStepInput(valid)).not.toThrow();
+
+      // Entrada inválida: pressed sin held
+      const invalid = {
+        leftHeld: false, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      };
+      expect(() => validateStepInput(invalid)).toThrow(EngineStepError);
+    });
+
+    it('la separación de PRNG conserva la bolsa 3-bag conteniendo exactamente residuos, sobrecarga y polaridad', () => {
+      const board = emptyBoard();
+      // Preparar 3 Quads exactos (12 filas: 12..23 con cols 1..9 llenas, col 0 libre)
+      for (let y = 12; y < 24; y++) {
+        for (let x = 1; x < 10; x++) board[y]![x] = 'J';
+      }
+
+      const engine = createGameEngine(
+        makeValidOptions({ seed: 42 }),
+        {
+          board,
+          activePiece: { type: 'I', x: -2, y: 0, orientation: Orientation.Right },
+          nextPieces: ['I', 'I', 'I', 'I', 'I'],
+          heldPiece: null,
+          combatEnergy: 190,
+        },
+      );
+
+      const generatedSabotages: SabotageType[] = [];
+
+      // Quad 1: 190 + 70 = 260 -> extrae S1
+      drainAll(engine);
+      stepHardDrop(engine);
+      const snap1 = engine.getSnapshot();
+      expect(snap1.storedSabotages).toHaveLength(1);
+      const s1 = snap1.storedSabotages[0]!;
+      generatedSabotages.push(s1);
+
+      // Consumir S1 para dejar el cartucho libre
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, triggerSabotage: true,
+      });
+      expect(engine.getSnapshot().storedSabotages).toHaveLength(0);
+
+      // Quad 2: Mover pieza 2 a col -2 (orientation Right) con 20 pasos DAS y hacer hard drop
+      drainAll(engine);
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true,
+      });
+      for (let i = 0; i < 40; i++) {
+        engine.step({
+          leftHeld: true, rightHeld: false, leftPressed: i === 0, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+        });
+      }
+      stepHardDrop(engine);
+      const snap2 = engine.getSnapshot();
+      // console.log('SNAP2:', snap2.storedSabotages, snap2.combatEnergy);
+      expect(snap2.storedSabotages).toHaveLength(1);
+      const s2 = snap2.storedSabotages[0]!;
+      generatedSabotages.push(s2);
+
+      // Consumir S2 para dejar el cartucho libre
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, triggerSabotage: true,
+      });
+      expect(engine.getSnapshot().storedSabotages).toHaveLength(0);
+
+      // Quad 3: Mover pieza 3 a col -2 (orientation Right) con 20 pasos DAS y hacer hard drop
+      drainAll(engine);
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true,
+      });
+      for (let i = 0; i < 40; i++) {
+        engine.step({
+          leftHeld: true, rightHeld: false, leftPressed: i === 0, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+        });
+      }
+      stepHardDrop(engine);
+      const snap3 = engine.getSnapshot();
+      expect(snap3.storedSabotages).toHaveLength(1);
+      const s3 = snap3.storedSabotages[0]!;
+      generatedSabotages.push(s3);
+
+      expect(generatedSabotages).toHaveLength(3);
+      expect(new Set(generatedSabotages)).toEqual(new Set(['residuos', 'sobrecarga', 'polaridad']));
     });
   });
 });

@@ -494,6 +494,29 @@ Ver [Informe de implementación](implementation/0018-progresion-determinista-de-
 
 Ver [Informe de implementación](implementation/0019-sabotaje-polaridad-inversa.md).
 
+## Task [0020 — Capa de batalla local determinista entre dos motores](tasks/0020-capa-de-batalla-local-determinista.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-08-01 |
+| **Resultado** | Nuevo paquete `@rautfall/battle-engine` con orquestación headless, avance lockstep síncrono, validación atómica, enrutamiento cruzado de sabotajes, conservación y publicación de eventos (`participantEvent`), resolución determinista de victorias y empate (`draw`), separación de PRNG de piezas y efectos en `@rautfall/game-engine` e integración en el modo demo `?battle-demo=1`. 583 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Nuevo paquete `packages/battle-engine` (`@rautfall/battle-engine`) desacoplado de Phaser y DOM.
+- Orquestador `BattleSession` que gestiona dos motores independientes en bucle síncrono determinista (lockstep).
+- Separación de flujos PRNG en `packages/game-engine`: `pieceSeed` (bolsa de 7 y cola de proximidad) y `effectsSeed` (huecos de basura). Dos motores con la misma semilla principal conservan idéntica secuencia de piezas independientemente de la basura o sabotajes recibidos.
+- Prevalidación atómica de entradas en `step()` usando la función exportada `validateStepInput()` de `game-engine`. Ante entradas inválidas en P1 o P2, ningún motor avanza ni muta su estado.
+- Publicación y conservación de hechos transitorios: cada evento drenado de un motor se preserva envuelto en `participantEvent`. Los sabotajes simultáneos se serializan (P1 $\to$ P2 y P2 $\to$ P1) publicando en el mismo paso los eventos causados en el receptor.
+- Operación `reset()` que restaura la sesión con la semilla y configuración originales y emite exclusivamente `battleReset`.
+- Modo demo de desarrollo `?battle-demo=1` para probar el combate 1v1 local con consola táctica DEV y enrutamiento real sin loopback.
+- 17 pruebas deterministas en `battle-engine`, 6 pruebas de PRNG/validación en `game-engine` y 4 pruebas en `apps/web`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0020-capa-de-batalla-local-determinista.md).
+
 ## Siguiente tarea
 
-- **0020 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate (Muerte Súbita o Bot IA) según la hoja de ruta en `docs/rautfall.md`.
+- **0021 — Integración visual del rival y Bot IA**: Integrar la representación real del segundo tablero en `OpponentMonitor.vue` y añadir el bot heurístico según `docs/rautfall.md`.

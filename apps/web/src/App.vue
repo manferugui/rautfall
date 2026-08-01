@@ -113,6 +113,43 @@ function doTogglePause(): void {
               </div>
             </div>
 
+            <!-- Seccion DEV de Batalla Local (?battle-demo=1) -->
+            <div v-if="gameState.battleState" class="console-section" data-testid="battle-demo-dev-panel">
+              <div class="session-header">
+                <span class="panel-label">DEV — Orquestación Batalla (2P)</span>
+              </div>
+              <div class="session-grid">
+                <div class="session-item">
+                  <span class="session-label">Battle Status</span>
+                  <span class="session-value" data-testid="battle-status">{{ gameState.battleState.status }}</span>
+                </div>
+                <div class="session-item">
+                  <span class="session-label">Battle Step</span>
+                  <span class="session-value" data-testid="battle-step">{{ gameState.battleState.step }}</span>
+                </div>
+                <div class="session-item">
+                  <span class="session-label">Ganador</span>
+                  <span class="session-value" data-testid="battle-winner">{{ gameState.battleState.winner ?? 'NINGUNO' }}</span>
+                </div>
+                <div class="session-item">
+                  <span class="session-label">P2 Status</span>
+                  <span class="session-value" data-testid="p2-status">{{ gameState.battleState.playerTwoStatus }}</span>
+                </div>
+                <div class="session-item">
+                  <span class="session-label">P2 Lvl / Energy</span>
+                  <span class="session-value" data-testid="p2-level-energy">Lvl {{ gameState.battleState.playerTwoLevel }} / {{ gameState.battleState.playerTwoCombatEnergy }} E</span>
+                </div>
+                <div class="session-item">
+                  <span class="session-label">P2 Sabotajes</span>
+                  <span class="session-value" data-testid="p2-sabotages">{{ gameState.battleState.playerTwoStoredSabotages.join(', ') || 'VACÍO' }}</span>
+                </div>
+                <div v-if="gameState.battleState.lastSabotageRouted" class="session-item">
+                  <span class="session-label">Último Enrutado</span>
+                  <span class="session-value" data-testid="last-sabotage-routed">{{ gameState.battleState.lastSabotageRouted }}</span>
+                </div>
+              </div>
+            </div>
+
             <div class="console-divider"></div>
 
             <!-- Controles reales -->
