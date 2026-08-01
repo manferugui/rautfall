@@ -26,6 +26,7 @@ import { isTSpinDemoActive, createTSpinDemoEngine } from '../tspin-demo';
 import { isSabotageDemoActive, createSabotageDemoEngine } from '../sabotage-demo';
 import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo';
 import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
+import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
   CELL_SIZE,
@@ -426,7 +427,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetEngine(): void {
-    if (isTSpinDemoActive()) {
+    const levelDemoTarget = getLevelDemoTarget();
+    if (levelDemoTarget !== null) {
+      // Escenario cerrado de desarrollo: demo de Nivel y Gravedad
+      this.engine = createLevelDemoEngine(levelDemoTarget);
+    } else if (isTSpinDemoActive()) {
       // Escenario cerrado de desarrollo: tablero preparado + pieza T
       this.engine = createTSpinDemoEngine();
     } else if (isSabotageDemoActive()) {
@@ -592,6 +597,9 @@ export class GameScene extends Phaser.Scene {
       storedSabotages: [...snap.storedSabotages],
       pendingGarbage: snap.pendingGarbage,
       activeEffects: [...snap.activeEffects],
+      level: snap.level,
+      baseGravityCellsPerSecond: snap.baseGravityCellsPerSecond,
+      activeGravityCellsPerSecond: snap.activeGravityCellsPerSecond,
     };
 
     if (
@@ -612,7 +620,10 @@ export class GameScene extends Phaser.Scene {
       this.lastState.activeEffects.length === newState.activeEffects.length &&
       this.lastState.activeEffects.every(
         (e, i) => e.type === newState.activeEffects[i]?.type && e.remainingMs === newState.activeEffects[i]?.remainingMs,
-      )
+      ) &&
+      this.lastState.level === newState.level &&
+      this.lastState.baseGravityCellsPerSecond === newState.baseGravityCellsPerSecond &&
+      this.lastState.activeGravityCellsPerSecond === newState.activeGravityCellsPerSecond
     ) {
       return;
     }

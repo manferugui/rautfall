@@ -444,6 +444,30 @@ Ver [Informe de implementación](implementation/0016-consumo-energia-y-residuos.
 
 Ver [Informe de implementación](implementation/0017-bolsa-sabotajes-y-sobrecarga.md).
 
+## Task [0018 — Progresión determinista de nivel y gravedad](tasks/0018-progresion-determinista-de-nivel-y-gravedad.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-31 |
+| **Resultado** | 530 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Progresión determinista de nivel ($1..10$) basada en líneas acumuladas eliminadas (`level = Math.min(10, Math.floor(clearedLines / 10) + 1)`).
+- Tabla discreta de gravedad base (`baseGravityCellsPerSecond`), desde $1.00\text{ c/s}$ (Nivel 1) hasta $10.00\text{ c/s}$ (Nivel 10), derivada exclusivamente de la tabla sin intervención de `config.gravityCellsPerSecond`.
+- Exposición en `EngineSnapshot` y `GamePresentationState` de `level`, `baseGravityCellsPerSecond` y `activeGravityCellsPerSecond`.
+- Evento de dominio `LevelUpEvent` (`levelUp`) emitido de forma atómica una sola vez al cambiar de nivel tras la eliminación de líneas.
+- Gravedad activa multiplicada por 3 durante **Sobrecarga** (`activeGravityCellsPerSecond = baseGravityCellsPerSecond * 3`).
+- Soft Drop strictly inalterado a `config.softDropCellsPerSecond` ($20.0\text{ c/s}$). Hard drop, DAS, ARR, SRS, `lockDelayMs` y `maxLockResets` inalterados.
+- Presentación táctica de `Nivel` y `Gravedad` en `ScorePanel.vue`.
+- Modos demo de desarrollo `?level-demo=1` y `?level-demo=10` para validación manual en entorno DEV.
+- 14 pruebas deterministas de motor para la Tarea 0018 + pruebas de escenarios demo, `types.test.ts`, `ScorePanel.test.ts` y `App.test.ts`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0018-progresion-determinista-de-nivel-y-gravedad.md).
+
 ## Siguiente tarea
 
-- **0018 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate o segundo tablero según la hoja de ruta en `docs/rautfall.md`.
+- **0019 — Siguiente tarea de producto/arquitectura**: Definir la siguiente iteración del sistema de combate (Polaridad Inversa o Muerte Súbita) según la hoja de ruta en `docs/rautfall.md`.

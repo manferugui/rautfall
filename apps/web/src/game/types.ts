@@ -17,6 +17,9 @@ export type GamePresentationState = Readonly<{
   storedSabotages: readonly SabotageType[];
   pendingGarbage: number;
   activeEffects: readonly ActiveEffectSnapshot[];
+  level: number;
+  baseGravityCellsPerSecond: number;
+  activeGravityCellsPerSecond: number;
 }>;
 
 /**

@@ -2,7 +2,7 @@
 /**
  * Pruebas del componente ScorePanel.
  *
- * Verifica que muestra correctamente puntuación, combo y back-to-back reales.
+ * Verifica que muestra correctamente puntuación, nivel, gravedad, combo, back-to-back y energía reales.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -19,6 +19,21 @@ describe('ScorePanel', () => {
   it('muestra el valor de puntuación cuando score es distinto de cero', () => {
     const wrapper = mount(ScorePanel, { props: { score: 1234, combo: 0, backToBack: 0, combatEnergy: 0 } });
     expect(wrapper.find('[data-testid="score-value"]').text()).toBe('1234');
+  });
+
+  it('muestra el nivel y la gravedad activa formateada', () => {
+    const wrapper = mount(ScorePanel, {
+      props: {
+        score: 0,
+        combo: 0,
+        backToBack: 0,
+        combatEnergy: 0,
+        level: 5,
+        activeGravityCellsPerSecond: 7.5,
+      },
+    });
+    expect(wrapper.find('[data-testid="level-value"]').text()).toBe('5');
+    expect(wrapper.find('[data-testid="gravity-value"]').text()).toBe('7.50 c/s');
   });
 
   it('muestra el valor numérico de combo cuando combo >= 1', () => {

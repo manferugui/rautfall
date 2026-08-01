@@ -8,7 +8,7 @@ import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import type { GamePresentationState, PhaserGameController } from './game/types';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [] });
+const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 1, baseGravityCellsPerSecond: 1.0, activeGravityCellsPerSecond: 1.0 });
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
@@ -87,7 +87,7 @@ function doTogglePause(): void {
 
             <!-- Puntuación, combo y back-to-back reales -->
             <div class="console-section">
-              <ScorePanel :score="gameState.score" :combo="gameState.combo" :back-to-back="gameState.backToBack" :combat-energy="gameState.combatEnergy" />
+              <ScorePanel :score="gameState.score" :combo="gameState.combo" :back-to-back="gameState.backToBack" :combat-energy="gameState.combatEnergy" :level="gameState.level" :active-gravity-cells-per-second="gameState.activeGravityCellsPerSecond" />
             </div>
 
             <div class="console-divider"></div>

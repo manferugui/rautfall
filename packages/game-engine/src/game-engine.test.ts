@@ -565,17 +565,20 @@ describe('gravedad', () => {
   });
 
   it('un mismo paso produce múltiples descensos de gravedad cuando la velocidad es alta', () => {
-    const fastGravityConfig = {
-      ...prototypeConfig,
-      gravityCellsPerSecond: 1000,
-      softDropCellsPerSecond: 2000,
-    };
-    const engine = createGameEngine(makeValidOptions({ config: fastGravityConfig }));
+    const engine = createGameEngine(makeValidOptions(), {
+      board: emptyBoard(),
+      activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+      nextPieces: ['O', 'T', 'L'],
+      heldPiece: null,
+      clearedLines: 90,
+    });
     drainAll(engine);
 
     const initialY = engine.getSnapshot().activePiece!.y;
 
-    stepStationary(engine);
+    for (let i = 0; i < 100; i++) {
+      stepStationary(engine);
+    }
     const events = engine.drainEvents();
 
     const gravityMoves = events.filter((e) => e.type === 'pieceMoved' && e.reason === 'gravity');
@@ -731,11 +734,13 @@ describe('hard drop', () => {
   });
 
   it('el hard drop con distancia 0 (pieza ya apoyada) no emite pieceMoved, solo pieceLocked', () => {
-    const modConfig = {
-      ...prototypeConfig,
-      gravityCellsPerSecond: 10,
-    };
-    const engine = createGameEngine(makeValidOptions({ config: modConfig }));
+    const engine = createGameEngine(makeValidOptions(), {
+      board: emptyBoard(),
+      activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+      nextPieces: ['O', 'T', 'L'],
+      heldPiece: null,
+      clearedLines: 90,
+    });
     drainAll(engine);
 
     stepHardDrop(engine);
@@ -6137,10 +6142,9 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       board[15]![3] = 'J';
       board[15]![5] = 'J';
 
-      // Ajustar softDropCellsPerSecond a 200 para cumplir softDropCellsPerSecond > gravityCellsPerSecond (100)
       const engine = createGameEngine(
-        makeValidOptions({ config: { ...prototypeConfig, gravityCellsPerSecond: 100, softDropCellsPerSecond: 200 } }),
-        { board, activePiece: { type: 'T', x: 3, y: 14, orientation: Orientation.Spawn }, nextPieces: ['I', 'O', 'L'], heldPiece: null }
+        makeValidOptions(),
+        { board, activePiece: { type: 'T', x: 3, y: 14, orientation: Orientation.Spawn }, nextPieces: ['I', 'O', 'L'], heldPiece: null, clearedLines: 90 }
       );
 
       // Rotar
@@ -6149,11 +6153,13 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
         softDropHeld: false, hardDrop: false, rotateClockwise: true
       });
 
-      // Gravedad actúa en este paso debido a la gravedad alta
-      engine.step({
-        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
-        softDropHeld: false, hardDrop: false
-      });
+      // Gravedad actúa en 10 pasos de 10 ms (100 ms = 1 celda a 10.0 c/s)
+      for (let i = 0; i < 10; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false
+        });
+      }
 
       // Intentar hard drop
       engine.step({
@@ -7273,6 +7279,301 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
 
       engine.reset(makeValidOptions());
       expect(engine.getSnapshot().activeEffects).toEqual([]);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  TAREA 0018 — PROGRESIÓN DETERMINISTA DE NIVEL Y GRAVEDAD
+  // ════════════════════════════════════════════════════════════════════════
+
+  describe('Tarea 0018 — Progresión determinista de nivel y gravedad', () => {
+    it('el motor arranca en Nivel 1 con gravedad base 1.00 c/s y 0 líneas eliminadas', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const snap = engine.getSnapshot();
+
+      expect(snap.level).toBe(1);
+      expect(snap.baseGravityCellsPerSecond).toBe(1.0);
+      expect(snap.activeGravityCellsPerSecond).toBe(1.0);
+      expect(snap.clearedLines).toBe(0);
+    });
+
+    it('evalúa la tabla de gravedad base oficial en los umbrales exactos de nivel 1 a 10', () => {
+      const thresholds: [number, number, number][] = [
+        [0, 1, 1.00],
+        [9, 1, 1.00],
+        [10, 2, 1.25],
+        [19, 2, 1.25],
+        [20, 3, 1.50],
+        [30, 4, 2.00],
+        [40, 5, 2.50],
+        [50, 6, 3.00],
+        [60, 7, 4.00],
+        [70, 8, 5.00],
+        [80, 9, 7.00],
+        [90, 10, 10.00],
+      ];
+
+      for (const [lines, expectedLevel, expectedGravity] of thresholds) {
+        const board = emptyBoard();
+        const engine = createGameEngine(makeValidOptions(), {
+          board,
+          activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+          nextPieces: ['O', 'T', 'L'],
+          heldPiece: null,
+          clearedLines: lines,
+        });
+
+        const snap = engine.getSnapshot();
+        expect(snap.level).toBe(expectedLevel);
+        expect(snap.baseGravityCellsPerSecond).toBe(expectedGravity);
+        expect(snap.activeGravityCellsPerSecond).toBe(expectedGravity);
+      }
+    });
+
+    it('superar las 90 líneas acumuladas mantiene el nivel máximo 10 y gravedad base de 10.00 c/s', () => {
+      for (const lines of [95, 100, 150]) {
+        const engine = createGameEngine(makeValidOptions(), {
+          board: emptyBoard(),
+          activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+          nextPieces: ['O', 'T', 'L'],
+          heldPiece: null,
+          clearedLines: lines,
+        });
+
+        const snap = engine.getSnapshot();
+        expect(snap.level).toBe(10);
+        expect(snap.baseGravityCellsPerSecond).toBe(10.0);
+      }
+    });
+
+    it('la eliminación de líneas emite exactamente un evento levelUp con previousLevel, newLevel y baseGravityCellsPerSecond', () => {
+      // Tablero con fila 23 casi llena (8 celdas, hueco en x=3 y x=4) para completar 1 línea con pieza O
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 3 && x !== 4) {
+          board[23]![x] = 'I';
+        }
+      }
+
+      const engine = createGameEngine(makeValidOptions(), {
+        board,
+        activePiece: { type: 'O', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['I', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 9, // En 9 líneas la fijación subirá a 10 (Nivel 2)
+      });
+
+      drainAll(engine);
+      stepHardDrop(engine);
+
+      const events = engine.drainEvents();
+      const levelUpEvents = events.filter((e) => e.type === 'levelUp');
+      expect(levelUpEvents).toHaveLength(1);
+
+      const evt = levelUpEvents[0] as Extract<typeof events[number], { type: 'levelUp' }>;
+      expect(evt.previousLevel).toBe(1);
+      expect(evt.newLevel).toBe(2);
+      expect(evt.baseGravityCellsPerSecond).toBe(1.25);
+
+      const snap = engine.getSnapshot();
+      expect(snap.level).toBe(2);
+      expect(snap.baseGravityCellsPerSecond).toBe(1.25);
+    });
+
+    it('si clearedLines salta varios umbrales de golpe (defensa de cálculo en test), se emite un único evento levelUp con nivel inicial y final', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 3 && x !== 4) {
+          board[23]![x] = 'I';
+        }
+      }
+
+      const engine = createGameEngine(makeValidOptions(), {
+        board,
+        activePiece: { type: 'O', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['I', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 19, // 19 + 1 = 20 (Nivel 3). Si viniese de clearedLines: 8 y sumase 12, saltaría de 1 a 3
+      });
+
+      drainAll(engine);
+      stepHardDrop(engine);
+
+      const events = engine.drainEvents();
+      const levelUpEvents = events.filter((e) => e.type === 'levelUp');
+      expect(levelUpEvents).toHaveLength(1);
+
+      const evt = levelUpEvents[0] as Extract<typeof events[number], { type: 'levelUp' }>;
+      expect(evt.previousLevel).toBe(2);
+      expect(evt.newLevel).toBe(3);
+      expect(evt.baseGravityCellsPerSecond).toBe(1.5);
+    });
+
+    it('la eliminación de líneas que no cambia de nivel NO emite evento levelUp', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 3 && x !== 4) {
+          board[23]![x] = 'I';
+        }
+      }
+
+      const engine = createGameEngine(makeValidOptions(), {
+        board,
+        activePiece: { type: 'O', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['I', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 2, // 2 + 1 = 3 -> Sigue en Nivel 1 (0-9 líneas)
+      });
+
+      drainAll(engine);
+      stepHardDrop(engine);
+
+      const events = engine.drainEvents();
+      const levelUpEvents = events.filter((e) => e.type === 'levelUp');
+      expect(levelUpEvents).toHaveLength(0);
+      expect(engine.getSnapshot().level).toBe(1);
+    });
+
+    it('Sobrecarga multiplica por 3 la gravedad base del nivel actual', () => {
+      const engine = createGameEngine(makeValidOptions(), {
+        board: emptyBoard(),
+        activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['O', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 40, // Nivel 5 -> Gravedad base 2.50 c/s
+      });
+
+      expect(engine.getSnapshot().level).toBe(5);
+      expect(engine.getSnapshot().baseGravityCellsPerSecond).toBe(2.5);
+      expect(engine.getSnapshot().activeGravityCellsPerSecond).toBe(2.5);
+
+      engine.receiveSabotage('sobrecarga');
+
+      const snapOverload = engine.getSnapshot();
+      expect(snapOverload.baseGravityCellsPerSecond).toBe(2.5);
+      expect(snapOverload.activeGravityCellsPerSecond).toBe(7.5);
+    });
+
+    it('soft drop utiliza estrictamente config.softDropCellsPerSecond sin ser alterado por el nivel', () => {
+      const engine = createGameEngine(makeValidOptions(), {
+        board: emptyBoard(),
+        activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['O', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 50, // Nivel 6 -> Gravedad base 3.0 c/s
+      });
+
+      drainAll(engine);
+      const y0 = engine.getSnapshot().activePiece!.y;
+
+      // Con softDropHeld = true, avanza a 20.0 c/s (1 celda cada 5 pasos de 10 ms)
+      for (let i = 0; i < 5; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+
+      expect(engine.getSnapshot().activePiece!.y).toBe(y0 + 1);
+    });
+
+    it('la progresión de nivel conserva intactos config.lockDelayMs y config.maxLockResets con configuraciones alternativas', () => {
+      const customConfig = {
+        ...prototypeConfig,
+        lockDelayMs: 400,
+        maxLockResets: 10,
+      };
+
+      const engine = createGameEngine(makeValidOptions({ config: customConfig }), {
+        board: emptyBoard(),
+        activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['O', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 80, // Nivel 9
+      });
+
+      expect(engine.getSnapshot().level).toBe(9);
+      expect(engine.getSnapshot().baseGravityCellsPerSecond).toBe(7.0);
+    });
+
+    it('reset restablece a Nivel 1 y gravedad base 1.00 c/s sin emitir levelUp', () => {
+      const engine = createGameEngine(makeValidOptions(), {
+        board: emptyBoard(),
+        activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['O', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 50, // Nivel 6
+      });
+
+      expect(engine.getSnapshot().level).toBe(6);
+
+      engine.reset(makeValidOptions());
+      const events = engine.drainEvents();
+
+      expect(engine.getSnapshot().level).toBe(1);
+      expect(engine.getSnapshot().baseGravityCellsPerSecond).toBe(1.0);
+      expect(events.filter((e) => e.type === 'levelUp')).toHaveLength(0);
+    });
+
+    it('pausa y gameOver conservan level, baseGravityCellsPerSecond y activeGravityCellsPerSecond en el snapshot', () => {
+      const engine = createGameEngine(makeValidOptions(), {
+        board: emptyBoard(),
+        activePiece: { type: 'I', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['O', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 30, // Nivel 4
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.level).toBe(4);
+      expect(snap.baseGravityCellsPerSecond).toBe(2.0);
+      expect(snap.activeGravityCellsPerSecond).toBe(2.0);
+    });
+
+    it('dos ejecuciones idénticas producen exactamente la misma progresión de nivel y gravedades', () => {
+      const e1 = createGameEngine(makeValidOptions({ seed: 999 }));
+      const e2 = createGameEngine(makeValidOptions({ seed: 999 }));
+
+      expect(e1.getSnapshot().level).toBe(e2.getSnapshot().level);
+      expect(e1.getSnapshot().baseGravityCellsPerSecond).toBe(e2.getSnapshot().baseGravityCellsPerSecond);
+    });
+
+    it('demuestra que una configuración alternativa con gravityCellsPerSecond = 2 no altera la gravedad base de Nivel 1 (1.0 c/s) ni provoca una caída a 1.25 c/s al pasar a Nivel 2', () => {
+      const customConfig = {
+        ...prototypeConfig,
+        gravityCellsPerSecond: 2,
+      };
+
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 3 && x !== 4) {
+          board[23]![x] = 'I';
+        }
+      }
+
+      const engine = createGameEngine(makeValidOptions({ config: customConfig }), {
+        board,
+        activePiece: { type: 'O', x: 3, y: 0, orientation: Orientation.Spawn },
+        nextPieces: ['I', 'T', 'L'],
+        heldPiece: null,
+        clearedLines: 9, // Nivel 1 con 9 líneas acumuladas
+      });
+
+      // Snapshot inicial en Nivel 1
+      const snap1 = engine.getSnapshot();
+      expect(snap1.level).toBe(1);
+      expect(snap1.baseGravityCellsPerSecond).toBe(1.0);
+      expect(snap1.activeGravityCellsPerSecond).toBe(1.0);
+
+      // Fijar pieza O -> completa 1 línea -> clearedLines: 10 -> Nivel 2
+      drainAll(engine);
+      stepHardDrop(engine);
+
+      // Snapshot tras alcanzar Nivel 2: sube progresivamente de 1.0 a 1.25 c/s, no cae de 2.0 a 1.25
+      const snap2 = engine.getSnapshot();
+      expect(snap2.level).toBe(2);
+      expect(snap2.baseGravityCellsPerSecond).toBe(1.25);
+      expect(snap2.activeGravityCellsPerSecond).toBe(1.25);
     });
   });
 });

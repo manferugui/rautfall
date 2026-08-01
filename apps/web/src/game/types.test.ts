@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GamePresentationState } from './types';
 
 describe('GamePresentationState', () => {
-  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo, backToBack, combatEnergy, storedSabotages, pendingGarbage y activeEffects', () => {
+  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo, backToBack, combatEnergy, storedSabotages, pendingGarbage, activeEffects, level, baseGravityCellsPerSecond y activeGravityCellsPerSecond', () => {
     const state: GamePresentationState = {
       status: 'running',
       step: 42,
@@ -16,11 +16,14 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
-    // Verificar que solo tiene las 12 propiedades esperadas
+    // Verificar que solo tiene las 15 propiedades esperadas
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(12);
+    expect(keys).toHaveLength(15);
     expect(keys).toContain('status');
     expect(keys).toContain('step');
     expect(keys).toContain('elapsedMs');
@@ -33,6 +36,9 @@ describe('GamePresentationState', () => {
     expect(keys).toContain('storedSabotages');
     expect(keys).toContain('pendingGarbage');
     expect(keys).toContain('activeEffects');
+    expect(keys).toContain('level');
+    expect(keys).toContain('baseGravityCellsPerSecond');
+    expect(keys).toContain('activeGravityCellsPerSecond');
   });
 
   it('no contiene el campo singular nextPiece', () => {
@@ -49,6 +55,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect('nextPiece' in state).toBe(false);
@@ -68,6 +77,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     // Verificar que no hay propiedades como board, activePiece, etc.
@@ -94,6 +106,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(state.status).toBe('gameOver');
@@ -116,11 +131,14 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(state.status).toBe('paused');
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(12);
+    expect(keys).toHaveLength(15);
   });
 
   it('nextPieces tiene tres elementos', () => {
@@ -137,6 +155,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(state.nextPieces).toHaveLength(3);
@@ -156,6 +177,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(state.heldPiece).toBe('L');
@@ -175,6 +199,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(state.heldPiece).toBeNull();
@@ -194,6 +221,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(typeof state.score).toBe('number');
@@ -214,6 +244,9 @@ describe('GamePresentationState', () => {
       storedSabotages: [],
       pendingGarbage: 0,
       activeEffects: [],
+      level: 1,
+      baseGravityCellsPerSecond: 1.0,
+      activeGravityCellsPerSecond: 1.0,
     };
 
     expect(typeof state.backToBack).toBe('number');

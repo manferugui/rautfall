@@ -50,7 +50,16 @@ export type GameEvent =
   | { type: 'sabotageTriggered'; step: number; sabotage: SabotageType }
   | { type: 'garbageApplied'; step: number; linesCount: number }
   | { type: 'effectStarted'; step: number; effect: ActiveEffectType; durationMs: number }
-  | { type: 'effectExpired'; step: number; effect: ActiveEffectType };
+  | { type: 'effectExpired'; step: number; effect: ActiveEffectType }
+  | LevelUpEvent;
+
+export interface LevelUpEvent {
+  type: 'levelUp';
+  step: number;
+  previousLevel: number;
+  newLevel: number;
+  baseGravityCellsPerSecond: number;
+}
 
 /**
  * Estado inmutable de la pieza activa en un instante dado.
@@ -107,6 +116,9 @@ export type EngineSnapshot = Readonly<{
   storedSabotages: readonly SabotageType[];
   pendingGarbage: number;
   activeEffects: readonly ActiveEffectSnapshot[];
+  level: number;
+  baseGravityCellsPerSecond: number;
+  activeGravityCellsPerSecond: number;
 }>;
 
 /**
@@ -272,6 +284,21 @@ const BACK_TO_BACK_ENERGY_BONUS_RATIO = 0.25;
 const OVERLOAD_GRAVITY_MULTIPLIER = 3;
 const OVERLOAD_DURATION_MS = 10000;
 const ALL_SABOTAGES: readonly SabotageType[] = Object.freeze(['residuos', 'sobrecarga']);
+
+const MAX_LEVEL = 10;
+const BASE_GRAVITY_TABLE: readonly number[] = [
+  0,     // Offset de índice 0 no utilizado
+  1.00,  // Nivel 1
+  1.25,  // Nivel 2
+  1.50,  // Nivel 3
+  2.00,  // Nivel 4
+  2.50,  // Nivel 5
+  3.00,  // Nivel 6
+  4.00,  // Nivel 7
+  5.00,  // Nivel 8
+  7.00,  // Nivel 9
+  10.00, // Nivel 10
+];
 
 // ── Definición de piezas ────────────────────────────────────────────────
 
@@ -702,6 +729,7 @@ export type TSpinDemoInitialState = {
   storedSabotages?: readonly SabotageType[];
   pendingGarbage?: number;
   activeEffects?: readonly ActiveEffectSnapshot[];
+  clearedLines?: number;
 };
 
 export function createGameEngine(
@@ -730,7 +758,9 @@ export function createGameEngine(
     ? [...initialState.nextPieces]
     : [];
   let verticalProgress = 0;
-  let clearedLines = 0;
+  let clearedLines = initialState?.clearedLines ?? 0;
+  let level = Math.min(MAX_LEVEL, Math.floor(clearedLines / 10) + 1);
+  let baseGravityCellsPerSecond = BASE_GRAVITY_TABLE[level]!;
   let lockDelayElapsedMs = 0;
   let lockResetsUsed = 0;
   let heldPiece: PieceType | null = initialState ? initialState.heldPiece : null;
@@ -816,6 +846,21 @@ export function createGameEngine(
     // 4. Detectar y eliminar líneas
     const lineIndices = clearLines();
     const linesCount = lineIndices.length as 0 | 1 | 2 | 3 | 4;
+
+    const previousLevel = level;
+    const newLevel = Math.min(MAX_LEVEL, Math.floor(clearedLines / 10) + 1);
+
+    if (newLevel !== previousLevel) {
+      level = newLevel;
+      baseGravityCellsPerSecond = BASE_GRAVITY_TABLE[level]!;
+      eventQueue.push({
+        type: 'levelUp',
+        step: currentStep,
+        previousLevel,
+        newLevel,
+        baseGravityCellsPerSecond,
+      });
+    }
 
     // Variables de clasificación
     const hasLines = lineIndices.length > 0;
@@ -1139,13 +1184,13 @@ export function createGameEngine(
     if (!activePiece) return;
 
     const hasSobrecarga = activeEffects.some((e) => e.type === 'sobrecarga');
-    const activeGravity = hasSobrecarga
-      ? config.gravityCellsPerSecond * OVERLOAD_GRAVITY_MULTIPLIER
-      : config.gravityCellsPerSecond;
+    const activeGravityCellsPerSecond = hasSobrecarga
+      ? baseGravityCellsPerSecond * OVERLOAD_GRAVITY_MULTIPLIER
+      : baseGravityCellsPerSecond;
 
     const activeCellsPerSecond = input.softDropHeld
       ? config.softDropCellsPerSecond
-      : activeGravity;
+      : activeGravityCellsPerSecond;
 
     verticalProgress += config.fixedStepMs * activeCellsPerSecond;
 
@@ -1318,6 +1363,11 @@ export function createGameEngine(
           })
         : null;
 
+      const hasSobrecarga = activeEffects.some((e) => e.type === 'sobrecarga');
+      const activeGravityCellsPerSecond = hasSobrecarga
+        ? baseGravityCellsPerSecond * OVERLOAD_GRAVITY_MULTIPLIER
+        : baseGravityCellsPerSecond;
+
       return Object.freeze({
         step: currentStep,
         elapsedMs: currentElapsedMs,
@@ -1340,6 +1390,9 @@ export function createGameEngine(
             Object.freeze({ type: e.type, remainingMs: e.remainingMs }),
           ),
         ),
+        level,
+        baseGravityCellsPerSecond,
+        activeGravityCellsPerSecond,
       });
     },
 
@@ -1391,6 +1444,8 @@ export function createGameEngine(
       nextPiecesQueue = [];
       verticalProgress = 0;
       clearedLines = 0;
+      level = 1;
+      baseGravityCellsPerSecond = BASE_GRAVITY_TABLE[1]!;
       lockDelayElapsedMs = 0;
       lockResetsUsed = 0;
       heldPiece = null;

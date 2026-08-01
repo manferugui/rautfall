@@ -5,6 +5,14 @@
       <span class="score-panel__value" data-testid="score-value">{{ score }}</span>
     </div>
     <div class="score-panel__row">
+      <span class="score-panel__label">Nivel</span>
+      <span class="score-panel__value" data-testid="level-value">{{ level }}</span>
+    </div>
+    <div class="score-panel__row">
+      <span class="score-panel__label">Gravedad</span>
+      <span class="score-panel__value" data-testid="gravity-value">{{ activeGravityCellsPerSecond.toFixed(2) }} c/s</span>
+    </div>
+    <div class="score-panel__row">
       <span class="score-panel__label">Combo</span>
       <span class="score-panel__value" data-testid="combo-value">{{ combo >= 1 ? combo : '\u2014' }}</span>
     </div>
@@ -26,9 +34,13 @@ withDefaults(
     combo: number;
     backToBack: number;
     combatEnergy?: number;
+    level?: number;
+    activeGravityCellsPerSecond?: number;
   }>(),
   {
     combatEnergy: 0,
+    level: 1,
+    activeGravityCellsPerSecond: 1.0,
   },
 );
 </script>
