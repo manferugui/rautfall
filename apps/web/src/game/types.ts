@@ -20,12 +20,31 @@ export type OpponentPresentationState = Readonly<{
   visibleCells: readonly CellPresentation[];
 }>;
 
+export type BotDevDiagnostic = Readonly<{
+  pieceId: number | null;
+  x: number | null;
+  y: number | null;
+  minCellY: number | null;
+  orientation: number | null;
+  boardCellCount: number;
+  phase: string;
+  reactionStepsRemaining: number;
+  actionIntervalStepsRemaining: number;
+  hardDropDelayStepsRemaining: number;
+  actionIndex: number;
+  lastActionStep: number | null;
+  lastAction: string | null;
+  currentAction: string | null;
+  planLength: number;
+}>;
+
 export type BattlePresentationState = Readonly<{
   status: BattleStatus;
   winner: BattleWinner;
   step: number;
   lastSabotageRouted: string | null;
   playerTwo: OpponentPresentationState;
+  botDevDiagnostic?: BotDevDiagnostic | undefined;
 }>;
 
 /**

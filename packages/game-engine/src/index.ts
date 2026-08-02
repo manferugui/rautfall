@@ -103,6 +103,7 @@ export interface LevelUpEvent {
  * `holdUsed` indica si esta pieza activa ya ha consumido su única reserva.
  */
 export type ActivePieceSnapshot = Readonly<{
+  pieceId: number;
   type: PieceType;
   x: number;
   y: number;
@@ -221,6 +222,13 @@ export type GameEngine = {
    *   cumplen su contrato.
    */
   reset(options: EngineOptions): void;
+  /**
+   * Crea una copia aislada e independiente del estado interno actual del motor.
+   * La instancia clonada conserva exactamente la misma posición de pieza,
+   * tablero, temporizadores, PRNGs y efectos, permitiendo simular pasos lógicos
+   * sin mutar la partida real.
+   */
+  clone(): GameEngine;
 };
 
 // ── Tipos de error ──────────────────────────────────────────────────────
@@ -421,14 +429,23 @@ const I_KICKS: KickTable = {
 
 // ── PRNG: mulberry32 ────────────────────────────────────────────────────
 
-function createPrng(seed: number): () => number {
-  let state = seed | 0;
-  return () => {
+export type Prng = {
+  (): number;
+  getState(): number;
+  clone(): Prng;
+};
+
+function createPrng(seed: number, initialState?: number): Prng {
+  let state = initialState !== undefined ? (initialState | 0) : (seed | 0);
+  const fn = (() => {
     state = (state + 0x6d2b79f5) | 0;
     let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  }) as Prng;
+  fn.getState = () => state;
+  fn.clone = () => createPrng(seed, state);
+  return fn;
 }
 
 function deriveSeed(seed: number, purpose: 'pieces' | 'effects'): number {
@@ -585,6 +602,7 @@ function isTSpin(
 // ── Tipo de pieza activa ────────────────────────────────────────────────
 
 type ActivePiece = {
+  pieceId: number;
   type: PieceType;
   x: number;
   y: number;
@@ -755,7 +773,7 @@ export function getPieceShape(type: PieceType): PieceShape {
  */
 export type TSpinDemoInitialState = {
   board: (PieceType | 'garbage' | null)[][];
-  activePiece: ActivePiece;
+  activePiece: { pieceId?: number; type: PieceType; x: number; y: number; orientation: Orientation };
   nextPieces: PieceType[];
   heldPiece: PieceType | null;
   combatEnergy?: number;
@@ -765,63 +783,123 @@ export type TSpinDemoInitialState = {
   clearedLines?: number;
 };
 
+type ActiveEffectState =
+  | { type: 'sobrecarga'; remainingMs: number }
+  | { type: 'polaridad'; remainingPieces: 1 | 2 };
+
+type InternalClonedState = {
+  currentStep: number;
+  currentElapsedMs: number;
+  currentSeed: number;
+  status: 'running' | 'gameOver';
+  board: (PieceType | 'garbage' | null)[][];
+  piecePrng: Prng;
+  effectsPrng: Prng;
+  bagState: { bag: PieceType[]; index: number };
+  sabotageBagState: { bag: SabotageType[]; index: number };
+  nextPieceId: number;
+  activePiece: ActivePiece | null;
+  nextPiecesQueue: PieceType[];
+  verticalProgress: number;
+  clearedLines: number;
+  level: number;
+  baseGravityCellsPerSecond: number;
+  lockDelayElapsedMs: number;
+  lockResetsUsed: number;
+  heldPiece: PieceType | null;
+  holdUsed: boolean;
+  score: number;
+  combo: number;
+  lastActionWasRotation: boolean;
+  backToBack: number;
+  combatEnergy: number;
+  storedSabotages: SabotageType[];
+  pendingGarbage: number;
+  activeEffects: ActiveEffectState[];
+  eventQueue: GameEvent[];
+  horizontalState: HorizontalState;
+};
+
 export function createGameEngine(
   options: EngineOptions,
   initialState?: TSpinDemoInitialState,
+  clonedState?: InternalClonedState,
 ): GameEngine {
   validateSeed(options.seed);
   parseGameConfig(options.config);
 
   const config = options.config;
-  let currentStep = 0;
-  let currentElapsedMs = 0;
-  let currentSeed = options.seed;
-  let status: 'running' | 'gameOver' = 'running';
-  // Si se proporciona un estado inicial (solo escenario dev nominado), se
-  // usa sin validación adicional: es responsabilidad del escenario.
-  let board = initialState ? cloneBoard(initialState.board) : createEmptyBoard();
-  let piecePrng = createPrng(deriveSeed(currentSeed, 'pieces'));
-  let effectsPrng = createPrng(deriveSeed(currentSeed, 'effects'));
-  let bagState = createBag(piecePrng);
-  let sabotageBagState = createSabotageBag(effectsPrng);
-  let activePiece: ActivePiece | null = initialState
-    ? { ...initialState.activePiece }
-    : null;
-  /** Cola mutable interna de próximas piezas (longitud siempre 3 tras la creación). */
-  let nextPiecesQueue: PieceType[] = initialState
-    ? [...initialState.nextPieces]
-    : [];
-  let verticalProgress = 0;
-  let clearedLines = initialState?.clearedLines ?? 0;
-  let level = Math.min(MAX_LEVEL, Math.floor(clearedLines / 10) + 1);
-  let baseGravityCellsPerSecond = BASE_GRAVITY_TABLE[level]!;
-  let lockDelayElapsedMs = 0;
-  let lockResetsUsed = 0;
-  let heldPiece: PieceType | null = initialState ? initialState.heldPiece : null;
-  let holdUsed = false;
-  let score = 0;
-  let combo = 0;
-  let lastActionWasRotation = false;
-  let backToBack = 0;
-  let combatEnergy = initialState?.combatEnergy ?? 0;
-  let storedSabotages: SabotageType[] = initialState?.storedSabotages
-    ? [...initialState.storedSabotages]
-    : [];
-  let pendingGarbage = initialState?.pendingGarbage ?? 0;
-  type ActiveEffectState =
-    | { type: 'sobrecarga'; remainingMs: number }
-    | { type: 'polaridad'; remainingPieces: 1 | 2 };
-  let activeEffects: ActiveEffectState[] = initialState?.activeEffects
-    ? initialState.activeEffects.map((e) =>
+  let currentStep = clonedState ? clonedState.currentStep : 0;
+  let currentElapsedMs = clonedState ? clonedState.currentElapsedMs : 0;
+  let currentSeed = clonedState ? clonedState.currentSeed : options.seed;
+  let status: 'running' | 'gameOver' = clonedState ? clonedState.status : 'running';
+  let board = clonedState
+    ? cloneBoard(clonedState.board)
+    : initialState
+      ? cloneBoard(initialState.board)
+      : createEmptyBoard();
+  let piecePrng = clonedState
+    ? clonedState.piecePrng.clone()
+    : createPrng(deriveSeed(currentSeed, 'pieces'));
+  let effectsPrng = clonedState
+    ? clonedState.effectsPrng.clone()
+    : createPrng(deriveSeed(currentSeed, 'effects'));
+  let bagState = clonedState
+    ? { bag: [...clonedState.bagState.bag], index: clonedState.bagState.index }
+    : createBag(piecePrng);
+  let sabotageBagState = clonedState
+    ? { bag: [...clonedState.sabotageBagState.bag], index: clonedState.sabotageBagState.index }
+    : createSabotageBag(effectsPrng);
+  let nextPieceId = clonedState ? clonedState.nextPieceId : 1;
+  let activePiece: ActivePiece | null = clonedState
+    ? clonedState.activePiece ? { ...clonedState.activePiece } : null
+    : initialState
+      ? { pieceId: nextPieceId++, ...initialState.activePiece }
+      : null;
+  let nextPiecesQueue: PieceType[] = clonedState
+    ? [...clonedState.nextPiecesQueue]
+    : initialState
+      ? [...initialState.nextPieces]
+      : [];
+  let verticalProgress = clonedState ? clonedState.verticalProgress : 0;
+  let clearedLines = clonedState ? clonedState.clearedLines : (initialState?.clearedLines ?? 0);
+  let level = clonedState ? clonedState.level : Math.min(MAX_LEVEL, Math.floor(clearedLines / 10) + 1);
+  let baseGravityCellsPerSecond = clonedState ? clonedState.baseGravityCellsPerSecond : BASE_GRAVITY_TABLE[level]!;
+  let lockDelayElapsedMs = clonedState ? clonedState.lockDelayElapsedMs : 0;
+  let lockResetsUsed = clonedState ? clonedState.lockResetsUsed : 0;
+  let heldPiece: PieceType | null = clonedState ? clonedState.heldPiece : (initialState ? initialState.heldPiece : null);
+  let holdUsed = clonedState ? clonedState.holdUsed : false;
+  let score = clonedState ? clonedState.score : 0;
+  let combo = clonedState ? clonedState.combo : 0;
+  let lastActionWasRotation = clonedState ? clonedState.lastActionWasRotation : false;
+  let backToBack = clonedState ? clonedState.backToBack : 0;
+  let combatEnergy = clonedState ? clonedState.combatEnergy : (initialState?.combatEnergy ?? 0);
+  let storedSabotages: SabotageType[] = clonedState
+    ? [...clonedState.storedSabotages]
+    : initialState?.storedSabotages
+      ? [...initialState.storedSabotages]
+      : [];
+  let pendingGarbage = clonedState ? clonedState.pendingGarbage : (initialState?.pendingGarbage ?? 0);
+  let activeEffects: ActiveEffectState[] = clonedState
+    ? clonedState.activeEffects.map((e) =>
         e.type === 'sobrecarga'
           ? { type: 'sobrecarga', remainingMs: e.remainingMs }
           : { type: 'polaridad', remainingPieces: e.remainingPieces },
       )
-    : [];
-  const eventQueue: GameEvent[] = [{ type: 'engineStarted', step: 0 }];
+    : initialState?.activeEffects
+      ? initialState.activeEffects.map((e) =>
+          e.type === 'sobrecarga'
+            ? { type: 'sobrecarga', remainingMs: e.remainingMs }
+            : { type: 'polaridad', remainingPieces: e.remainingPieces },
+        )
+      : [];
+  const eventQueue: GameEvent[] = clonedState
+    ? []
+    : [{ type: 'engineStarted', step: 0 }];
 
-  // Estado de temporización horizontal
-  const horizontalState = createHorizontalState();
+  const horizontalState: HorizontalState = clonedState
+    ? { ...clonedState.horizontalState }
+    : createHorizontalState();
 
   /** Reinicia los contadores de estado por pieza (spawn, hold entrante, reset). */
   function resetPieceState(): void {
@@ -852,7 +930,7 @@ export function createGameEngine(
       return;
     }
 
-    activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
+    activePiece = { pieceId: nextPieceId++, type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     nextPiecesQueue = queuePieces;
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
@@ -1098,7 +1176,7 @@ export function createGameEngine(
       return;
     }
 
-    activePiece = { type: candidate, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
+    activePiece = { pieceId: nextPieceId++, type: candidate, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
     resetPieceState();
@@ -1117,7 +1195,7 @@ export function createGameEngine(
       return;
     }
 
-    activePiece = { type: incoming, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
+    activePiece = { pieceId: nextPieceId++, type: incoming, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
     resetHorizontalState(horizontalState);
     verticalProgress = 0;
     resetPieceState();
@@ -1355,7 +1433,7 @@ export function createGameEngine(
     }
   }
 
-  if (!initialState) {
+  if (!initialState && !clonedState) {
     spawnInitialPieces();
   }
 
@@ -1419,6 +1497,7 @@ export function createGameEngine(
       const grounded = isGrounded(board, activePiece);
       const activePieceSnap: ActivePieceSnapshot | null = activePiece
         ? Object.freeze({
+            pieceId: activePiece.pieceId,
             type: activePiece.type,
             x: activePiece.x,
             y: activePiece.y,
@@ -1545,6 +1624,7 @@ export function createGameEngine(
       board = createEmptyBoard();
       piecePrng = createPrng(deriveSeed(currentSeed, 'pieces'));
       effectsPrng = createPrng(deriveSeed(currentSeed, 'effects'));
+      nextPieceId = 1;
       activePiece = null;
       nextPiecesQueue = [];
       verticalProgress = 0;
@@ -1582,7 +1662,7 @@ export function createGameEngine(
         activePiece = null;
         nextPiecesQueue = [secondType, thirdType, fourthType];
       } else {
-        activePiece = { type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
+        activePiece = { pieceId: nextPieceId++, type: firstType, x: spawnX, y: spawnY, orientation: Orientation.Spawn };
         nextPiecesQueue = [secondType, thirdType, fourthType];
         resetHorizontalState(horizontalState);
         verticalProgress = 0;
@@ -1590,6 +1670,49 @@ export function createGameEngine(
       }
 
       eventQueue.push({ type: 'engineReset', step: 0 });
+    },
+
+    clone(): GameEngine {
+      return createGameEngine(
+        options,
+        undefined,
+        {
+          currentStep,
+          currentElapsedMs,
+          currentSeed,
+          status,
+          board: cloneBoard(board),
+          piecePrng: piecePrng.clone(),
+          effectsPrng: effectsPrng.clone(),
+          bagState: { bag: [...bagState.bag], index: bagState.index },
+          sabotageBagState: { bag: [...sabotageBagState.bag], index: sabotageBagState.index },
+          nextPieceId,
+          activePiece: activePiece ? { ...activePiece } : null,
+          nextPiecesQueue: [...nextPiecesQueue],
+          verticalProgress,
+          clearedLines,
+          level,
+          baseGravityCellsPerSecond,
+          lockDelayElapsedMs,
+          lockResetsUsed,
+          heldPiece,
+          holdUsed,
+          score,
+          combo,
+          lastActionWasRotation,
+          backToBack,
+          combatEnergy,
+          storedSabotages: [...storedSabotages],
+          pendingGarbage,
+          activeEffects: activeEffects.map((e) =>
+            e.type === 'sobrecarga'
+              ? { type: 'sobrecarga', remainingMs: e.remainingMs }
+              : { type: 'polaridad', remainingPieces: e.remainingPieces },
+          ),
+          eventQueue: [],
+          horizontalState: { ...horizontalState },
+        },
+      );
     },
   };
 }

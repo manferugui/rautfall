@@ -60,6 +60,7 @@ describe('mapEngineToOpponentPresentation', () => {
       ...snap,
       board: boardCopy,
       activePiece: {
+        pieceId: 1,
         type: 'I',
         orientation: 0,
         x: 5,
@@ -108,6 +109,7 @@ describe('mapEngineToOpponentPresentation', () => {
     const mockSnap: EngineSnapshot = {
       ...snap,
       activePiece: {
+        pieceId: 1,
         type: 'T',
         orientation: 0,
         x: 4,

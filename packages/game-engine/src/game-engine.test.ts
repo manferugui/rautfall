@@ -8060,4 +8060,501 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       expect(new Set(generatedSabotages)).toEqual(new Set(['residuos', 'sobrecarga', 'polaridad']));
     });
   });
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  TAREA 0022 — CLONACIÓN DEL MOTOR (clone())
+  // ════════════════════════════════════════════════════════════════════════
+
+  describe('Tarea 0022 — Clonación del motor (clone())', () => {
+    it('1. snapshot inicial del clon es idéntico al del motor original', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      expect(clone.getSnapshot()).toEqual(engine.getSnapshot());
+    });
+
+    it('2. cola inicial de eventos del clon está vacía', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      const cloneEvents = clone.drainEvents();
+      expect(cloneEvents).toEqual([]);
+    });
+
+    it('3. los eventos pendientes del original no se copian al clon', () => {
+      const engine = createGameEngine(makeValidOptions());
+      // engine tiene evento engineStarted sin drenar
+      const clone = engine.clone();
+
+      expect(clone.drainEvents()).toEqual([]);
+      expect(engine.drainEvents()).toHaveLength(1);
+    });
+
+    it('4. pasos idénticos en el original y en el clon producen snapshots idénticos', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      const input: StepInput = {
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      };
+
+      engine.step(input);
+      clone.step(input);
+
+      expect(clone.getSnapshot()).toEqual(engine.getSnapshot());
+    });
+
+    it('5. pasos idénticos producen eventos idénticos', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.drainEvents(); // limpiar evento inicial
+      const clone = engine.clone();
+
+      const input: StepInput = {
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      };
+
+      engine.step(input);
+      clone.step(input);
+
+      expect(clone.drainEvents()).toEqual(engine.drainEvents());
+    });
+
+    it('6. avanzar el clon no modifica el original', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const snapBefore = engine.getSnapshot();
+      const clone = engine.clone();
+
+      clone.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+
+      expect(engine.getSnapshot()).toEqual(snapBefore);
+    });
+
+    it('7. avanzar el original no modifica el clon', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+      const cloneSnapBefore = clone.getSnapshot();
+
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+
+      expect(clone.getSnapshot()).toEqual(cloneSnapBefore);
+    });
+
+    it('8. acciones distintas producen divergencia independiente', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+
+      clone.step({
+        leftHeld: false, rightHeld: true, leftPressed: false, rightPressed: true,
+        softDropHeld: false, hardDrop: false,
+      });
+
+      expect(engine.getSnapshot().activePiece?.x).not.toEqual(clone.getSnapshot().activePiece?.x);
+    });
+
+    it('9. PRNG de piezas conservado tras la clonación', () => {
+      const engine = createGameEngine(makeValidOptions());
+      // Avanzar varios pasos para consumir piezas
+      stepHardDrop(engine);
+      stepHardDrop(engine);
+
+      const clone = engine.clone();
+
+      // Fijar otra pieza en ambos
+      stepHardDrop(engine);
+      stepHardDrop(clone);
+
+      expect(clone.getSnapshot().activePiece?.type).toBe(engine.getSnapshot().activePiece?.type);
+    });
+
+    it('10. PRNG de piezas independiente tras la clonación', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      // Avanzar sólo el clon
+      stepHardDrop(clone);
+
+      // Los estados deben haber divertido adecuadamente sin alterar el original
+      expect(engine.getSnapshot().step).toBe(0);
+      expect(clone.getSnapshot().step).toBeGreaterThan(0);
+    });
+
+    it('11. PRNG de sabotajes conservado tras la clonación', () => {
+      const board = emptyBoard();
+      for (let y = 12; y < 24; y++) {
+        for (let x = 1; x < 10; x++) board[y]![x] = 'J';
+      }
+
+      const engine = createGameEngine(
+        makeValidOptions({ seed: 42 }),
+        {
+          board,
+          activePiece: { type: 'I', x: -2, y: 0, orientation: Orientation.Right },
+          nextPieces: ['I', 'I', 'I'],
+          heldPiece: null,
+          combatEnergy: 190,
+        },
+      );
+
+      const clone = engine.clone();
+
+      stepHardDrop(engine);
+      stepHardDrop(clone);
+
+      expect(engine.getSnapshot().storedSabotages).toEqual(clone.getSnapshot().storedSabotages);
+    });
+
+    it('12. PRNG de sabotajes independiente tras la clonación', () => {
+      const board = emptyBoard();
+      for (let y = 12; y < 24; y++) {
+        for (let x = 1; x < 10; x++) board[y]![x] = 'J';
+      }
+
+      const engine = createGameEngine(
+        makeValidOptions({ seed: 42 }),
+        {
+          board,
+          activePiece: { type: 'I', x: -2, y: 0, orientation: Orientation.Right },
+          nextPieces: ['I', 'I', 'I'],
+          heldPiece: null,
+          combatEnergy: 190,
+        },
+      );
+
+      const clone = engine.clone();
+      stepHardDrop(clone);
+
+      // El original no ha consumido energía ni generado sabotajes
+      expect(engine.getSnapshot().storedSabotages).toEqual([]);
+      expect(clone.getSnapshot().storedSabotages).toHaveLength(1);
+    });
+
+    it('13. clonación con hold ocupado conserva heldPiece', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, hold: true,
+      });
+
+      const snap = engine.getSnapshot();
+      expect(snap.heldPiece).not.toBeNull();
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().heldPiece).toBe(snap.heldPiece);
+    });
+
+    it('14. clonación después de usar hold conserva holdUsed', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, hold: true,
+      });
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().activePiece?.holdUsed).toBe(true);
+
+      // Intentar un segundo hold en el clon debe ser ignorado
+      const typeBeforeSecondHold = clone.getSnapshot().activePiece?.type;
+      clone.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, hold: true,
+      });
+      expect(clone.getSnapshot().activePiece?.type).toBe(typeBeforeSecondHold);
+    });
+
+    it('15. clonación con garbage pendiente conserva pendingGarbage', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('residuos');
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().pendingGarbage).toBe(2);
+
+      // Aplicar hard drop en el clon consume basura en el clon pero no en el original
+      stepHardDrop(clone);
+      expect(clone.getSnapshot().pendingGarbage).toBe(0);
+      expect(engine.getSnapshot().pendingGarbage).toBe(2);
+    });
+
+    it('16. clonación con Sobrecarga activa conserva remainingMs', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('sobrecarga');
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().activeEffects).toEqual(engine.getSnapshot().activeEffects);
+      expect(clone.getSnapshot().activeGravityCellsPerSecond).toBe(engine.getSnapshot().activeGravityCellsPerSecond);
+    });
+
+    it('17. clonación con Polaridad activa conserva remainingPieces y comportamiento invertido', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('polaridad');
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().activeEffects).toEqual(engine.getSnapshot().activeEffects);
+
+      const x0 = clone.getSnapshot().activePiece!.x;
+      clone.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+      // Inversión: izquierda se convierte en derecha
+      expect(clone.getSnapshot().activePiece!.x).toBe(x0 + 1);
+    });
+
+    it('18. clonación durante lock delay conserva lockDelayElapsedMs y lockResetsUsed', () => {
+      const engine = createGameEngine(makeValidOptions());
+      // Bajar la pieza hasta apoyarla
+      while (!engine.getSnapshot().activePiece?.grounded) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+
+      // Consumir 100 ms de lock delay
+      for (let i = 0; i < 10; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+        });
+      }
+
+      const snap = engine.getSnapshot();
+      expect(snap.activePiece?.lockDelayElapsedMs).toBeGreaterThan(0);
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().activePiece?.lockDelayElapsedMs).toBe(snap.activePiece?.lockDelayElapsedMs);
+      expect(clone.getSnapshot().activePiece?.lockResetsUsed).toBe(snap.activePiece?.lockResetsUsed);
+    });
+
+    it('19. clonación en gameOver conserva status gameOver', () => {
+      const engine = createGameEngine(makeValidOptions());
+      while (engine.getSnapshot().status === 'running') {
+        try {
+          stepHardDrop(engine);
+        } catch {
+          break;
+        }
+      }
+      expect(engine.getSnapshot().status).toBe('gameOver');
+
+      const clone = engine.clone();
+      expect(clone.getSnapshot().status).toBe('gameOver');
+      expect(() => clone.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      })).toThrow(EngineStepError);
+    });
+
+    it('20. clon de clon reproduce exactamente el estado', () => {
+      const engine = createGameEngine(makeValidOptions());
+      stepHardDrop(engine);
+
+      const clone1 = engine.clone();
+      const clone2 = clone1.clone();
+
+      expect(clone2.getSnapshot()).toEqual(engine.getSnapshot());
+    });
+
+    it('21. reset del clon no afecta al original', () => {
+      const engine = createGameEngine(makeValidOptions());
+      stepHardDrop(engine);
+      const snapBefore = engine.getSnapshot();
+
+      const clone = engine.clone();
+      clone.reset(makeValidOptions());
+
+      expect(engine.getSnapshot()).toEqual(snapBefore);
+      expect(clone.getSnapshot().step).toBe(0);
+    });
+
+    it('22. reset del original no afecta al clon', () => {
+      const engine = createGameEngine(makeValidOptions());
+      stepHardDrop(engine);
+
+      const clone = engine.clone();
+      const cloneSnapBefore = clone.getSnapshot();
+
+      engine.reset(makeValidOptions());
+
+      expect(clone.getSnapshot()).toEqual(cloneSnapBefore);
+      expect(engine.getSnapshot().step).toBe(0);
+    });
+
+    it('23. estructuras readonly expuestas no comparten referencias mutables', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      const origSnap = engine.getSnapshot();
+      const cloneSnap = clone.getSnapshot();
+
+      expect(origSnap.board).not.toBe(cloneSnap.board);
+      expect(origSnap.nextPieces).not.toBe(cloneSnap.nextPieces);
+    });
+
+    it('24. drenar eventos de una instancia no afecta a la otra', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      // Original tiene 1 evento de arranque
+      expect(engine.drainEvents()).toHaveLength(1);
+      // Clon tiene 0 eventos
+      expect(clone.drainEvents()).toHaveLength(0);
+
+      // Avanzar ambos
+      const input: StepInput = {
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      };
+      engine.step(input);
+      clone.step(input);
+
+      // Drenar clone no vacía original
+      expect(clone.drainEvents()).toHaveLength(1);
+      expect(engine.drainEvents()).toHaveLength(1);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  TAREA 0022 — IDENTIDAD DE PIEZA (pieceId)
+  // ════════════════════════════════════════════════════════════════════════
+
+  describe('Tarea 0022 — Identidad de pieza (pieceId)', () => {
+    it('1. pieceId está presente en el snapshot de la pieza activa', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const active = engine.getSnapshot().activePiece;
+      expect(active).not.toBeNull();
+      expect(typeof active!.pieceId).toBe('number');
+      expect(active!.pieceId).toBeGreaterThan(0);
+    });
+
+    it('2. pieceId se mantiene estable durante movimientos horizontales', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const p1 = engine.getSnapshot().activePiece!.pieceId;
+
+      engine.step({
+        leftHeld: true, rightHeld: false, leftPressed: true, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+
+      const p2 = engine.getSnapshot().activePiece!.pieceId;
+      expect(p2).toBe(p1);
+    });
+
+    it('3. pieceId se mantiene estable durante rotaciones', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const p1 = engine.getSnapshot().activePiece!.pieceId;
+
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false, rotateClockwise: true,
+      });
+
+      const p2 = engine.getSnapshot().activePiece!.pieceId;
+      expect(p2).toBe(p1);
+    });
+
+    it('4. pieceId se mantiene estable durante el descenso por gravedad', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const p1 = engine.getSnapshot().activePiece!.pieceId;
+
+      for (let i = 0; i < 20; i++) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+
+      const p2 = engine.getSnapshot().activePiece!.pieceId;
+      expect(p2).toBe(p1);
+    });
+
+    it('5. pieceId se mantiene estable durante el lock delay acumulado', () => {
+      const engine = createGameEngine(makeValidOptions());
+
+      // Descender la pieza hasta apoyarse
+      while (!engine.getSnapshot().activePiece!.grounded) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+
+      const p1 = engine.getSnapshot().activePiece!.pieceId;
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+      });
+      const p2 = engine.getSnapshot().activePiece!.pieceId;
+
+      expect(p2).toBe(p1);
+    });
+
+    it('6. pieceId cambia al aparecer la siguiente pieza tras fijación', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const p1 = engine.getSnapshot().activePiece!.pieceId;
+
+      stepHardDrop(engine);
+
+      const p2 = engine.getSnapshot().activePiece!.pieceId;
+      expect(p2).not.toBe(p1);
+      expect(p2).toBe(p1 + 1);
+    });
+
+    it('7. dos piezas consecutivas del mismo tipo reciben pieceId distintos', () => {
+      const engine = createGameEngine(makeValidOptions({ seed: 12345 }));
+      const active1 = engine.getSnapshot().activePiece!;
+      stepHardDrop(engine);
+      const active2 = engine.getSnapshot().activePiece!;
+
+      expect(active2.pieceId).not.toBe(active1.pieceId);
+    });
+
+    it('8. clone() conserva exactamente el mismo pieceId de la pieza activa', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const origId = engine.getSnapshot().activePiece!.pieceId;
+      const clone = engine.clone();
+      const cloneId = clone.getSnapshot().activePiece!.pieceId;
+
+      expect(cloneId).toBe(origId);
+    });
+
+    it('9. clon y original evolucionan de forma independiente conservando pieceId aislados', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const clone = engine.clone();
+
+      stepHardDrop(engine); // Original fija pieza y avanza pieceId
+
+      const origIdAfter = engine.getSnapshot().activePiece!.pieceId;
+      const cloneIdUnchanged = clone.getSnapshot().activePiece!.pieceId;
+
+      expect(origIdAfter).not.toBe(cloneIdUnchanged);
+    });
+
+    it('10. reset() reproduce deterministamente el pieceId inicial esperado (pieceId = 1)', () => {
+      const options = makeValidOptions();
+      const engine = createGameEngine(options);
+      const initialId = engine.getSnapshot().activePiece!.pieceId;
+
+      stepHardDrop(engine);
+      stepHardDrop(engine);
+
+      engine.reset(options);
+      const resetId = engine.getSnapshot().activePiece!.pieceId;
+
+      expect(initialId).toBe(1);
+      expect(resetId).toBe(1);
+    });
+  });
 });

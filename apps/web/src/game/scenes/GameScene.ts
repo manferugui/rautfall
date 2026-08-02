@@ -28,7 +28,8 @@ import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo
 import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
 import { isPolarityDemoActive, createPolarityDemoEngine } from '../polarity-demo';
 import { isBattleDemoActive, createBattleDemoSession } from '../battle-demo';
-import type { BattleSession } from '@rautfall/battle-engine';
+import { createDeterministicBot, type BattleSession, type DeterministicBot } from '@rautfall/battle-engine';
+import type { BotDevDiagnostic } from '../types';
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
@@ -69,6 +70,7 @@ export type GameSceneCallbacks = {
 export class GameScene extends Phaser.Scene {
   private engine!: GameEngine;
   private battleSession: BattleSession | null = null;
+  private playerTwoBot: DeterministicBot | null = null;
   private lastSabotageRouted: string | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
@@ -311,10 +313,14 @@ export class GameScene extends Phaser.Scene {
       }
 
         if (this.battleSession) {
-          if (this.battleSession.getSnapshot().status === 'running') {
+          const bSnap = this.battleSession.getSnapshot();
+          if (bSnap.status === 'running') {
+            const p2Input = this.playerTwoBot
+              ? this.playerTwoBot.nextStep(this.battleSession.getEngine('playerTwo'), bSnap.status)
+              : this.emptyStepInput();
             this.battleSession.step({
               playerOne: input,
-              playerTwo: this.emptyStepInput(),
+              playerTwo: p2Input,
             });
           }
         } else if (this.engine.getSnapshot().status === 'running') {
@@ -453,35 +459,46 @@ export class GameScene extends Phaser.Scene {
     if (isBattleDemoActive()) {
       // Escenario cerrado de desarrollo: Capa de Batalla Local (2P)
       this.battleSession = createBattleDemoSession();
+      this.playerTwoBot = createDeterministicBot();
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
       this.lastSabotageRouted = null;
     } else if (levelDemoTarget !== null) {
       this.battleSession = null;
+      this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: demo de Nivel y Gravedad
       this.engine = createLevelDemoEngine(levelDemoTarget);
     } else if (isTSpinDemoActive()) {
       this.battleSession = null;
+      this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: tablero preparado + pieza T
       this.engine = createTSpinDemoEngine();
     } else if (isSabotageDemoActive()) {
       this.battleSession = null;
+      this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: demo de Residuos
       this.engine = createSabotageDemoEngine();
     } else if (isOverloadDemoActive()) {
       this.battleSession = null;
+      this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: demo de Sobrecarga
       this.engine = createOverloadDemoEngine();
     } else if (isGarbageDemoActive()) {
       this.battleSession = null;
+      this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: demo de Residuos (Garbage Demo)
       this.engine = createGarbageDemoEngine();
     } else if (isPolarityDemoActive()) {
       this.battleSession = null;
+      this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: demo de Polaridad inversa
       this.engine = createPolarityDemoEngine();
     } else {
       this.battleSession = null;
+      this.playerTwoBot = null;
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
+    }
+    if (this.playerTwoBot) {
+      this.playerTwoBot.reset();
     }
     this.engine.drainEvents();
     this.accumulator = 0;
@@ -652,6 +669,44 @@ export class GameScene extends Phaser.Scene {
 
     if (this.battleSession) {
       const bSnap = this.battleSession.getSnapshot();
+
+      let botDevDiagnostic: BotDevDiagnostic | undefined = undefined;
+      if (import.meta.env.DEV && this.playerTwoBot) {
+        const p2Engine = this.battleSession.getEngine('playerTwo');
+        const p2Snap = p2Engine.getSnapshot();
+        const p2Active = p2Snap.activePiece;
+        const diag = this.playerTwoBot.getDiagnostic();
+
+        let boardCellCount = 0;
+        for (let r = 0; r < 24; r++) {
+          const row = p2Snap.board[r];
+          if (!row) continue;
+          for (let c = 0; c < 10; c++) {
+            if (row[c] !== null && row[c] !== undefined) boardCellCount++;
+          }
+        }
+
+        const minCellY = p2Active ? Math.min(...p2Active.cells.map((cell) => cell.y)) : null;
+
+        botDevDiagnostic = Object.freeze({
+          pieceId: p2Active?.pieceId ?? null,
+          x: p2Active?.x ?? null,
+          y: p2Active?.y ?? null,
+          minCellY,
+          orientation: p2Active?.orientation ?? null,
+          boardCellCount,
+          phase: diag.currentPhase,
+          reactionStepsRemaining: diag.reactionTimerSteps,
+          actionIntervalStepsRemaining: diag.actionIntervalTimer,
+          hardDropDelayStepsRemaining: diag.hardDropDelayTimer,
+          actionIndex: diag.actionIndex,
+          lastActionStep: diag.lastActionStep,
+          lastAction: diag.lastAction,
+          currentAction: diag.currentPhase === 'executing' ? 'active' : null,
+          planLength: diag.planDiagnostic?.selectedActionCount ?? 0,
+        });
+      }
+
       newState = {
         ...newState,
         battleState: {
@@ -660,6 +715,7 @@ export class GameScene extends Phaser.Scene {
           step: bSnap.step,
           lastSabotageRouted: this.lastSabotageRouted,
           playerTwo: mapEngineToOpponentPresentation(bSnap.playerTwo),
+          botDevDiagnostic,
         },
       };
     }

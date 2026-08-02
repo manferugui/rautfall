@@ -147,6 +147,54 @@ function doTogglePause(): void {
                   <span class="session-label">Último Enrutado</span>
                   <span class="session-value" data-testid="last-sabotage-routed">{{ gameState.battleState.lastSabotageRouted }}</span>
                 </div>
+                <template v-if="gameState.battleState.botDevDiagnostic">
+                  <div class="session-item">
+                    <span class="session-label">P2 Piece ID</span>
+                    <span class="session-value" data-testid="player-two-piece-id">{{ gameState.battleState.botDevDiagnostic.pieceId ?? 'NULL' }}</span>
+                  </div>
+                  <div class="session-item">
+                    <span class="session-label">P2 X / Y / MinY</span>
+                    <span class="session-value">
+                      X:<span data-testid="player-two-x">{{ gameState.battleState.botDevDiagnostic.x ?? '-' }}</span>
+                      Y:<span data-testid="player-two-y">{{ gameState.battleState.botDevDiagnostic.y ?? '-' }}</span>
+                      MinY:<span data-testid="player-two-min-cell-y">{{ gameState.battleState.botDevDiagnostic.minCellY ?? '-' }}</span>
+                    </span>
+                  </div>
+                  <div class="session-item">
+                    <span class="session-label">P2 Orient / BoardCells</span>
+                    <span class="session-value">
+                      O:<span data-testid="player-two-orientation">{{ gameState.battleState.botDevDiagnostic.orientation ?? '-' }}</span>
+                      Cells:<span data-testid="player-two-board-cell-count">{{ gameState.battleState.botDevDiagnostic.boardCellCount }}</span>
+                    </span>
+                  </div>
+                  <div class="session-item">
+                    <span class="session-label">Bot Phase</span>
+                    <span class="session-value" data-testid="bot-phase">{{ gameState.battleState.botDevDiagnostic.phase }}</span>
+                  </div>
+                  <div class="session-item">
+                    <span class="session-label">Timers (React/Int/Drop)</span>
+                    <span class="session-value">
+                      <span data-testid="bot-reaction-steps-remaining">{{ gameState.battleState.botDevDiagnostic.reactionStepsRemaining }}</span> /
+                      <span data-testid="bot-action-interval-steps-remaining">{{ gameState.battleState.botDevDiagnostic.actionIntervalStepsRemaining }}</span> /
+                      <span data-testid="bot-hard-drop-delay-steps-remaining">{{ gameState.battleState.botDevDiagnostic.hardDropDelayStepsRemaining }}</span>
+                    </span>
+                  </div>
+                  <div class="session-item">
+                    <span class="session-label">Plan Act/Len</span>
+                    <span class="session-value">
+                      Idx:<span data-testid="bot-action-index">{{ gameState.battleState.botDevDiagnostic.actionIndex }}</span>
+                      Act:<span data-testid="bot-current-action">{{ gameState.battleState.botDevDiagnostic.currentAction ?? 'NULL' }}</span>
+                      Len:<span data-testid="bot-plan-length">{{ gameState.battleState.botDevDiagnostic.planLength }}</span>
+                    </span>
+                  </div>
+                  <div class="session-item">
+                    <span class="session-label">Last Action / Step</span>
+                    <span class="session-value">
+                      Act:<span data-testid="bot-last-action">{{ gameState.battleState.botDevDiagnostic.lastAction ?? 'NULL' }}</span>
+                      Step:<span data-testid="bot-last-action-step">{{ gameState.battleState.botDevDiagnostic.lastActionStep ?? 'NULL' }}</span>
+                    </span>
+                  </div>
+                </template>
               </div>
             </div>
 

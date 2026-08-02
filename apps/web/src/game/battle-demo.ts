@@ -40,14 +40,14 @@ export function createBattleDemoSession(
 export const BATTLE_DEMO_HELP = `
 === Battle Demo (Capa de Batalla Local Determinista 2P) activado ===
 Jugador 1: Controles de teclado humano.
-Jugador 2: Entradas neutras en lockstep síncrono.
+Jugador 2: Rival autónomo controlado por DeterministicBot.
 Semilla compartida: 42
 Comprobaciones:
   1. Pulsar Flecha Izquierda / Derecha / Z / Space → P1 avanza y realiza acciones.
-  2. Acumular energía y pulsar A → P1 lanza sabotaje que el orquestador enruta realmente a P2.
-  3. Comprobar panel técnico DEV de P2 → se muestra status, energía, nivel, sabotajes recibidos y efectos en P2.
-  4. Demostrar que no hay loopback a P1.
-  5. Pulsar Esc → la aplicación web deja de llamar a battleSession.step() y congela ambos motores.
-  6. Pulsar R → reinicio coordinado de la sesión de batalla.
+  2. Observar P2 → el bot heurístico evalúa tableros y coloca piezas de forma autónoma.
+  3. Acumular energía y pulsar A → P1 lanza sabotaje que el orquestador enruta realmente a P2.
+  4. Comprobar panel técnico DEV de P2 → se muestra status, energía, nivel, sabotajes recibidos y efectos en P2.
+  5. Pulsar Esc → la aplicación web deja de llamar a battleSession.step() y congela ambos motores y el bot.
+  6. Pulsar R → reinicio coordinado de la sesión de batalla y el bot.
 =====================================================================
 `;

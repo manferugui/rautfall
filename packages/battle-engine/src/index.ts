@@ -11,6 +11,38 @@ import {
 
 export type BattleParticipant = 'playerOne' | 'playerTwo';
 
+export {
+  createDeterministicBot,
+  isActivePieceFullyVisible,
+  normalizeBotConfig,
+  BOT_REACTION_DELAY_STEPS,
+  BOT_ACTION_INTERVAL_STEPS,
+  BOT_HARD_DROP_DELAY_STEPS,
+  type DeterministicBot,
+  type DeterministicBotDiagnostic,
+} from './bot/deterministic-bot';
+export {
+  DEFAULT_BOT_HEURISTIC_WEIGHTS,
+  type BoardMetrics,
+  evaluateBoardMetrics,
+  scoreBoardMetrics,
+} from './bot/board-evaluator';
+export {
+  searchPlacements,
+  BOT_MAX_SEARCH_NODES,
+  type SearchMetrics,
+  type SearchResult,
+} from './bot/placement-search';
+export type {
+  BotAction,
+  BotConfig,
+  BotExecutionPhase,
+  BotHeuristicWeights,
+  BotPlan,
+  BotPlanDiagnostic,
+  PlacementCandidate,
+} from './bot/types';
+
 export type BattleStatus =
   | 'running'
   | 'playerOneWon'
@@ -89,6 +121,7 @@ export interface BattleSession {
   getSnapshot(): BattleSnapshot;
   drainEvents(): readonly BattleEvent[];
   reset(): BattleSnapshot;
+  getEngine(participant: BattleParticipant): GameEngine;
 }
 
 export function createBattleSession(options: BattleSessionOptions): BattleSession {
@@ -268,6 +301,10 @@ export function createBattleSession(options: BattleSessionOptions): BattleSessio
       eventQueue = [{ type: 'battleReset', step: 0 }];
 
       return getSnapshot();
+    },
+
+    getEngine(participant: BattleParticipant): GameEngine {
+      return participant === 'playerOne' ? playerOneEngine : playerTwoEngine;
     },
   };
 }

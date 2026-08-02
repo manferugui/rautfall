@@ -540,6 +540,28 @@ Ver [Informe de implementación](implementation/0020-capa-de-batalla-local-deter
 
 Ver [Informe de implementación](implementation/0021-integracion-visual-segundo-tablero-real.md).
 
+## Task [0022 — Bot heurístico determinista para batalla local](tasks/0022-bot-heuristico-determinista.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-08-02 |
+| **Resultado** | Bot heurístico determinista (`DeterministicBot`) para Player 2 en Batalla Local, configurado con un único perfil de referencia equilibrado (base para `battleNormal`). Método contractual `GameEngine.clone()` en `@rautfall/game-engine` y propiedad contractual `pieceId: number` en `ActivePieceSnapshot` para percepción e invalidación determinista sin identificadores sintéticos. Exploración BFS de colocaciones alcanzables (`placement-search.ts`), descarte obligatorio de candidatos terminales cuando existan alternativas de supervivencia, función de evaluación con 10 métricas y penalización de pozos/huecos nuevos (`board-evaluator.ts`), desempate canónico de 7 niveles, espera de visibilidad completa ($y \ge 4$), ejecutor físico con retardo de 20 pasos (200 ms), intervalo de 4 pasos entre acciones (40 ms) y pausa de 5 pasos antes del hard drop (50 ms), desorientación por Polaridad Inversa e integración en Player 2 para `?battle-demo=1`. 645 tests Vitest y 2 tests E2E Playwright en verde. Lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Método `clone(): GameEngine` en `@rautfall/game-engine` con clonación inmutable de tableros, piezas y PRNGs.
+- Campo `pieceId: number` en `ActivePieceSnapshot` para identificar de forma contractual y estable cada pieza generada por el motor.
+- `board-evaluator.ts` calcula métricas post-colocación penalizando pozos profundos, huecos nuevos y ocupación de filas ocultas.
+- `placement-search.ts` filtra candidatos terminales si existen supervivientes y desempata en 7 niveles.
+- `deterministic-bot.ts` impone perfil de cadencia de referencia (20 ticks de retardo, 4 ticks de intervalo, 5 ticks previos a hard drop), visibilidad completa ($y \ge 4$) y tolerancia a la gravedad natural.
+- Integración en `GameScene.ts` para Player 2 en `?battle-demo=1` expuesta con atributos `data-testid` estables en consola DEV.
+- 24 tests de clonación + 10 tests de `pieceId` en `game-engine`, 24 tests de bot en `battle-engine` y 2 tests E2E Playwright en `apps/web`.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0022-bot-heuristico-determinista.md).
+
 ## Siguiente tarea
 
-- **0022 — Bot IA heurístico para el rival**: Diseñar e implementar el rival controlado por IA heurística según `docs/rautfall.md`.
+- **0023 — Muerte súbita y fin de batalla local**: Diseñar e implementar las reglas de finalización de batalla, temporizador de muerte súbita e incremento progresivo de presión según `docs/rautfall.md`.
