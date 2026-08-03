@@ -11,8 +11,10 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     pageErrors.push(error.message);
   });
 
-  await test.step('carga de la aplicación y tablero real de Phaser', async () => {
+  await test.step('carga de la aplicación y navegación al Modo Entrenamiento', async () => {
     await page.goto('/');
+    await expect(page.getByTestId('mode-selector')).toBeVisible();
+    await page.getByTestId('start-training-button').click();
     const canvas = page.locator('[data-testid="game-canvas"] canvas');
     await expect(canvas).toBeVisible();
   });
@@ -22,10 +24,7 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     await expect(page.getByTestId('held-piece-preview')).toBeVisible();
     const nextPiecesItems = page.getByTestId('next-pieces-preview').getByRole('listitem');
     await expect(nextPiecesItems).toHaveCount(3);
-    await expect(page.getByTestId('opponent-column')).toContainText('SIMULADO');
-    await expect(page.getByTestId('simulated-energy')).toBeVisible();
-    await expect(page.getByTestId('simulated-cartridge')).toBeVisible();
-    await expect(page.getByTestId('simulated-residues')).toBeVisible();
+    await expect(page.getByTestId('opponent-column')).toContainText('SIN OPONENTE');
     await expect(page.getByTestId('score-value')).toHaveText('0');
     await expect(page.getByTestId('combo-value')).toBeVisible();
   });

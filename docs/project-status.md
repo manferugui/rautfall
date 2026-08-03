@@ -609,6 +609,29 @@ Ver [Informe de implementación](implementation/0023-bot-sabotajes-deterministas
 
 Ver [Informe de implementación](implementation/0024-muerte-subita-determinista-batalla-local.md).
 
+## Task [0025 — Flujo web de modos y resultados](tasks/0025-flujo-web-modos-y-resultados.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-08-03 |
+| **Resultado** | Flujo jugable de producción completo en `apps/web`: Menú Principal Industrial Dramatic (`ModeSelector.vue`), selección e inicio de modos Entrenamiento (1P) y Batalla Local (2P contra `DeterministicBot`) sin query flags, panel modal de Resultados (`ResultsModal.vue`) con desglose de estadísticas oficiales y acciones Volver a Jugar / Menú Principal, presentación limpia de monitor rival en Entrenamiento (`SIN OPONENTE` / `STANDBY`), ciclo de vida estricto de Phaser con `game.destroy(true)` y creación limpia por partida, conservación de flags DEV para desarrollo y pruebas E2E. 708 tests Vitest y 7 tests E2E Playwright en verde. Lint, typecheck, build y git diff --check limpios. |
+
+### Resumen
+
+- Máquina de estados de navegación en Vue (`appScreen`: `'menu' | 'playing' | 'results'`) desacoplada del motor y Phaser.
+- `ModeSelector.vue`: Menú Principal con estética Industrial Dramatic, selector de modos (Entrenamiento / Batalla) y resumen de controles.
+- `ResultsModal.vue`: Modal de resultados al finalizar la partida con métricas oficiales (Puntuación, Nivel, Tiempo transcurrido, Resultado de batalla) y acciones Volver a Jugar / Menú Principal.
+- `OpponentMonitor.vue` adaptado para mostrar estado standby inequívoco (`SIN OPONENTE`) en Entrenamiento (1P) sin celdas ficticias.
+- Batalla Local 2P accesible desde la interfaz gráfica normal sin parámetros URL.
+- Ciclo de vida estricto con destrucción completa de Phaser en `onBeforeUnmount()` y recreación limpia al iniciar cada partida.
+- Flags DEV (`?battle-demo=1`, etc.) conservadas como accesos directos de desarrollo protegidas por `import.meta.env.DEV`.
+- 708 tests Vitest y 7 escenarios E2E Playwright en verde. Sin errores de lint, typecheck ni build.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0025-flujo-web-modos-y-resultados.md).
+
 ## Siguiente tarea
 
-- **0025 — Pantalla de resultados, fin de partida y menú de navegación en Web**: Diseñar e implementar la interfaz de presentación de victoria/derrota, cierre de partida y selector de modos en la aplicación web.
+- Pendiente de definición y auditoría por el usuario.

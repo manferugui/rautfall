@@ -13,10 +13,11 @@
 
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { createPhaserGame } from '../game/create-phaser-game';
-import type { GamePresentationState, PhaserGameController } from '../game/types';
+import type { GameMode, GamePresentationState, PhaserGameController } from '../game/types';
 
 const props = defineProps<{
   onStateUpdate: (state: GamePresentationState) => void;
+  mode?: GameMode;
 }>();
 
 const emit = defineEmits<{
@@ -31,6 +32,7 @@ onMounted(() => {
 
   controller = createPhaserGame({
     parent: gameContainer.value,
+    mode: props.mode ?? 'training',
     onStateUpdate: (state: GamePresentationState) => {
       props.onStateUpdate(state);
     },

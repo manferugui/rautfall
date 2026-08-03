@@ -31,7 +31,23 @@ const mockOpponentState: OpponentPresentationState = Object.freeze({
 });
 
 describe('OpponentMonitor.vue', () => {
-  describe('Modo Simulado (1P normal)', () => {
+  describe('Modo Entrenamiento (1P)', () => {
+    it('renderiza la insignia "SIN OPONENTE" y no muestra celdas ficticias', () => {
+      const wrapper = mount(OpponentMonitor, {
+        props: { mode: 'training' },
+      });
+      expect(wrapper.find('[data-testid="standby-badge"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="standby-badge"]').text()).toBe('SIN OPONENTE');
+      expect(wrapper.find('[data-testid="simulated-badge"]').exists()).toBe(false);
+      expect(wrapper.findAll('[data-testid="opponent-cell"]').length).toBe(0);
+      expect(wrapper.find('[data-testid="standby-board-overlay"]').text()).toBe('STANDBY');
+      expect(wrapper.find('[data-testid="training-telemetry"]').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Modo entrenamiento individual');
+      wrapper.unmount();
+    });
+  });
+
+  describe('Modo Simulado (1P legacy demo)', () => {
     it('renderiza la etiqueta "SIMULADO"', () => {
       const wrapper = mount(OpponentMonitor);
       expect(wrapper.find('[data-testid="simulated-badge"]').exists()).toBe(true);

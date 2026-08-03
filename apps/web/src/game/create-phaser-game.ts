@@ -7,12 +7,14 @@
 
 import Phaser from 'phaser';
 import { GameScene, type GameSceneCallbacks } from './scenes/GameScene';
-import type { GamePresentationState, PhaserGameController } from './types';
+import type { GameMode, GamePresentationState, PhaserGameController } from './types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './coordinates';
 
 export type CreatePhaserGameOptions = {
   /** Elemento DOM que contendrá el canvas de Phaser. */
   parent: HTMLElement;
+  /** Modo de juego seleccionado para la sesión ('training' | 'battle'). */
+  mode?: GameMode;
   /** Callback para notificar cambios de estado a Vue. */
   onStateUpdate: (state: GamePresentationState) => void;
 };
@@ -47,6 +49,7 @@ export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameCo
   // Añadir la escena dinámicamente para poder pasarle datos
   game.scene.add('GameScene', GameScene, true, {
     callbacks: sceneCallbacks,
+    mode: options.mode ?? 'training',
   });
 
   return {

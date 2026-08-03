@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
- * Monitor rival (Simulado / Real).
+ * Monitor rival (Simulado / Real / Standby Entrenamiento).
  *
  * Responsabilidades:
- * - Renderizar el tablero rival estático simulado (modo 1P normal) o real (modo ?battle-demo=1).
+ * - Renderizar el tablero rival estático simulado, real (modo ?battle-demo=1 / battle) o standby (entrenamiento).
+ * - En modo entrenamiento (1P), mostrar estado en reposo "SIN OPONENTE" sin celdas ficticias.
  * - En modo real, mostrar visibleCells (celdas fijas, activas, fantasma y basura) proyectadas 10×20.
  * - Ocultar la insignia "SIMULADO" exclusivamente cuando existe un estado real de P2.
  * - Mostrar telemetría táctica real de P2 (Nivel, Energía, Sabotajes, Efectos, Basura pendiente).
@@ -14,7 +15,7 @@
 import { computed } from 'vue';
 import type { ActiveEffectSnapshot } from '@rautfall/game-engine';
 import type { BattleStatus, BattleWinner } from '@rautfall/battle-engine';
-import type { OpponentPresentationState } from '../game/types';
+import type { GameMode, OpponentPresentationState } from '../game/types';
 import {
   OPPONENT_STATIC_BOARD,
   OPPONENT_BOARD_COLS,
@@ -31,15 +32,18 @@ const props = withDefaults(
     battleStatus?: BattleStatus | null;
     winner?: BattleWinner | null;
     isPaused?: boolean;
+    mode?: GameMode;
   }>(),
   {
     playerTwo: null,
     battleStatus: null,
     winner: null,
     isPaused: false,
+    mode: 'battle',
   },
 );
 
+const isTraining = computed(() => props.mode === 'training');
 const isRealMode = computed(() => props.playerTwo != null);
 
 const terminalResultText = computed(() => {
@@ -73,7 +77,8 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
   <div class="opponent-monitor" data-testid="opponent-monitor">
     <div class="opponent-header">
       <span class="opponent-title">RIVAL</span>
-      <span v-if="!isRealMode" class="simulated-badge" data-testid="simulated-badge">SIMULADO</span>
+      <span v-if="isTraining" class="standby-badge" data-testid="standby-badge">SIN OPONENTE</span>
+      <span v-else-if="!isRealMode" class="simulated-badge" data-testid="simulated-badge">SIMULADO</span>
       <span v-else class="real-badge" data-testid="real-badge">Lvl {{ playerTwo?.level }}</span>
     </div>
 
@@ -88,8 +93,15 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
           height: OPPONENT_BOARD_ROWS * OPPONENT_CELL_SIZE + 'px',
         }"
       >
-        <!-- Modo Simulado (1P normal) -->
-        <template v-if="!isRealMode">
+        <!-- Modo Entrenamiento (1P sin rival) -->
+        <template v-if="isTraining">
+          <div class="standby-board-overlay" data-testid="standby-board-overlay">
+            STANDBY
+          </div>
+        </template>
+
+        <!-- Modo Simulado (1P legacy demo) -->
+        <template v-else-if="!isRealMode">
           <div
             v-for="(cell, index) in OPPONENT_STATIC_BOARD"
             :key="index"
@@ -135,8 +147,24 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
       </div>
     </div>
 
+    <!-- Telemetría Táctica: Modo Entrenamiento -->
+    <div v-if="isTraining" class="opponent-telemetry" data-testid="training-telemetry">
+      <div class="telemetry-row">
+        <span class="telemetry-label">Modo</span>
+        <span class="telemetry-value">ENTRENAMIENTO</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-label">Oponente</span>
+        <span class="telemetry-value">NINGUNO</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-label">Monitor</span>
+        <span class="telemetry-value telemetry-value--amber">STANDBY</span>
+      </div>
+    </div>
+
     <!-- Telemetría Táctica: Modo Simulado -->
-    <div v-if="!isRealMode" class="opponent-telemetry">
+    <div v-else-if="!isRealMode" class="opponent-telemetry">
       <div class="telemetry-row">
         <span class="telemetry-label">Enlace</span>
         <span class="telemetry-value telemetry-value--ok">{{ SIMULATED_OPPONENT_LINK_STATUS }}</span>
@@ -176,9 +204,10 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
     </div>
 
     <p class="opponent-footnote">
-      {{ isRealMode ? 'Monitor táctico en tiempo real' : 'Vista de prototipo — sin lógica de combate' }}
+      {{ isTraining ? 'Modo entrenamiento individual' : isRealMode ? 'Monitor táctico en tiempo real' : 'Vista de prototipo — sin lógica de combate' }}
     </p>
   </div>
+
 </template>
 
 <style scoped>
@@ -219,6 +248,31 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
   background: var(--rf-color-metal-600, #3a3b3f);
   padding: 1px 6px;
   border-radius: var(--rf-radius-sm, 3px);
+}
+
+.standby-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--rf-color-amber, #f39c12);
+  background: var(--rf-color-graphite-700, #28292c);
+  border: 1px solid var(--rf-color-amber, #f39c12);
+  padding: 1px 6px;
+  border-radius: var(--rf-radius-sm, 3px);
+}
+
+.standby-board-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.4));
+  font-size: 0.85rem;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
 }
 
 .real-badge {

@@ -1,23 +1,114 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import GameCanvas from './components/GameCanvas.vue';
 import NextPiecesPreview from './components/NextPiecesPreview.vue';
 import ScorePanel from './components/ScorePanel.vue';
 import HeldPiecePreview from './components/HeldPiecePreview.vue';
 import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
-import type { GamePresentationState, PhaserGameController } from './game/types';
+import ModeSelector from './components/ModeSelector.vue';
+import ResultsModal from './components/ResultsModal.vue';
+import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
+import { isBattleDemoActive } from './game/battle-demo';
+import { isTSpinDemoActive } from './game/tspin-demo';
+import { isSabotageDemoActive } from './game/sabotage-demo';
+import { isOverloadDemoActive } from './game/overload-demo';
+import { isGarbageDemoActive } from './game/garbage-demo';
+import { isPolarityDemoActive } from './game/polarity-demo';
+import { getLevelDemoTarget } from './game/level-demo';
 
-const gameState = ref<GamePresentationState>({ status: 'running', step: 0, elapsedMs: 0, nextPieces: ['I', 'I', 'I'], heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 1, baseGravityCellsPerSecond: 1.0, activeGravityCellsPerSecond: 1.0 });
+function hasDevDemoFlag(): boolean {
+  return (
+    isBattleDemoActive() ||
+    isTSpinDemoActive() ||
+    isSabotageDemoActive() ||
+    isOverloadDemoActive() ||
+    isGarbageDemoActive() ||
+    isPolarityDemoActive() ||
+    getLevelDemoTarget() !== null
+  );
+}
+
+const isDevDemo = hasDevDemoFlag();
+const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
+const gameMode = ref<GameMode>(isBattleDemoActive() ? 'battle' : 'training');
+const isCanvasMounted = ref(isDevDemo);
+
+const gameState = ref<GamePresentationState>({
+  status: 'running',
+  step: 0,
+  elapsedMs: 0,
+  nextPieces: ['I', 'I', 'I'],
+  heldPiece: null,
+  score: 0,
+  combo: 0,
+  backToBack: 0,
+  combatEnergy: 0,
+  storedSabotages: [],
+  pendingGarbage: 0,
+  activeEffects: [],
+  level: 1,
+  baseGravityCellsPerSecond: 1.0,
+  activeGravityCellsPerSecond: 1.0,
+});
+
+const gameResult = ref<GameResultSummary | null>(null);
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
 
 function onStateUpdate(state: GamePresentationState): void {
   gameState.value = state;
+
+  const isEngineGameOver = state.status === 'gameOver';
+  const isBattleEnded = Boolean(state.battleState && state.battleState.status !== 'running');
+
+  if (!isDevDemo && (isEngineGameOver || isBattleEnded) && appScreen.value === 'playing') {
+    let title = 'ENTRENAMIENTO FINALIZADO';
+    let subtitle: string | undefined = undefined;
+
+    if (gameMode.value === 'battle' && state.battleState) {
+      const winner = state.battleState.winner;
+      if (winner === 'playerOne') {
+        title = 'VICTORIA';
+        subtitle = 'Has derrotado al rival autónomo';
+      } else if (winner === 'playerTwo') {
+        title = 'DERROTA';
+        subtitle = 'El rival ha dominado la batalla';
+      } else if (winner === 'draw') {
+        title = 'EMPATE';
+        subtitle = 'Ambos tableros colapsaron simultáneamente';
+      }
+    }
+
+    gameResult.value = {
+      mode: gameMode.value,
+      title,
+      subtitle,
+      score: state.score,
+      level: state.level,
+      elapsedMs: state.elapsedMs,
+      battleResult: state.battleState
+        ? {
+            status: state.battleState.status,
+            winner: state.battleState.winner,
+            step: state.battleState.step,
+          }
+        : undefined,
+    };
+
+    appScreen.value = 'results';
+  }
 }
 
 function onControllerReady(c: PhaserGameController): void {
   controller = c;
+}
+
+function selectMode(mode: GameMode): void {
+  gameMode.value = mode;
+  gameResult.value = null;
+  appScreen.value = 'playing';
+  isCanvasMounted.value = true;
 }
 
 function doReset(): void {
@@ -29,23 +120,57 @@ function doReset(): void {
 function doTogglePause(): void {
   controller?.togglePause();
 }
+
+async function doReplay(): Promise<void> {
+  isCanvasMounted.value = false;
+  controller = null;
+  gameResult.value = null;
+  appScreen.value = 'playing';
+
+  await nextTick();
+  isCanvasMounted.value = true;
+}
+
+function goToMenu(): void {
+  isCanvasMounted.value = false;
+  controller = null;
+  gameResult.value = null;
+  appScreen.value = 'menu';
+}
 </script>
 
 <template>
   <div class="app">
-    <!-- Aviso de ancho insuficiente: fuera de la carcasa, es un mensaje de sistema, no parte de la máquina -->
+    <!-- Aviso de ancho insuficiente -->
     <div class="width-warning" data-testid="width-warning" role="status">
       Rautfall Tactical está pensado para escritorio o portátil con más ancho de pantalla.
       La experiencia puede resultar incómoda por debajo de 760 px.
     </div>
 
-    <div class="tactical-chassis panel-riveted">
+    <!-- Menú Principal -->
+    <ModeSelector
+      v-if="appScreen === 'menu'"
+      @select-mode="selectMode"
+    />
+
+    <!-- Pantalla de Juego ('playing' o 'results') -->
+    <div v-else class="tactical-chassis panel-riveted">
       <header class="app-header">
         <div class="title-tag">
           <h1 class="app-title">Rautfall</h1>
         </div>
-        <span class="app-descriptor">Build. Disrupt. Survive.</span>
+        <span class="app-descriptor">
+          {{ gameMode === 'battle' ? 'Modo Batalla Local (2P)' : 'Modo Entrenamiento (1P)' }}
+        </span>
         <div class="hazard-strip" aria-hidden="true"></div>
+        <button
+          type="button"
+          class="exit-menu-btn"
+          data-testid="exit-to-menu-button"
+          @click="goToMenu"
+        >
+          Menú
+        </button>
       </header>
 
       <div v-if="error" class="error">
@@ -58,6 +183,8 @@ function doTogglePause(): void {
           <div class="board-bezel" :class="`board-bezel--${gameState.status}`">
             <div class="canvas-wrapper">
               <GameCanvas
+                v-if="isCanvasMounted"
+                :mode="gameMode"
                 :on-state-update="onStateUpdate"
                 @controller-ready="onControllerReady"
               />
@@ -253,6 +380,7 @@ function doTogglePause(): void {
         <!-- Zona 3: Monitor rival -->
         <div class="opponent-column" data-testid="opponent-column">
           <OpponentMonitor
+            :mode="gameMode"
             :player-two="gameState.battleState?.playerTwo ?? null"
             :battle-status="gameState.battleState?.status ?? null"
             :winner="gameState.battleState?.winner ?? null"
@@ -260,9 +388,17 @@ function doTogglePause(): void {
           />
         </div>
       </div>
+
+      <!-- Modal de Resultados cuando appScreen === 'results' -->
+      <ResultsModal
+        v-if="appScreen === 'results' && gameResult"
+        :result="gameResult"
+        @replay="doReplay"
+        @main-menu="goToMenu"
+      />
     </div>
 
-    <p class="footnote">Prototipo técnico — 0009b</p>
+    <p class="footnote">Rautfall TFM — Tarea 0025</p>
   </div>
 </template>
 
@@ -352,6 +488,26 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
+}
+
+.exit-menu-btn {
+  margin-left: auto;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  background: var(--rf-color-graphite-700, #28292c);
+  color: var(--rf-color-text-muted, rgba(232,232,236,0.8));
+  border-radius: var(--rf-radius-sm, 3px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.exit-menu-btn:hover {
+  background: var(--rf-color-graphite-800, #1f2023);
+  color: var(--rf-color-text-primary, #e8e8ec);
 }
 
 .hazard-strip {

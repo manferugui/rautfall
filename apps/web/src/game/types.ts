@@ -55,6 +55,33 @@ export type BattlePresentationState = Readonly<{
 }>;
 
 /**
+ * Modos de juego soportados por la aplicación web.
+ */
+export type GameMode = 'training' | 'battle';
+
+/**
+ * Pantallas principales de la aplicación web.
+ */
+export type AppScreen = 'menu' | 'playing' | 'results';
+
+/**
+ * Resumen oficial de resultados al finalizar una partida.
+ */
+export type GameResultSummary = Readonly<{
+  mode: GameMode;
+  title: string;
+  subtitle?: string | undefined;
+  score: number;
+  level: number;
+  elapsedMs: number;
+  battleResult?: Readonly<{
+    status: BattleStatus;
+    winner: BattleWinner;
+    step: number;
+  }> | undefined;
+}>;
+
+/**
  * Resumen mínimo que Phaser comunica a Vue.
  */
 export type GamePresentationState = Readonly<{

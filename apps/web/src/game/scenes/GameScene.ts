@@ -17,7 +17,7 @@
 import Phaser from 'phaser';
 import { createGameEngine, type GameEngine, type PieceType } from '@rautfall/game-engine';
 import { prototypeConfig } from '@rautfall/game-config';
-import type { GamePresentationState } from '../types';
+import type { GameMode, GamePresentationState, BotDevDiagnostic } from '../types';
 import { computeSteps } from '../time-adapter';
 import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
@@ -28,8 +28,7 @@ import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo
 import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
 import { isPolarityDemoActive, createPolarityDemoEngine } from '../polarity-demo';
 import { isBattleDemoActive, createBattleDemoSession } from '../battle-demo';
-import { createDeterministicBot, type BattleSession, type DeterministicBot } from '@rautfall/battle-engine';
-import type { BotDevDiagnostic } from '../types';
+import { createBattleSession, createDeterministicBot, type BattleSession, type DeterministicBot } from '@rautfall/battle-engine';
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
@@ -68,6 +67,7 @@ export type GameSceneCallbacks = {
 };
 
 export class GameScene extends Phaser.Scene {
+  private mode: GameMode = 'training';
   private engine!: GameEngine;
   private battleSession: BattleSession | null = null;
   private playerTwoBot: DeterministicBot | null = null;
@@ -125,8 +125,9 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
-  init(data: { callbacks: GameSceneCallbacks }): void {
+  init(data: { callbacks: GameSceneCallbacks; mode?: GameMode }): void {
     this.callbacks = data.callbacks;
+    this.mode = data.mode ?? 'training';
   }
 
   create(): void {
@@ -492,7 +493,14 @@ export class GameScene extends Phaser.Scene {
       this.playerTwoBot = null;
       // Escenario cerrado de desarrollo: demo de Polaridad inversa
       this.engine = createPolarityDemoEngine();
+    } else if (this.mode === 'battle') {
+      // Modo Batalla normal de producción (2P)
+      this.battleSession = createBattleSession({ seed: FIXED_SEED, config: prototypeConfig });
+      this.playerTwoBot = createDeterministicBot();
+      this.engine = this.battleSession.getEngine('playerOne');
+      this.lastSabotageRouted = null;
     } else {
+      // Modo Entrenamiento normal de producción (1P)
       this.battleSession = null;
       this.playerTwoBot = null;
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
