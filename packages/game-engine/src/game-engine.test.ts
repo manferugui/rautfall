@@ -11,6 +11,7 @@ import {
   type SabotageType,
   type StepInput,
   type TSpinDemoInitialState,
+  type EngineModifiers,
 } from './index';
 
 function makeValidOptions(
@@ -8555,6 +8556,106 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
 
       expect(initialId).toBe(1);
       expect(resetId).toBe(1);
+    });
+  });
+
+  describe('Tarea 0024 — Modificadores externos (EngineModifiers)', () => {
+    it('aplica el multiplicador externo de gravedad sobre activeGravityCellsPerSecond', () => {
+      const engine = createGameEngine(makeValidOptions());
+      const baseGravity = engine.getSnapshot().activeGravityCellsPerSecond;
+
+      const input: StepInput = {
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+        modifiers: { gravityMultiplier: 1.5 },
+      };
+
+      engine.step(input);
+
+      expect(engine.getSnapshot().activeGravityCellsPerSecond).toBe(baseGravity * 1.5);
+    });
+
+    it('aplica el multiplicador externo de energía sobre la energía generada', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 0 && x !== 1) board[23]![x] = 'Z';
+      }
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 20, orientation: Orientation.Spawn });
+
+      const input: StepInput = {
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true,
+        modifiers: { energyMultiplier: 1.2 },
+      };
+
+      engine.step(input);
+
+      // Eliminación de 1 línea = 10 base energy * 1.2 = 12
+      expect(engine.getSnapshot().combatEnergy).toBe(12);
+    });
+
+    it('valida estrictamente modifiers rechazando negativos, cero, NaN, Infinity y claves desconocidas', () => {
+      const engine = createGameEngine(makeValidOptions());
+
+      expect(() => {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+          modifiers: { gravityMultiplier: -1 },
+        });
+      }).toThrow('gravityMultiplier must be a finite positive number');
+
+      expect(() => {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+          modifiers: { gravityMultiplier: Infinity },
+        });
+      }).toThrow('gravityMultiplier must be a finite positive number');
+
+      expect(() => {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false,
+          modifiers: { unknownProp: 2 } as unknown as EngineModifiers,
+        });
+      }).toThrow('Unknown property in modifiers: unknownProp');
+    });
+
+    it('aplica redondeo entero determinista Math.floor en la energía generada', () => {
+      const board = emptyBoard();
+      for (let x = 0; x < 10; x++) {
+        if (x !== 0 && x !== 1) board[23]![x] = 'Z';
+      }
+      const engine = createTestEngine(board, { type: 'O', x: 0, y: 20, orientation: Orientation.Spawn });
+
+      // Multiplicador no entero, por ejemplo 1.135
+      const input: StepInput = {
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: true,
+        modifiers: { energyMultiplier: 1.135 },
+      };
+
+      engine.step(input);
+
+      // 10 base energy * 1.135 = 11.35 -> Math.floor = 11
+      expect(engine.getSnapshot().combatEnergy).toBe(11);
+    });
+
+    it('reset() limpia los modificadores de entrada de la sesión anterior', () => {
+      const options = makeValidOptions();
+      const engine = createGameEngine(options);
+      const baseGravity = engine.getSnapshot().activeGravityCellsPerSecond;
+
+      engine.step({
+        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+        softDropHeld: false, hardDrop: false,
+        modifiers: { gravityMultiplier: 1.5 },
+      });
+      expect(engine.getSnapshot().activeGravityCellsPerSecond).toBe(baseGravity * 1.5);
+
+      engine.reset(options);
+      expect(engine.getSnapshot().activeGravityCellsPerSecond).toBe(baseGravity);
     });
   });
 });

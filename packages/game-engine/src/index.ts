@@ -8,6 +8,14 @@ export type SabotageType = 'residuos' | 'sobrecarga' | 'polaridad';
 
 export type ActiveEffectType = 'sobrecarga' | 'polaridad';
 
+/**
+ * Modificadores externos aplicables al paso lógico del motor individual.
+ */
+export type EngineModifiers = Readonly<{
+  gravityMultiplier?: number;
+  energyMultiplier?: number;
+}>;
+
 export type ActiveEffectSnapshot =
   | Readonly<{
       type: 'sobrecarga';
@@ -176,6 +184,7 @@ export type StepInput = {
   rotateCounterclockwise?: boolean;
   hold?: boolean;
   triggerSabotage?: boolean;
+  modifiers?: EngineModifiers;
 };
 
 export type EngineOptions = {
@@ -830,6 +839,7 @@ type InternalClonedState = {
   activeEffects: ActiveEffectState[];
   eventQueue: GameEvent[];
   horizontalState: HorizontalState;
+  lastInputModifiers?: EngineModifiers | undefined;
 };
 
 export function createGameEngine(
@@ -908,10 +918,12 @@ export function createGameEngine(
   const eventQueue: GameEvent[] = clonedState
     ? []
     : [{ type: 'engineStarted', step: 0 }];
-
-  const horizontalState: HorizontalState = clonedState
+  const horizontalState = clonedState
     ? { ...clonedState.horizontalState }
     : createHorizontalState();
+  let lastInputModifiers: EngineModifiers | undefined = clonedState?.lastInputModifiers
+    ? { ...clonedState.lastInputModifiers }
+    : undefined;
 
   /** Reinicia los contadores de estado por pieza (spawn, hold entrante, reset). */
   function resetPieceState(): void {
@@ -1061,7 +1073,8 @@ export function createGameEngine(
         const backToBackEnergyBonus = (isDifficult && backToBack >= 2)
           ? Math.floor(baseEnergy * BACK_TO_BACK_ENERGY_BONUS_RATIO)
           : 0;
-        const generatedEnergy = baseEnergy + comboEnergyBonus + backToBackEnergyBonus;
+        const extEnergyMult = lastInputModifiers?.energyMultiplier ?? 1;
+        const generatedEnergy = Math.floor((baseEnergy + comboEnergyBonus + backToBackEnergyBonus) * extEnergyMult);
 
         score += basePoints + comboBonus + backToBackBonus;
 
@@ -1330,9 +1343,10 @@ export function createGameEngine(
     if (!activePiece) return;
 
     const hasSobrecarga = activeEffects.some((e) => e.type === 'sobrecarga');
-    const activeGravityCellsPerSecond = hasSobrecarga
+    const extGravityMult = input.modifiers?.gravityMultiplier ?? 1;
+    const activeGravityCellsPerSecond = (hasSobrecarga
       ? baseGravityCellsPerSecond * OVERLOAD_GRAVITY_MULTIPLIER
-      : baseGravityCellsPerSecond;
+      : baseGravityCellsPerSecond) * extGravityMult;
 
     const activeCellsPerSecond = input.softDropHeld
       ? config.softDropCellsPerSecond
@@ -1460,6 +1474,8 @@ export function createGameEngine(
 
       validateStepInput(input);
 
+      lastInputModifiers = input.modifiers;
+
       currentStep++;
       currentElapsedMs += config.fixedStepMs;
 
@@ -1528,9 +1544,10 @@ export function createGameEngine(
         : null;
 
       const hasSobrecarga = activeEffects.some((e) => e.type === 'sobrecarga');
-      const activeGravityCellsPerSecond = hasSobrecarga
+      const extGravityMult = lastInputModifiers?.gravityMultiplier ?? 1;
+      const activeGravityCellsPerSecond = (hasSobrecarga
         ? baseGravityCellsPerSecond * OVERLOAD_GRAVITY_MULTIPLIER
-        : baseGravityCellsPerSecond;
+        : baseGravityCellsPerSecond) * extGravityMult;
 
       return Object.freeze({
         step: currentStep,
@@ -1666,6 +1683,7 @@ export function createGameEngine(
       bagState = createBag(piecePrng);
       sabotageBagState = createSabotageBag(effectsPrng);
       resetHorizontalState(horizontalState);
+      lastInputModifiers = undefined;
       eventQueue.length = 0;
 
       const firstType = nextFromBag(bagState, piecePrng);
@@ -1731,6 +1749,7 @@ export function createGameEngine(
           ),
           eventQueue: [],
           horizontalState: { ...horizontalState },
+          lastInputModifiers: lastInputModifiers ? { ...lastInputModifiers } : undefined,
         },
       );
     },
@@ -1753,7 +1772,7 @@ export function validateStepInput(input: unknown): asserts input is StepInput {
   const allowedKeys = [
     'leftHeld', 'rightHeld', 'leftPressed', 'rightPressed',
     'softDropHeld', 'hardDrop', 'rotateClockwise', 'rotateCounterclockwise',
-    'hold', 'triggerSabotage',
+    'hold', 'triggerSabotage', 'modifiers',
   ];
   for (const key of Object.keys(obj)) {
     if (!allowedKeys.includes(key)) {
@@ -1830,6 +1849,38 @@ export function validateStepInput(input: unknown): asserts input is StepInput {
   // Comprobar triggerSabotage si está presente
   if ('triggerSabotage' in obj && typeof obj.triggerSabotage !== 'boolean') {
     throw new EngineStepError('INVALID_GAME_INPUT', `triggerSabotage must be boolean, got ${typeof obj.triggerSabotage}`);
+  }
+
+  // Comprobar modifiers si está presente
+  if ('modifiers' in obj && obj.modifiers !== undefined) {
+    if (typeof obj.modifiers !== 'object' || obj.modifiers === null) {
+      throw new EngineStepError('INVALID_GAME_INPUT', 'modifiers must be an object');
+    }
+    const mods = obj.modifiers as Record<string, unknown>;
+    const allowedModKeys = ['gravityMultiplier', 'energyMultiplier'];
+    for (const key of Object.keys(mods)) {
+      if (!allowedModKeys.includes(key)) {
+        throw new EngineStepError('INVALID_GAME_INPUT', `Unknown property in modifiers: ${key}`);
+      }
+    }
+    if ('gravityMultiplier' in mods && mods.gravityMultiplier !== undefined) {
+      if (
+        typeof mods.gravityMultiplier !== 'number' ||
+        mods.gravityMultiplier <= 0 ||
+        !Number.isFinite(mods.gravityMultiplier)
+      ) {
+        throw new EngineStepError('INVALID_GAME_INPUT', 'gravityMultiplier must be a finite positive number');
+      }
+    }
+    if ('energyMultiplier' in mods && mods.energyMultiplier !== undefined) {
+      if (
+        typeof mods.energyMultiplier !== 'number' ||
+        mods.energyMultiplier <= 0 ||
+        !Number.isFinite(mods.energyMultiplier)
+      ) {
+        throw new EngineStepError('INVALID_GAME_INPUT', 'energyMultiplier must be a finite positive number');
+      }
+    }
   }
 
   // pressed sin held

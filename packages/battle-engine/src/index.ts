@@ -57,6 +57,65 @@ export {
   type SabotagePolicyInput,
 } from './bot/types';
 
+export type SuddenDeathPhase =
+  | 'inactive'
+  | 'warning'
+  | 'phase1'
+  | 'phase2'
+  | 'phase3';
+
+export type SuddenDeathSnapshot = Readonly<{
+  phase: SuddenDeathPhase;
+  warningRemainingMs: number;
+  activeElapsedMs: number;
+  gravityMultiplier: number;
+  energyMultiplier: number;
+}>;
+
+export function computeSuddenDeath(elapsedMs: number): SuddenDeathSnapshot {
+  if (elapsedMs < 285_000) {
+    return Object.freeze({
+      phase: 'inactive',
+      warningRemainingMs: 0,
+      activeElapsedMs: 0,
+      gravityMultiplier: 1.0,
+      energyMultiplier: 1.0,
+    });
+  } else if (elapsedMs < 300_000) {
+    return Object.freeze({
+      phase: 'warning',
+      warningRemainingMs: 300_000 - elapsedMs,
+      activeElapsedMs: 0,
+      gravityMultiplier: 1.0,
+      energyMultiplier: 1.0,
+    });
+  } else if (elapsedMs < 330_000) {
+    return Object.freeze({
+      phase: 'phase1',
+      warningRemainingMs: 0,
+      activeElapsedMs: elapsedMs - 300_000,
+      gravityMultiplier: 1.15,
+      energyMultiplier: 1.20,
+    });
+  } else if (elapsedMs < 360_000) {
+    return Object.freeze({
+      phase: 'phase2',
+      warningRemainingMs: 0,
+      activeElapsedMs: elapsedMs - 300_000,
+      gravityMultiplier: 1.30,
+      energyMultiplier: 1.20,
+    });
+  } else {
+    return Object.freeze({
+      phase: 'phase3',
+      warningRemainingMs: 0,
+      activeElapsedMs: elapsedMs - 300_000,
+      gravityMultiplier: 1.50,
+      energyMultiplier: 1.20,
+    });
+  }
+}
+
 export type BattleStatus =
   | 'running'
   | 'playerOneWon'
@@ -79,6 +138,7 @@ export type BattleSessionOptions = Readonly<{
   config: GameConfig;
   playerOneInitialState?: EngineInitialState;
   playerTwoInitialState?: EngineInitialState;
+  initialElapsedMs?: number;
 }>;
 
 export type BattleSnapshot = Readonly<{
@@ -86,6 +146,7 @@ export type BattleSnapshot = Readonly<{
   elapsedMs: number;
   status: BattleStatus;
   winner: BattleWinner;
+  suddenDeath: SuddenDeathSnapshot;
   playerOne: EngineSnapshot;
   playerTwo: EngineSnapshot;
 }>;
@@ -116,6 +177,21 @@ export type BattleEvent =
       type: 'battleEnded';
       step: number;
       winner: Exclude<BattleWinner, null>;
+    }>
+  | Readonly<{
+      type: 'suddenDeathWarning';
+      step: number;
+      warningRemainingMs: number;
+    }>
+  | Readonly<{
+      type: 'suddenDeathStarted';
+      step: number;
+    }>
+  | Readonly<{
+      type: 'suddenDeathPhaseChanged';
+      step: number;
+      phase: SuddenDeathPhase;
+      gravityMultiplier: number;
     }>;
 
 export type BattleStepErrorCode =
@@ -141,6 +217,16 @@ export interface BattleSession {
 }
 
 export function createBattleSession(options: BattleSessionOptions): BattleSession {
+  if (options.initialElapsedMs !== undefined) {
+    if (
+      typeof options.initialElapsedMs !== 'number' ||
+      options.initialElapsedMs < 0 ||
+      !Number.isFinite(options.initialElapsedMs)
+    ) {
+      throw new Error('initialElapsedMs must be a non-negative finite number');
+    }
+  }
+
   const playerOneEngine: GameEngine = createGameEngine(
     { seed: options.seed, config: options.config },
     options.playerOneInitialState,
@@ -153,11 +239,12 @@ export function createBattleSession(options: BattleSessionOptions): BattleSessio
   playerOneEngine.drainEvents();
   playerTwoEngine.drainEvents();
 
-  let step = 0;
-  let elapsedMs = 0;
+  let step = options.initialElapsedMs !== undefined ? Math.floor(options.initialElapsedMs / options.config.fixedStepMs) : 0;
+  let elapsedMs = options.initialElapsedMs ?? 0;
   let status: BattleStatus = 'running';
   let winner: BattleWinner = null;
-  let eventQueue: BattleEvent[] = [{ type: 'battleStarted', step: 0 }];
+  let lastSuddenDeathPhase: SuddenDeathPhase = computeSuddenDeath(elapsedMs).phase;
+  let eventQueue: BattleEvent[] = [{ type: 'battleStarted', step }];
 
   function getSnapshot(): BattleSnapshot {
     return Object.freeze({
@@ -165,6 +252,7 @@ export function createBattleSession(options: BattleSessionOptions): BattleSessio
       elapsedMs,
       status,
       winner,
+      suddenDeath: computeSuddenDeath(elapsedMs),
       playerOne: playerOneEngine.getSnapshot(),
       playerTwo: playerTwoEngine.getSnapshot(),
     });
@@ -195,8 +283,37 @@ export function createBattleSession(options: BattleSessionOptions): BattleSessio
       step++;
       elapsedMs += options.config.fixedStepMs;
 
-      playerOneEngine.step(input.playerOne);
-      playerTwoEngine.step(input.playerTwo);
+      const suddenDeath = computeSuddenDeath(elapsedMs);
+      if (suddenDeath.phase !== lastSuddenDeathPhase) {
+        if (suddenDeath.phase === 'warning') {
+          eventQueue.push({
+            type: 'suddenDeathWarning',
+            step,
+            warningRemainingMs: suddenDeath.warningRemainingMs,
+          });
+        } else if (suddenDeath.phase === 'phase1') {
+          eventQueue.push({
+            type: 'suddenDeathStarted',
+            step,
+          });
+        } else if (suddenDeath.phase === 'phase2' || suddenDeath.phase === 'phase3') {
+          eventQueue.push({
+            type: 'suddenDeathPhaseChanged',
+            step,
+            phase: suddenDeath.phase,
+            gravityMultiplier: suddenDeath.gravityMultiplier,
+          });
+        }
+        lastSuddenDeathPhase = suddenDeath.phase;
+      }
+
+      const modifiers = {
+        gravityMultiplier: suddenDeath.gravityMultiplier,
+        energyMultiplier: suddenDeath.energyMultiplier,
+      };
+
+      playerOneEngine.step({ ...input.playerOne, modifiers });
+      playerTwoEngine.step({ ...input.playerTwo, modifiers });
 
       const p1Events = playerOneEngine.drainEvents();
       for (const evt of p1Events) {
@@ -310,11 +427,12 @@ export function createBattleSession(options: BattleSessionOptions): BattleSessio
       playerOneEngine.drainEvents();
       playerTwoEngine.drainEvents();
 
-      step = 0;
-      elapsedMs = 0;
+      step = options.initialElapsedMs !== undefined ? Math.floor(options.initialElapsedMs / options.config.fixedStepMs) : 0;
+      elapsedMs = options.initialElapsedMs ?? 0;
       status = 'running';
       winner = null;
-      eventQueue = [{ type: 'battleReset', step: 0 }];
+      lastSuddenDeathPhase = computeSuddenDeath(elapsedMs).phase;
+      eventQueue = [{ type: 'battleReset', step }];
 
       return getSnapshot();
     },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isBattleDemoActive, createBattleDemoSession, BATTLE_DEMO_HELP } from './battle-demo';
+import { isBattleDemoActive, isSuddenDeathDemoActive, createBattleDemoSession, BATTLE_DEMO_HELP } from './battle-demo';
 
 describe('battle-demo', () => {
   it('isBattleDemoActive devuelve false cuando no está la query param ?battle-demo=1', () => {
@@ -20,6 +20,12 @@ describe('battle-demo', () => {
     } finally {
       (import.meta.env as { DEV: boolean }).DEV = originalDev;
     }
+  });
+
+  it('isSuddenDeathDemoActive devuelve true solo cuando ?battle-demo=1&sudden-death-demo=1 están en DEV', () => {
+    expect(isSuddenDeathDemoActive('?battle-demo=1&sudden-death-demo=1')).toBe(true);
+    expect(isSuddenDeathDemoActive('?battle-demo=1')).toBe(false);
+    expect(isSuddenDeathDemoActive('?sudden-death-demo=1')).toBe(false);
   });
 
   it('createBattleDemoSession instancia una BattleSession válida', () => {

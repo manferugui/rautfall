@@ -321,7 +321,122 @@ describe('@rautfall/battle-engine', () => {
       });
 
       expect(snap.step).toBe(1);
+      expect(snap.step).toBe(1);
       expect(snap.status).toBe('running');
+    });
+  });
+
+  describe('Tarea 0024 — Muerte súbita determinista', () => {
+    it('transiciona correctamente por las fronteras temporales exactas de 04:45, 05:00, 05:30 y 06:00', () => {
+      // 1. Frontera de aviso 04:45 (285.000 ms)
+      const battleWarning = createBattleSession(makeValidOptions({ initialElapsedMs: 284_990 }));
+      expect(battleWarning.getSnapshot().suddenDeath.phase).toBe('inactive');
+      const snapWarning = battleWarning.step(emptyBattleInput());
+      expect(snapWarning.suddenDeath.phase).toBe('warning');
+      expect(snapWarning.suddenDeath.warningRemainingMs).toBe(15000);
+      expect(battleWarning.drainEvents().filter((e) => e.type === 'suddenDeathWarning')).toHaveLength(1);
+
+      // 2. Frontera de phase1 05:00 (300.000 ms)
+      const battlePhase1 = createBattleSession(makeValidOptions({ initialElapsedMs: 299_990 }));
+      expect(battlePhase1.getSnapshot().suddenDeath.phase).toBe('warning');
+      const snapPhase1 = battlePhase1.step(emptyBattleInput());
+      expect(snapPhase1.suddenDeath.phase).toBe('phase1');
+      expect(snapPhase1.suddenDeath.gravityMultiplier).toBe(1.15);
+      expect(snapPhase1.suddenDeath.energyMultiplier).toBe(1.20);
+      expect(battlePhase1.drainEvents().filter((e) => e.type === 'suddenDeathStarted')).toHaveLength(1);
+
+      // 3. Frontera de phase2 05:30 (330.000 ms)
+      const battlePhase2 = createBattleSession(makeValidOptions({ initialElapsedMs: 329_990 }));
+      expect(battlePhase2.getSnapshot().suddenDeath.phase).toBe('phase1');
+      const snapPhase2 = battlePhase2.step(emptyBattleInput());
+      expect(snapPhase2.suddenDeath.phase).toBe('phase2');
+      expect(snapPhase2.suddenDeath.gravityMultiplier).toBe(1.30);
+      expect(snapPhase2.suddenDeath.energyMultiplier).toBe(1.20);
+      expect(battlePhase2.drainEvents().filter((e) => e.type === 'suddenDeathPhaseChanged')).toHaveLength(1);
+
+      // 4. Frontera de phase3 06:00 (360.000 ms)
+      const battlePhase3 = createBattleSession(makeValidOptions({ initialElapsedMs: 359_990 }));
+      expect(battlePhase3.getSnapshot().suddenDeath.phase).toBe('phase2');
+      const snapPhase3 = battlePhase3.step(emptyBattleInput());
+      expect(snapPhase3.suddenDeath.phase).toBe('phase3');
+      expect(snapPhase3.suddenDeath.gravityMultiplier).toBe(1.50);
+      expect(snapPhase3.suddenDeath.energyMultiplier).toBe(1.20);
+      expect(battlePhase3.drainEvents().filter((e) => e.type === 'suddenDeathPhaseChanged')).toHaveLength(1);
+    });
+
+    it('aplica multiplicadores de presión simétricos y compuestos sobre ambos participantes', () => {
+      const battle = createBattleSession(makeValidOptions({ initialElapsedMs: 300_000 }));
+      const snap = battle.step(emptyBattleInput());
+      expect(snap.playerOne.activeGravityCellsPerSecond).toBe(1.0 * 1.15);
+      expect(snap.playerTwo.activeGravityCellsPerSecond).toBe(1.0 * 1.15);
+    });
+
+    it('conserva la condición de victoria por top-out de un participante', () => {
+      const battle = createBattleSession(makeValidOptions());
+
+      // Llenar tablero de P1 hasta provocar gameOver
+      const p1Engine = battle.getEngine('playerOne');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+      p1Engine.receiveSabotage('residuos');
+
+      let lastSnap = battle.getSnapshot();
+      while (lastSnap.status === 'running') {
+        lastSnap = battle.step(emptyBattleInput());
+      }
+
+      expect(lastSnap.status).toBe('playerTwoWon');
+      expect(lastSnap.winner).toBe('playerTwo');
+
+      // Verificación de ausencia de avance tras finalizar
+      expect(() => battle.step(emptyBattleInput())).toThrow('Battle is not running');
+    });
+
+    it('resuelve empate (draw) si ambos participantes mueren en el mismo paso global', () => {
+      const battle = createBattleSession(makeValidOptions());
+
+      // Llenar tableros de P1 y P2 simultáneamente
+      const p1Engine = battle.getEngine('playerOne');
+      const p2Engine = battle.getEngine('playerTwo');
+      for (let i = 0; i < 11; i++) {
+        p1Engine.receiveSabotage('residuos');
+        p2Engine.receiveSabotage('residuos');
+      }
+
+      let lastSnap = battle.getSnapshot();
+      while (lastSnap.status === 'running') {
+        lastSnap = battle.step(emptyBattleInput());
+      }
+
+      expect(lastSnap.status).toBe('draw');
+      expect(lastSnap.winner).toBe('draw');
+    });
+
+    it('reset restaura el estado de Muerte Súbita respetando initialElapsedMs', () => {
+      const options = makeValidOptions({ initialElapsedMs: 300_000 });
+      const battle = createBattleSession(options);
+      expect(battle.getSnapshot().suddenDeath.phase).toBe('phase1');
+
+      const resetSnap = battle.reset();
+      expect(resetSnap.suddenDeath.phase).toBe('phase1');
+      expect(resetSnap.elapsedMs).toBe(300_000);
+    });
+
+    it('valida que initialElapsedMs deba ser un número finito no negativo si está definido', () => {
+      expect(() => {
+        createBattleSession(makeValidOptions({ initialElapsedMs: -500 }));
+      }).toThrow('initialElapsedMs must be a non-negative finite number');
+
+      expect(() => {
+        createBattleSession(makeValidOptions({ initialElapsedMs: NaN }));
+      }).toThrow('initialElapsedMs must be a non-negative finite number');
     });
   });
 });
