@@ -1,6 +1,8 @@
 import {
   Orientation,
+  type EngineSnapshot,
   type GameEngine,
+  type SabotageType,
   type StepInput,
 } from '@rautfall/game-engine';
 import type { BattleStatus } from '../index';
@@ -10,11 +12,16 @@ import {
   searchPlacements,
 } from './placement-search';
 import {
+  evaluateSabotageDecision,
+  normalizeBotSabotageConfig,
+} from './sabotage-policy';
+import {
   type BotAction,
   type BotConfig,
   type BotExecutionPhase,
   type BotPlan,
   type BotPlanDiagnostic,
+  type SabotageDecision,
 } from './types';
 
 export const BOT_REACTION_DELAY_STEPS = 20;
@@ -58,6 +65,20 @@ const ACTION_STEP_INPUT_MAP: Record<BotAction, StepInput> = {
   wait: NEUTRAL_STEP_INPUT,
 };
 
+export function isNeutralPlacementInput(input: StepInput): boolean {
+  return (
+    !input.leftHeld &&
+    !input.rightHeld &&
+    !input.leftPressed &&
+    !input.rightPressed &&
+    !input.softDropHeld &&
+    !input.hardDrop &&
+    !input.rotateClockwise &&
+    !input.rotateCounterclockwise &&
+    !input.hold
+  );
+}
+
 export function isActivePieceFullyVisible(engine: GameEngine): boolean {
   const active = engine.getSnapshot().activePiece;
   if (!active) return false;
@@ -79,6 +100,7 @@ export function normalizeBotConfig(config?: Partial<BotConfig>): BotConfig {
   );
   const maxSearchNodes = Math.max(1, Math.floor(config?.maxSearchNodes ?? 500));
   const heuristicWeights = config?.heuristicWeights ?? DEFAULT_BOT_HEURISTIC_WEIGHTS;
+  const sabotage = normalizeBotSabotageConfig(config?.sabotage);
 
   return Object.freeze({
     reactionDelaySteps,
@@ -86,6 +108,7 @@ export function normalizeBotConfig(config?: Partial<BotConfig>): BotConfig {
     hardDropDelaySteps,
     maxSearchNodes,
     heuristicWeights,
+    sabotage,
   });
 }
 
@@ -98,10 +121,20 @@ export interface DeterministicBotDiagnostic {
   lastActionStep: number | null;
   lastAction: string | null;
   planDiagnostic?: BotPlanDiagnostic | undefined;
+  sabotageDecision?: SabotageDecision | undefined;
+  sabotageCooldownRemaining?: number;
+  sabotageDecisionIntervalRemaining?: number;
+  lastSabotageUsed?: SabotageType | null;
+  lastSabotageEvaluationStep?: number | null;
+  frontStoredSabotage?: SabotageType | null;
 }
 
 export interface DeterministicBot {
-  nextStep(engine: GameEngine, battleStatus?: BattleStatus): StepInput;
+  nextStep(
+    engine: GameEngine,
+    battleStatus?: BattleStatus,
+    opponentSnapshot?: EngineSnapshot | null,
+  ): StepInput;
   reset(): void;
   getDiagnostic(): DeterministicBotDiagnostic;
 }
@@ -122,6 +155,14 @@ export function createDeterministicBot(config?: Partial<BotConfig>): Determinist
   let lastActionStep: number | null = null;
   let lastAction: string | null = null;
 
+  // Estado táctico determinista de sabotaje
+  let sabotageDecisionIntervalRemaining = 0;
+  let sabotageCooldownRemaining = 0;
+  let lastSabotageDecision: SabotageDecision | undefined = undefined;
+  let lastSabotageUsed: SabotageType | null = null;
+  let lastSabotageEvaluationStep: number | null = null;
+  let lastFrontStoredSabotage: SabotageType | null = null;
+
   function reset(): void {
     currentPlan = null;
     actionIndex = 0;
@@ -134,6 +175,13 @@ export function createDeterministicBot(config?: Partial<BotConfig>): Determinist
     lastBoardFingerprint = null;
     lastActionStep = null;
     lastAction = null;
+
+    sabotageDecisionIntervalRemaining = 0;
+    sabotageCooldownRemaining = 0;
+    lastSabotageDecision = undefined;
+    lastSabotageUsed = null;
+    lastSabotageEvaluationStep = null;
+    lastFrontStoredSabotage = null;
   }
 
   function invalidateAndPlan(engine: GameEngine): void {
@@ -172,132 +220,177 @@ export function createDeterministicBot(config?: Partial<BotConfig>): Determinist
     }
   }
 
-  return {
-    nextStep(engine: GameEngine, battleStatus?: BattleStatus): StepInput {
-      const snap = engine.getSnapshot();
+  function getPlacementInput(engine: GameEngine, battleStatus?: BattleStatus): { input: StepInput; phase: BotExecutionPhase } {
+    const snap = engine.getSnapshot();
 
-      // Si la partida o batalla terminaron, entrar en fase terminal
+    if (
+      snap.status === 'gameOver' ||
+      !snap.activePiece ||
+      (battleStatus !== undefined && battleStatus !== 'running')
+    ) {
+      return { input: NEUTRAL_STEP_INPUT, phase: 'terminal' };
+    }
+
+    const active = snap.activePiece;
+    const currentFingerprint = computeBoardFingerprint(snap.board);
+
+    if (!isActivePieceFullyVisible(engine)) {
+      return { input: NEUTRAL_STEP_INPUT, phase: 'waitingForVisibility' };
+    }
+
+    const currentPieceId = active.pieceId;
+    const pieceChanged = trackedPieceId !== currentPieceId;
+    const boardChangedUnexpectedly =
+      lastBoardFingerprint !== null &&
+      lastBoardFingerprint !== currentFingerprint &&
+      actionIndex > 0 &&
+      currentPlan?.actions[actionIndex - 1] !== 'hardDrop';
+
+    let positionMismatched = false;
+    if (expectedPosition !== null && !pieceChanged) {
       if (
-        snap.status === 'gameOver' ||
-        !snap.activePiece ||
-        (battleStatus !== undefined && battleStatus !== 'running')
+        active.orientation !== expectedPosition.orientation ||
+        (actionIndex > 0 &&
+          (currentPlan?.actions[actionIndex - 1] === 'left' ||
+            currentPlan?.actions[actionIndex - 1] === 'right') &&
+          active.x !== expectedPosition.x)
       ) {
-        currentPhase = 'terminal';
-        return NEUTRAL_STEP_INPUT;
+        positionMismatched = true;
       }
+    }
 
-      const active = snap.activePiece;
-      const currentFingerprint = computeBoardFingerprint(snap.board);
-
-      // FASE 2: La pieza DEBE estar completamente visible (todas sus celdas en y >= 4)
-      if (!isActivePieceFullyVisible(engine)) {
-        currentPhase = 'waitingForVisibility';
-        return NEUTRAL_STEP_INPUT;
-      }
-
-      const currentPieceId = active.pieceId;
-      const pieceChanged = trackedPieceId !== currentPieceId;
-      const boardChangedUnexpectedly =
-        lastBoardFingerprint !== null &&
-        lastBoardFingerprint !== currentFingerprint &&
-        actionIndex > 0 &&
-        currentPlan?.actions[actionIndex - 1] !== 'hardDrop';
-
-      // FASE 4: Validar posición esperada ignorando descensos por gravedad natural en Y
-      let positionMismatched = false;
-      if (expectedPosition !== null && !pieceChanged) {
-        if (
-          active.orientation !== expectedPosition.orientation ||
-          (actionIndex > 0 &&
-            (currentPlan?.actions[actionIndex - 1] === 'left' ||
-              currentPlan?.actions[actionIndex - 1] === 'right') &&
-            active.x !== expectedPosition.x)
-        ) {
-          positionMismatched = true;
-        }
-      }
-
-      // Si se requiere replanificar por cambio de pieza o discrepancia de posición (Polaridad)
-      if (currentPlan === null || pieceChanged || boardChangedUnexpectedly || positionMismatched) {
-        trackedPieceId = currentPieceId;
-        lastBoardFingerprint = currentFingerprint;
-        invalidateAndPlan(engine);
-      }
-
+    if (currentPlan === null || pieceChanged || boardChangedUnexpectedly || positionMismatched) {
+      trackedPieceId = currentPieceId;
       lastBoardFingerprint = currentFingerprint;
+      invalidateAndPlan(engine);
+    }
 
-      // FASE 3: Consumir retardo de reacción de 30 pasos lógicos
+    lastBoardFingerprint = currentFingerprint;
+
+    if (reactionTimerSteps > 0) {
+      reactionTimerSteps--;
+      expectedPosition = { x: active.x, orientation: active.orientation };
+      return { input: NEUTRAL_STEP_INPUT, phase: 'reacting' };
+    }
+
+    if (!currentPlan || actionIndex >= currentPlan.actions.length) {
+      invalidateAndPlan(engine);
       if (reactionTimerSteps > 0) {
-        currentPhase = 'reacting';
         reactionTimerSteps--;
         expectedPosition = { x: active.x, orientation: active.orientation };
-        return NEUTRAL_STEP_INPUT;
+        return { input: NEUTRAL_STEP_INPUT, phase: 'reacting' };
       }
+    }
 
-      // Si el plan expiró sin fijar la pieza, replanificar
-      if (!currentPlan || actionIndex >= currentPlan.actions.length) {
-        invalidateAndPlan(engine);
-        if (reactionTimerSteps > 0) {
-          currentPhase = 'reacting';
-          reactionTimerSteps--;
-          expectedPosition = { x: active.x, orientation: active.orientation };
-          return NEUTRAL_STEP_INPUT;
-        }
+    if (!currentPlan) {
+      return { input: NEUTRAL_STEP_INPUT, phase: 'terminal' };
+    }
+
+    if (actionIntervalTimer > 0) {
+      actionIntervalTimer--;
+      expectedPosition = { x: active.x, orientation: active.orientation };
+      return { input: NEUTRAL_STEP_INPUT, phase: 'waitingBetweenActions' };
+    }
+
+    const nextAction = currentPlan.actions[actionIndex]!;
+
+    if (nextAction === 'hardDrop') {
+      if (currentPhase !== 'waitingBeforeHardDrop') {
+        hardDropDelayTimer = fullConfig.hardDropDelaySteps;
       }
-
-      if (!currentPlan) {
-        currentPhase = 'terminal';
-        return NEUTRAL_STEP_INPUT;
-      }
-
-      // FASE 3: Consumir intervalo entre acciones de movimiento/rotación (6 pasos)
-      if (actionIntervalTimer > 0) {
-        currentPhase = 'waitingBetweenActions';
-        actionIntervalTimer--;
+      if (hardDropDelayTimer > 0) {
+        hardDropDelayTimer--;
         expectedPosition = { x: active.x, orientation: active.orientation };
-        return NEUTRAL_STEP_INPUT;
+        return { input: NEUTRAL_STEP_INPUT, phase: 'waitingBeforeHardDrop' };
+      }
+    }
+
+    actionIndex++;
+    lastActionStep = snap.step;
+    lastAction = nextAction;
+
+    if (nextAction !== 'hardDrop' && nextAction !== 'wait') {
+      actionIntervalTimer = fullConfig.actionIntervalSteps;
+    }
+
+    let expX = active.x;
+    let expOrient = active.orientation;
+    if (nextAction === 'left') expX = active.x - 1;
+    if (nextAction === 'right') expX = active.x + 1;
+    if (nextAction === 'rotateClockwise') {
+      expOrient = ((active.orientation + 1) % 4) as Orientation;
+    }
+    if (nextAction === 'rotateCounterClockwise') {
+      expOrient = ((active.orientation + 3) % 4) as Orientation;
+    }
+    expectedPosition = { x: expX, orientation: expOrient };
+
+    return { input: ACTION_STEP_INPUT_MAP[nextAction], phase: 'executing' };
+  }
+
+  return {
+    nextStep(
+      engine: GameEngine,
+      battleStatus?: BattleStatus,
+      opponentSnapshot?: EngineSnapshot | null,
+    ): StepInput {
+      const snap = engine.getSnapshot();
+      lastFrontStoredSabotage = snap.storedSabotages[0] ?? null;
+
+      const placementResult = getPlacementInput(engine, battleStatus);
+      currentPhase = placementResult.phase;
+
+      // Si la sesión o el motor propio están en estado terminal, no se evalúan ni activan sabotajes
+      if (currentPhase === 'terminal' || snap.status === 'gameOver') {
+        return placementResult.input;
       }
 
-      const nextAction = currentPlan.actions[actionIndex]!;
+      // Decrementar contadores de sabotaje una vez por paso del bot
+      if (sabotageCooldownRemaining > 0) {
+        sabotageCooldownRemaining--;
+      }
+      if (sabotageDecisionIntervalRemaining > 0) {
+        sabotageDecisionIntervalRemaining--;
+      }
 
-      // FASE 3: Pausa de 5 pasos antes del hard drop final
-      if (nextAction === 'hardDrop') {
-        if (currentPhase !== 'waitingBeforeHardDrop') {
-          hardDropDelayTimer = fullConfig.hardDropDelaySteps;
+      // Evaluar la política táctica de sabotaje solo cuando:
+      // 1. exista opponentSnapshot
+      // 2. la entrada de colocación para este tick sea completamente neutra
+      // 3. no haya cooldown activo
+      // 4. no haya intervalo entre decisiones activo
+      if (
+        opponentSnapshot &&
+        isNeutralPlacementInput(placementResult.input) &&
+        sabotageCooldownRemaining === 0 &&
+        sabotageDecisionIntervalRemaining === 0
+      ) {
+        const decision = evaluateSabotageDecision(
+          {
+            ownSnapshot: snap,
+            opponentSnapshot,
+            cooldownStepsRemaining: sabotageCooldownRemaining,
+            decisionIntervalStepsRemaining: sabotageDecisionIntervalRemaining,
+          },
+          fullConfig.sabotage,
+        );
+
+        lastSabotageEvaluationStep = snap.step;
+        lastSabotageDecision = decision;
+
+        if (decision.shouldTrigger === true) {
+          sabotageCooldownRemaining = fullConfig.sabotage.cooldownSteps;
+          sabotageDecisionIntervalRemaining = fullConfig.sabotage.decisionIntervalSteps;
+          lastSabotageUsed = decision.sabotage;
+          return Object.freeze({
+            ...placementResult.input,
+            triggerSabotage: true,
+          });
+        } else {
+          sabotageDecisionIntervalRemaining = fullConfig.sabotage.decisionIntervalSteps;
         }
-        if (hardDropDelayTimer > 0) {
-          currentPhase = 'waitingBeforeHardDrop';
-          hardDropDelayTimer--;
-          expectedPosition = { x: active.x, orientation: active.orientation };
-          return NEUTRAL_STEP_INPUT;
-        }
       }
 
-      // Consumir la acción planificada
-      currentPhase = 'executing';
-      actionIndex++;
-      lastActionStep = snap.step;
-      lastAction = nextAction;
-
-      // Configurar temporizador de intervalo si la acción fue un movimiento o rotación
-      if (nextAction !== 'hardDrop' && nextAction !== 'wait') {
-        actionIntervalTimer = fullConfig.actionIntervalSteps;
-      }
-
-      // Calcular posición horizontal y orientación esperadas
-      let expX = active.x;
-      let expOrient = active.orientation;
-      if (nextAction === 'left') expX = active.x - 1;
-      if (nextAction === 'right') expX = active.x + 1;
-      if (nextAction === 'rotateClockwise') {
-        expOrient = ((active.orientation + 1) % 4) as Orientation;
-      }
-      if (nextAction === 'rotateCounterClockwise') {
-        expOrient = ((active.orientation + 3) % 4) as Orientation;
-      }
-      expectedPosition = { x: expX, orientation: expOrient };
-
-      return ACTION_STEP_INPUT_MAP[nextAction];
+      return placementResult.input;
     },
 
     reset,
@@ -312,6 +405,12 @@ export function createDeterministicBot(config?: Partial<BotConfig>): Determinist
         lastActionStep,
         lastAction,
         planDiagnostic: currentPlan?.diagnostic,
+        sabotageDecision: lastSabotageDecision,
+        sabotageCooldownRemaining,
+        sabotageDecisionIntervalRemaining,
+        lastSabotageUsed,
+        lastSabotageEvaluationStep,
+        frontStoredSabotage: lastFrontStoredSabotage,
       });
     },
   };

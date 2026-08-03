@@ -4,6 +4,7 @@ import { prototypeConfig } from '@rautfall/game-config';
 import type { StepInput } from '@rautfall/game-engine';
 import {
   createBattleSession,
+  createDeterministicBot,
   BattleStepError,
   type BattleSessionOptions,
   type BattleStepInput,
@@ -287,5 +288,40 @@ describe('@rautfall/battle-engine', () => {
 
     expect(battle1.getSnapshot()).toEqual(battle2.getSnapshot());
     expect(battle1.drainEvents()).toEqual(battle2.drainEvents());
+  });
+
+  describe('integración de BattleSession con el bot y sabotajes de P2', () => {
+    it('BattleSession enruta correctamente triggerSabotage de P2 hacia P1', () => {
+      const battle = createBattleSession(makeValidOptions({ seed: 123 }));
+      battle.drainEvents();
+
+      const p1Engine = battle.getEngine('playerOne');
+      const p2Engine = battle.getEngine('playerTwo');
+
+      const bot = createDeterministicBot();
+      const p2Input = bot.nextStep(p2Engine, 'running', p1Engine.getSnapshot());
+      expect(p2Input).toBeDefined();
+
+      const snap = battle.step({
+        playerOne: emptyInput(),
+        playerTwo: p2Input,
+      });
+
+      expect(snap.status).toBe('running');
+      expect(snap.step).toBe(1);
+    });
+
+    it('enrutamiento bidireccional de sabotajes en BattleSession entre P1 y P2', () => {
+      const battle = createBattleSession(makeValidOptions());
+      battle.drainEvents();
+
+      const snap = battle.step({
+        playerOne: emptyInput(),
+        playerTwo: { ...emptyInput(), triggerSabotage: true },
+      });
+
+      expect(snap.step).toBe(1);
+      expect(snap.status).toBe('running');
+    });
   });
 });

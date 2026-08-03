@@ -7,6 +7,7 @@ import {
   type GameEngine,
   type SabotageType,
   type StepInput,
+  type EngineInitialState,
 } from '@rautfall/game-engine';
 
 export type BattleParticipant = 'playerOne' | 'playerTwo';
@@ -14,6 +15,7 @@ export type BattleParticipant = 'playerOne' | 'playerTwo';
 export {
   createDeterministicBot,
   isActivePieceFullyVisible,
+  isNeutralPlacementInput,
   normalizeBotConfig,
   BOT_REACTION_DELAY_STEPS,
   BOT_ACTION_INTERVAL_STEPS,
@@ -33,14 +35,26 @@ export {
   type SearchMetrics,
   type SearchResult,
 } from './bot/placement-search';
-export type {
-  BotAction,
-  BotConfig,
-  BotExecutionPhase,
-  BotHeuristicWeights,
-  BotPlan,
-  BotPlanDiagnostic,
-  PlacementCandidate,
+export {
+  evaluateSabotageDecision,
+  getOpponentMaxHeight,
+  getOpponentPieceWallDistance,
+  isOpponentPieceFullyVisible,
+  normalizeBotSabotageConfig,
+} from './bot/sabotage-policy';
+export {
+  DEFAULT_BOT_SABOTAGE_CONFIG,
+  type BotAction,
+  type BotConfig,
+  type BotExecutionPhase,
+  type BotHeuristicWeights,
+  type BotPlan,
+  type BotPlanDiagnostic,
+  type BotSabotageConfig,
+  type PlacementCandidate,
+  type SabotageDecision,
+  type SabotageDecisionReason,
+  type SabotagePolicyInput,
 } from './bot/types';
 
 export type BattleStatus =
@@ -63,6 +77,8 @@ export type BattleStepInput = Readonly<{
 export type BattleSessionOptions = Readonly<{
   seed: number;
   config: GameConfig;
+  playerOneInitialState?: EngineInitialState;
+  playerTwoInitialState?: EngineInitialState;
 }>;
 
 export type BattleSnapshot = Readonly<{
@@ -125,14 +141,14 @@ export interface BattleSession {
 }
 
 export function createBattleSession(options: BattleSessionOptions): BattleSession {
-  const playerOneEngine: GameEngine = createGameEngine({
-    seed: options.seed,
-    config: options.config,
-  });
-  const playerTwoEngine: GameEngine = createGameEngine({
-    seed: options.seed,
-    config: options.config,
-  });
+  const playerOneEngine: GameEngine = createGameEngine(
+    { seed: options.seed, config: options.config },
+    options.playerOneInitialState,
+  );
+  const playerTwoEngine: GameEngine = createGameEngine(
+    { seed: options.seed, config: options.config },
+    options.playerTwoInitialState,
+  );
 
   playerOneEngine.drainEvents();
   playerTwoEngine.drainEvents();
@@ -289,8 +305,8 @@ export function createBattleSession(options: BattleSessionOptions): BattleSessio
     },
 
     reset(): BattleSnapshot {
-      playerOneEngine.reset({ seed: options.seed, config: options.config });
-      playerTwoEngine.reset({ seed: options.seed, config: options.config });
+      playerOneEngine.reset({ seed: options.seed, config: options.config }, options.playerOneInitialState);
+      playerTwoEngine.reset({ seed: options.seed, config: options.config }, options.playerTwoInitialState);
       playerOneEngine.drainEvents();
       playerTwoEngine.drainEvents();
 

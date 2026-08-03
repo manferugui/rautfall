@@ -1,4 +1,4 @@
-import type { Orientation, PieceType } from '@rautfall/game-engine';
+import type { EngineSnapshot, Orientation, PieceType, SabotageType } from '@rautfall/game-engine';
 
 export type BotAction =
   | 'left'
@@ -30,12 +30,69 @@ export type BotHeuristicWeights = Readonly<{
   gameOverWeight: number;
 }>;
 
+export type SabotageDecisionReason =
+  | 'noStoredSabotage'
+  | 'ownTerminal'
+  | 'opponentTerminal'
+  | 'cooldownActive'
+  | 'decisionIntervalActive'
+  | 'opponentTooLow'
+  | 'equivalentPressureAlreadyActive'
+  | 'noActiveOpponentPiece'
+  | 'opponentPieceNotVisible'
+  | 'poorTacticalWindow'
+  | 'triggerGarbage'
+  | 'triggerOverload'
+  | 'triggerPolarity';
+
+export type SabotageDecision =
+  | Readonly<{
+      shouldTrigger: false;
+      sabotage: null;
+      reason: SabotageDecisionReason;
+    }>
+  | Readonly<{
+      shouldTrigger: true;
+      sabotage: SabotageType;
+      reason: SabotageDecisionReason;
+    }>;
+
+export type SabotagePolicyInput = Readonly<{
+  ownSnapshot: EngineSnapshot;
+  opponentSnapshot: EngineSnapshot;
+  cooldownStepsRemaining: number;
+  decisionIntervalStepsRemaining: number;
+}>;
+
+export type BotSabotageConfig = Readonly<{
+  decisionIntervalSteps: number;
+  cooldownSteps: number;
+  minimumOpponentHeightForGarbage: number;
+  minimumOpponentHeightForOverload: number;
+  polarityWallDistanceThreshold: number;
+  garbageTopOutRiskThreshold: number;
+  polarityTopOutRiskThreshold: number;
+  maximumEquivalentPendingGarbage: number;
+}>;
+
+export const DEFAULT_BOT_SABOTAGE_CONFIG: BotSabotageConfig = Object.freeze({
+  decisionIntervalSteps: 20,
+  cooldownSteps: 100,
+  minimumOpponentHeightForGarbage: 8,
+  minimumOpponentHeightForOverload: 5,
+  polarityWallDistanceThreshold: 1,
+  garbageTopOutRiskThreshold: 1,
+  polarityTopOutRiskThreshold: 1,
+  maximumEquivalentPendingGarbage: 2,
+});
+
 export type BotConfig = Readonly<{
   reactionDelaySteps: number;
   actionIntervalSteps: number;
   hardDropDelaySteps: number;
   maxSearchNodes: number;
   heuristicWeights: BotHeuristicWeights;
+  sabotage: BotSabotageConfig;
 }>;
 
 export type PlacementCandidate = Readonly<{

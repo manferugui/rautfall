@@ -1,17 +1,39 @@
-import { describe, expect, it } from 'vitest';
-import { createGameEngine, type StepInput } from '@rautfall/game-engine';
 import { prototypeConfig } from '@rautfall/game-config';
+import { createGameEngine, type EngineSnapshot, type GameEngine, type SabotageType, type StepInput } from '@rautfall/game-engine';
+import { describe, expect, it } from 'vitest';
 import {
+  BOT_ACTION_INTERVAL_STEPS,
+  BOT_HARD_DROP_DELAY_STEPS,
+  BOT_REACTION_DELAY_STEPS,
   createDeterministicBot,
   isActivePieceFullyVisible,
   normalizeBotConfig,
-  BOT_REACTION_DELAY_STEPS,
-  BOT_ACTION_INTERVAL_STEPS,
-  BOT_HARD_DROP_DELAY_STEPS,
 } from './deterministic-bot';
 
 function makeValidOptions(seed = 42) {
   return { seed, config: prototypeConfig };
+}
+
+function createMockOpponentSnapshot(maxHeight = 0, overrides?: Partial<EngineSnapshot>): EngineSnapshot {
+  const engine = createGameEngine(makeValidOptions());
+  const snap = engine.getSnapshot();
+  const board = snap.board.map((row, r) => {
+    if (r >= 24 - maxHeight) {
+      const newRow = [...row];
+      newRow[0] = 'I';
+      return Object.freeze(newRow);
+    }
+    return row;
+  });
+  return Object.freeze({
+    ...snap,
+    board: Object.freeze(board),
+    ...overrides,
+  });
+}
+
+function createMockOwnEngine(seed = 100, storedSabotages: SabotageType[] = ['residuos']): GameEngine {
+  return createGameEngine(makeValidOptions(seed), { storedSabotages });
 }
 
 describe('deterministic-bot', () => {
@@ -70,7 +92,6 @@ describe('deterministic-bot', () => {
       softDropHeld: false, hardDrop: false,
     };
 
-    // Consumir los 20 pasos de reacción por defecto
     for (let i = 0; i < BOT_REACTION_DELAY_STEPS; i++) {
       const diagBefore = bot.nextStep(engine);
       expect(diagBefore).toEqual(neutralInput);
@@ -91,11 +112,9 @@ describe('deterministic-bot', () => {
       engine.step(bot.nextStep(engine));
     }
 
-    // Primera acción de movimiento
     const action1 = bot.nextStep(engine);
     engine.step(action1);
 
-    // Los siguientes BOT_ACTION_INTERVAL_STEPS - 1 ticks deben ser de espera entre acciones
     for (let i = 0; i < BOT_ACTION_INTERVAL_STEPS - 1; i++) {
       const waitInput = bot.nextStep(engine);
       expect(waitInput).toEqual({
@@ -213,21 +232,177 @@ describe('deterministic-bot', () => {
     const engine = createGameEngine(makeValidOptions());
     const bot = createDeterministicBot();
 
-    // 1. Inicialmente en waitingForVisibility -> timer = 0
     expect(bot.getDiagnostic().hardDropDelayTimer).toBe(0);
     bot.nextStep(engine);
     expect(bot.getDiagnostic().hardDropDelayTimer).toBe(0);
 
-    // 2. Transición a reacting -> timer = 0
     while (!isActivePieceFullyVisible(engine)) {
       engine.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
     }
-    bot.nextStep(engine); // entra en reacting
+    bot.nextStep(engine);
     expect(bot.getDiagnostic().currentPhase).toBe('reacting');
     expect(bot.getDiagnostic().hardDropDelayTimer).toBe(0);
 
-    // 3. Reset mantiene timer = 0
     bot.reset();
     expect(bot.getDiagnostic().hardDropDelayTimer).toBe(0);
+  });
+
+  describe('integración táctica de sabotajes', () => {
+    it('emite triggerSabotage solo en tick neutro y nunca combinado con movimiento, rotación o hardDrop', () => {
+      const e1 = createMockOwnEngine(100, ['residuos']);
+      const oppSnap = createMockOpponentSnapshot(8);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(e1)) {
+        e1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      let triggeredCount = 0;
+      for (let i = 0; i < 60; i++) {
+        const inpt = bot.nextStep(e1, 'running', oppSnap);
+        if (inpt.triggerSabotage === true) {
+          triggeredCount++;
+          expect(inpt.leftHeld).toBe(false);
+          expect(inpt.rightHeld).toBe(false);
+          expect(inpt.leftPressed).toBe(false);
+          expect(inpt.rightPressed).toBe(false);
+          expect(inpt.softDropHeld).toBe(false);
+          expect(inpt.hardDrop).toBe(false);
+          expect(inpt.rotateClockwise).toBeUndefined();
+          expect(inpt.rotateCounterclockwise).toBeUndefined();
+          expect(inpt.hold).toBeUndefined();
+        }
+        e1.step(inpt);
+      }
+
+      expect(triggeredCount).toBe(1);
+    });
+
+    it('carga cooldown (100 pasos) tras disparar y decrementa un paso por tick', () => {
+      const e1 = createMockOwnEngine(100, ['residuos']);
+      const oppSnap = createMockOpponentSnapshot(8);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(e1)) {
+        e1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      let triggered = false;
+      for (let i = 0; i < 30; i++) {
+        const inpt = bot.nextStep(e1, 'running', oppSnap);
+        if (inpt.triggerSabotage === true) {
+          triggered = true;
+          expect(bot.getDiagnostic().sabotageCooldownRemaining).toBe(100);
+          expect(bot.getDiagnostic().lastSabotageUsed).toBe('residuos');
+          break;
+        }
+        e1.step(inpt);
+      }
+      expect(triggered).toBe(true);
+
+      bot.nextStep(e1, 'running', oppSnap);
+      expect(bot.getDiagnostic().sabotageCooldownRemaining).toBe(99);
+    });
+
+    it('conservar no carga cooldown (mantiene cooldownRemaining en 0) y carga solo decisionInterval', () => {
+      const e1 = createMockOwnEngine(100, ['residuos']);
+      const oppSnap = createMockOpponentSnapshot(0);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(e1)) {
+        e1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      bot.nextStep(e1, 'running', oppSnap);
+      const diag = bot.getDiagnostic();
+      expect(diag.sabotageDecision?.shouldTrigger).toBe(false);
+      expect(diag.sabotageDecision?.reason).toBe('opponentTooLow');
+      expect(diag.sabotageCooldownRemaining).toBe(0);
+      expect(diag.sabotageDecisionIntervalRemaining).toBe(20);
+    });
+
+    it('reset limpia el estado táctico por completo', () => {
+      const e1 = createMockOwnEngine(100, ['residuos']);
+      const oppSnap = createMockOpponentSnapshot(8);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(e1)) {
+        e1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      for (let i = 0; i < 30; i++) {
+        const inpt = bot.nextStep(e1, 'running', oppSnap);
+        if (inpt.triggerSabotage) break;
+        e1.step(inpt);
+      }
+
+      expect(bot.getDiagnostic().sabotageCooldownRemaining).toBeGreaterThan(0);
+
+      bot.reset();
+      const diag = bot.getDiagnostic();
+      expect(diag.sabotageCooldownRemaining).toBe(0);
+      expect(diag.sabotageDecisionIntervalRemaining).toBe(0);
+      expect(diag.sabotageDecision).toBeUndefined();
+      expect(diag.lastSabotageUsed).toBeNull();
+    });
+
+    it('terminalidad impide la evaluación y activación de sabotajes', () => {
+      const e1 = createMockOwnEngine(100, ['residuos']);
+      const oppSnap = createMockOpponentSnapshot(8);
+      const bot = createDeterministicBot();
+
+      const inpt = bot.nextStep(e1, 'playerOneWon', oppSnap);
+      expect(inpt.triggerSabotage).toBeUndefined();
+      expect(bot.getDiagnostic().currentPhase).toBe('terminal');
+    });
+
+    it('dos cartuchos no se disparan en ráfaga por efecto del cooldown', () => {
+      const e1 = createMockOwnEngine(100, ['residuos', 'residuos']);
+      const oppSnap = createMockOpponentSnapshot(8);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(e1)) {
+        e1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      let triggerCount = 0;
+      for (let i = 0; i < 60; i++) {
+        const inpt = bot.nextStep(e1, 'running', oppSnap);
+        if (inpt.triggerSabotage) triggerCount++;
+        e1.step(inpt);
+      }
+
+      expect(triggerCount).toBe(1);
+    });
+
+    it('consumo observado: el bot emite triggerSabotage sin mutar ownSnapshot, y la cola FIFO se actualiza al ser procesada por GameEngine', () => {
+      const e1 = createMockOwnEngine(100, ['residuos', 'sobrecarga']);
+      const oppSnap = createMockOpponentSnapshot(8);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(e1)) {
+        e1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      // 1. Emitir triggerSabotage
+      const inpt1 = bot.nextStep(e1, 'running', oppSnap);
+      expect(inpt1.triggerSabotage).toBe(true);
+
+      // El cartucho de ownSnapshot no se muta internamente por el bot
+      expect(e1.getSnapshot().storedSabotages).toEqual(['residuos', 'sobrecarga']);
+
+      // 2. Segunda llamada a nextStep con el mismo snapshot antiguo no vuelve a emitir triggerSabotage durante cooldown
+      const inpt2 = bot.nextStep(e1, 'running', oppSnap);
+      expect(inpt2.triggerSabotage).toBeUndefined();
+
+      // 3. Al ejecutar el paso en GameEngine, el motor consume el frente de la cola
+      e1.step(inpt1);
+      expect(e1.getSnapshot().storedSabotages).toEqual(['sobrecarga']);
+
+      // 4. El frente FIFO actualizado pasa a ser observado deterministamente
+      const inpt3 = bot.nextStep(e1, 'running', oppSnap);
+      expect(inpt3).toBeDefined();
+      expect(bot.getDiagnostic().frontStoredSabotage).toBe('sobrecarga');
+    });
   });
 });

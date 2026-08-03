@@ -36,6 +36,13 @@ export type BotDevDiagnostic = Readonly<{
   lastAction: string | null;
   currentAction: string | null;
   planLength: number;
+  sabotageDecision?: string | null;
+  sabotageDecisionReason?: string | null;
+  sabotageCooldownRemaining?: number;
+  sabotageDecisionIntervalRemaining?: number;
+  lastSabotageUsed?: SabotageType | null;
+  lastSabotageEvaluationStep?: number | null;
+  frontStoredSabotage?: SabotageType | null;
 }>;
 
 export type BattlePresentationState = Readonly<{

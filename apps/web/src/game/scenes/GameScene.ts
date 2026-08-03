@@ -316,7 +316,7 @@ export class GameScene extends Phaser.Scene {
           const bSnap = this.battleSession.getSnapshot();
           if (bSnap.status === 'running') {
             const p2Input = this.playerTwoBot
-              ? this.playerTwoBot.nextStep(this.battleSession.getEngine('playerTwo'), bSnap.status)
+              ? this.playerTwoBot.nextStep(this.battleSession.getEngine('playerTwo'), bSnap.status, bSnap.playerOne)
               : this.emptyStepInput();
             this.battleSession.step({
               playerOne: input,
@@ -460,7 +460,7 @@ export class GameScene extends Phaser.Scene {
       // Escenario cerrado de desarrollo: Capa de Batalla Local (2P)
       this.battleSession = createBattleDemoSession();
       this.playerTwoBot = createDeterministicBot();
-      this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
+      this.engine = this.battleSession.getEngine('playerOne');
       this.lastSabotageRouted = null;
     } else if (levelDemoTarget !== null) {
       this.battleSession = null;
@@ -704,6 +704,13 @@ export class GameScene extends Phaser.Scene {
           lastAction: diag.lastAction,
           currentAction: diag.currentPhase === 'executing' ? 'active' : null,
           planLength: diag.planDiagnostic?.selectedActionCount ?? 0,
+          sabotageDecision: diag.sabotageDecision ? (diag.sabotageDecision.shouldTrigger ? diag.sabotageDecision.sabotage : 'none') : null,
+          sabotageDecisionReason: diag.sabotageDecision?.reason ?? null,
+          sabotageCooldownRemaining: diag.sabotageCooldownRemaining ?? 0,
+          sabotageDecisionIntervalRemaining: diag.sabotageDecisionIntervalRemaining ?? 0,
+          lastSabotageUsed: diag.lastSabotageUsed ?? null,
+          lastSabotageEvaluationStep: diag.lastSabotageEvaluationStep ?? null,
+          frontStoredSabotage: diag.frontStoredSabotage ?? null,
         });
       }
 

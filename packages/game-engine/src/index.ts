@@ -215,13 +215,16 @@ export type GameEngine = {
   receiveSabotage(sabotage: SabotageType): void;
   /**
    * Reinicia el motor a un estado limpio (tablero vacío, contador de paso a
-   * 0, nueva bolsa) con la semilla y configuración indicadas. Válido incluso
+   * 0, nueva bolsa) con la semilla y configuración indicadas, o restaura opcionalmente
+   * un estado inicial determinista si se proporciona `resetInitialState`. Válido incluso
    * si el motor estaba en game over.
    *
+   * @param options Configuración y semilla para el reinicio.
+   * @param resetInitialState Estado inicial opcional para restaurar deterministamente en la operación de reset.
    * @throws {EngineOptionsError} si `options.seed` o `options.config` no
    *   cumplen su contrato.
    */
-  reset(options: EngineOptions): void;
+  reset(options: EngineOptions, resetInitialState?: EngineInitialState): void;
   /**
    * Crea una copia aislada e independiente del estado interno actual del motor.
    * La instancia clonada conserva exactamente la misma posición de pieza,
@@ -783,6 +786,15 @@ export type TSpinDemoInitialState = {
   clearedLines?: number;
 };
 
+/**
+ * Tipo público de inicialización determinista.
+ * Permite proporcionar opcionalmente un estado inicial parcial al crear el motor
+ * con `createGameEngine()` o al reiniciarlo con `GameEngine.reset()`.
+ * Las propiedades omitidas conservan los valores por defecto del motor.
+ * No ofrece mecanismos de mutación arbitraria durante una partida en ejecución.
+ */
+export type EngineInitialState = Partial<TSpinDemoInitialState>;
+
 type ActiveEffectState =
   | { type: 'sobrecarga'; remainingMs: number }
   | { type: 'polaridad'; remainingPieces: 1 | 2 };
@@ -822,7 +834,7 @@ type InternalClonedState = {
 
 export function createGameEngine(
   options: EngineOptions,
-  initialState?: TSpinDemoInitialState,
+  initialState?: EngineInitialState,
   clonedState?: InternalClonedState,
 ): GameEngine {
   validateSeed(options.seed);
@@ -835,7 +847,7 @@ export function createGameEngine(
   let status: 'running' | 'gameOver' = clonedState ? clonedState.status : 'running';
   let board = clonedState
     ? cloneBoard(clonedState.board)
-    : initialState
+    : initialState?.board
       ? cloneBoard(initialState.board)
       : createEmptyBoard();
   let piecePrng = clonedState
@@ -853,12 +865,12 @@ export function createGameEngine(
   let nextPieceId = clonedState ? clonedState.nextPieceId : 1;
   let activePiece: ActivePiece | null = clonedState
     ? clonedState.activePiece ? { ...clonedState.activePiece } : null
-    : initialState
+    : initialState?.activePiece
       ? { pieceId: nextPieceId++, ...initialState.activePiece }
       : null;
   let nextPiecesQueue: PieceType[] = clonedState
     ? [...clonedState.nextPiecesQueue]
-    : initialState
+    : initialState?.nextPieces
       ? [...initialState.nextPieces]
       : [];
   let verticalProgress = clonedState ? clonedState.verticalProgress : 0;
@@ -867,7 +879,7 @@ export function createGameEngine(
   let baseGravityCellsPerSecond = clonedState ? clonedState.baseGravityCellsPerSecond : BASE_GRAVITY_TABLE[level]!;
   let lockDelayElapsedMs = clonedState ? clonedState.lockDelayElapsedMs : 0;
   let lockResetsUsed = clonedState ? clonedState.lockResetsUsed : 0;
-  let heldPiece: PieceType | null = clonedState ? clonedState.heldPiece : (initialState ? initialState.heldPiece : null);
+  let heldPiece: PieceType | null = clonedState ? clonedState.heldPiece : (initialState?.heldPiece ?? null);
   let holdUsed = clonedState ? clonedState.holdUsed : false;
   let score = clonedState ? clonedState.score : 0;
   let combo = clonedState ? clonedState.combo : 0;
@@ -1433,7 +1445,7 @@ export function createGameEngine(
     }
   }
 
-  if (!initialState && !clonedState) {
+  if (!clonedState && (!initialState || !activePiece)) {
     spawnInitialPieces();
   }
 
@@ -1613,36 +1625,44 @@ export function createGameEngine(
       }
     },
 
-    reset(options: EngineOptions): void {
+    reset(options: EngineOptions, resetInitialState?: EngineInitialState): void {
       validateSeed(options.seed);
       parseGameConfig(options.config);
+
+      const init = resetInitialState;
 
       currentStep = 0;
       currentElapsedMs = 0;
       currentSeed = options.seed;
       status = 'running';
-      board = createEmptyBoard();
+      board = init?.board ? cloneBoard(init.board) : createEmptyBoard();
       piecePrng = createPrng(deriveSeed(currentSeed, 'pieces'));
       effectsPrng = createPrng(deriveSeed(currentSeed, 'effects'));
       nextPieceId = 1;
       activePiece = null;
       nextPiecesQueue = [];
       verticalProgress = 0;
-      clearedLines = 0;
-      level = 1;
-      baseGravityCellsPerSecond = BASE_GRAVITY_TABLE[1]!;
+      clearedLines = init?.clearedLines ?? 0;
+      level = Math.min(10, Math.floor(clearedLines / 10) + 1);
+      baseGravityCellsPerSecond = BASE_GRAVITY_TABLE[level]!;
       lockDelayElapsedMs = 0;
       lockResetsUsed = 0;
-      heldPiece = null;
+      heldPiece = init?.heldPiece ?? null;
       holdUsed = false;
       score = 0;
       combo = 0;
       lastActionWasRotation = false;
       backToBack = 0;
-      combatEnergy = 0;
-      storedSabotages = [];
-      pendingGarbage = 0;
-      activeEffects = [];
+      combatEnergy = init?.combatEnergy ?? 0;
+      storedSabotages = init?.storedSabotages ? [...init.storedSabotages] : [];
+      pendingGarbage = init?.pendingGarbage ?? 0;
+      activeEffects = init?.activeEffects
+        ? init.activeEffects.map((e) =>
+            e.type === 'sobrecarga'
+              ? { type: 'sobrecarga', remainingMs: e.remainingMs }
+              : { type: 'polaridad', remainingPieces: e.remainingPieces },
+          )
+        : [];
       bagState = createBag(piecePrng);
       sabotageBagState = createSabotageBag(effectsPrng);
       resetHorizontalState(horizontalState);

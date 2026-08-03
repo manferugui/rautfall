@@ -29,9 +29,41 @@ export function isBattleDemoActive(searchOverride?: string): boolean {
  * Solo debe llamarse cuando `isBattleDemoActive()` devuelve true.
  */
 export function createBattleDemoSession(
-  options: BattleSessionOptions = { seed: 42, config: prototypeConfig },
+  options?: Partial<BattleSessionOptions>,
 ): BattleSession {
-  return createBattleSession(options);
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const params = new URLSearchParams(search);
+  const botSabotageParam = params.get('bot-sabotage');
+
+  let playerOneInitialState = options?.playerOneInitialState;
+  let playerTwoInitialState = options?.playerTwoInitialState;
+
+  if (import.meta.env.DEV && botSabotageParam) {
+    playerTwoInitialState = {
+      storedSabotages: ['residuos'],
+      ...playerTwoInitialState,
+    };
+
+    if (botSabotageParam === 'high') {
+      const board = Array.from({ length: 24 }, () => new Array(10).fill(null));
+      for (let r = 16; r < 24; r++) {
+        board[r]![0] = 'garbage';
+      }
+      playerOneInitialState = {
+        board,
+        ...playerOneInitialState,
+      };
+    }
+  }
+
+  const sessionOptions: BattleSessionOptions = {
+    seed: options?.seed ?? 42,
+    config: options?.config ?? prototypeConfig,
+    ...(playerOneInitialState ? { playerOneInitialState } : {}),
+    ...(playerTwoInitialState ? { playerTwoInitialState } : {}),
+  };
+
+  return createBattleSession(sessionOptions);
 }
 
 /**

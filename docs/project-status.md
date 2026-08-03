@@ -562,6 +562,30 @@ Ver [Informe de implementación](implementation/0021-integracion-visual-segundo-
 
 Ver [Informe de implementación](implementation/0022-bot-heuristico-determinista.md).
 
+## Task [0023 — Decisión y activación determinista de sabotajes por el bot](tasks/0023-bot-sabotajes-deterministas.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-08-02 |
+| **Resultado** | Política táctica pura y determinista (`sabotage-policy.ts`) integrada en `DeterministicBot` para Player 2 en Batalla Local. Evaluación exclusiva del frente FIFO del cartucho (`storedSabotages[0]`), activación mediante contrato de entrada público (`StepInput.triggerSabotage`) emitido en ticks tácticos neutros sin interferir con movimientos ni hard drops, percepción estrictamente readonly desde `EngineSnapshot` del rival (sin acceso al motor mutable ni PRNG ajeno), cadencia táctica periódica (20 pasos / 200 ms) y cooldown determinista (100 pasos / 1.000 ms), escenario DEV determinista en `?battle-demo=1&bot-sabotage=1` y `?battle-demo=1&bot-sabotage=high`. 668 tests Vitest y 5 tests E2E Playwright en verde. Lint, typecheck, build y git diff --check limpios. |
+
+### Resumen
+
+- Módulo puro `sabotage-policy.ts` exporta `evaluateSabotageDecision` con guardas obligatorias en orden de precedencia (terminalidad propia, terminalidad rival, cooldown, intervalo de decisión, cartucho vacío).
+- Evaluación exclusiva del primer elemento del cartucho FIFO (`storedSabotages[0]`), decidiendo entre activar o conservar con razones explícitas (`SabotageDecisionReason`).
+- Reglas tácticas por tipo: `residuos` (altura rival $\ge 8$ y sin presión pendiente equivalente), `sobrecarga` (altura rival $\ge 5$, pieza activa en rival y sin efecto activo previo), `polaridad` (pieza activa completamente visible cerca de pared $\le 1$ o riesgo elevado de top-out y sin efecto previo).
+- `DeterministicBot` emite `triggerSabotage: true` en ticks neutros (`isNeutralPlacementInput`) sin combinar con movimiento, rotación o hard drop.
+- Cadencia táctica de 20 pasos de intervalo de decisión y 100 pasos de cooldown tras activación.
+- Pausa y terminalidad congelan la política; `reset()` limpia el estado táctico por completo.
+- Ampliación controlada de la API pública de inicialización y reset deterministas (`EngineInitialState` en `@rautfall/game-engine` y parámetro opcional `resetInitialState` en `GameEngine.reset()`).
+- `apps/web` recibe instantánea pública de P1 (`bSnap.playerOne`) y expone telemetría táctica en consola DEV (`botDevDiagnostic`).
+- 24 tests unitarios de política + 7 tests unitarios de ejecutor bot + 2 tests de integración `BattleSession` + 3 tests E2E Playwright.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0023-bot-sabotajes-deterministas.md).
+
 ## Siguiente tarea
 
-- **0023 — Muerte súbita y fin de batalla local**: Diseñar e implementar las reglas de finalización de batalla, temporizador de muerte súbita e incremento progresivo de presión según `docs/rautfall.md`.
+- **0024 — Muerte súbita y fin de batalla local**: Diseñar e implementar las reglas de finalización de batalla, temporizador de muerte súbita e incremento progresivo de presión según `docs/rautfall.md`.
