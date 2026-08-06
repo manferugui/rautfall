@@ -350,6 +350,13 @@ function goToMenu(): void {
                       Step:<span data-testid="bot-last-action-step">{{ gameState.battleState.botDevDiagnostic.lastActionStep ?? 'NULL' }}</span>
                     </span>
                   </div>
+                  <div class="session-item">
+                    <span class="session-label">HD Steps / MaxBurst</span>
+                    <span class="session-value">
+                      HD:<span data-testid="bot-hard-drop-phase-step-count">{{ gameState.battleState.botDevDiagnostic.hardDropPhaseStepCount ?? 0 }}</span>
+                      Burst:<span data-testid="bot-max-actions-in-single-step">{{ gameState.battleState.botDevDiagnostic.maxActionsInSingleStep ?? 0 }}</span>
+                    </span>
+                  </div>
                 </template>
               </div>
             </div>

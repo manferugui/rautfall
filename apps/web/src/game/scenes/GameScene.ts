@@ -122,6 +122,11 @@ export class GameScene extends Phaser.Scene {
    */
   private horizontalListeners: (() => void) | null = null;
 
+  /** Telemetría acumulativa de diagnóstico exclusiva para entornos DEV. */
+  private devHardDropPhaseStepCount = 0;
+  private devMaxActionsInSingleStep = 0;
+  private lastBotActionIndex = 0;
+
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -459,6 +464,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private resetEngine(): void {
+    if (import.meta.env.DEV) {
+      this.devHardDropPhaseStepCount = 0;
+      this.devMaxActionsInSingleStep = 0;
+      this.lastBotActionIndex = 0;
+    }
+
     const levelDemoTarget = getLevelDemoTarget();
     if (isBattleDemoActive()) {
       // Escenario cerrado de desarrollo: Capa de Batalla Local (2P)
@@ -699,6 +710,16 @@ export class GameScene extends Phaser.Scene {
 
         const minCellY = p2Active ? Math.min(...p2Active.cells.map((cell) => cell.y)) : null;
 
+        if (diag.currentPhase === 'waitingBeforeHardDrop') {
+          this.devHardDropPhaseStepCount++;
+        }
+
+        const actionsInStep = diag.actionIndex - this.lastBotActionIndex;
+        if (actionsInStep > this.devMaxActionsInSingleStep) {
+          this.devMaxActionsInSingleStep = actionsInStep;
+        }
+        this.lastBotActionIndex = diag.actionIndex;
+
         botDevDiagnostic = Object.freeze({
           pieceId: p2Active?.pieceId ?? null,
           x: p2Active?.x ?? null,
@@ -722,6 +743,8 @@ export class GameScene extends Phaser.Scene {
           lastSabotageUsed: diag.lastSabotageUsed ?? null,
           lastSabotageEvaluationStep: diag.lastSabotageEvaluationStep ?? null,
           frontStoredSabotage: diag.frontStoredSabotage ?? null,
+          hardDropPhaseStepCount: this.devHardDropPhaseStepCount,
+          maxActionsInSingleStep: this.devMaxActionsInSingleStep,
         });
       }
 

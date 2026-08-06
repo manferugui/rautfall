@@ -43,6 +43,8 @@ export type BotDevDiagnostic = Readonly<{
   lastSabotageUsed?: SabotageType | null;
   lastSabotageEvaluationStep?: number | null;
   frontStoredSabotage?: SabotageType | null;
+  hardDropPhaseStepCount?: number;
+  maxActionsInSingleStep?: number;
 }>;
 
 export type BattlePresentationState = Readonly<{

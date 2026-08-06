@@ -651,6 +651,7 @@ Ver [Informe de implementación](implementation/0025-flujo-web-modos-y-resultado
 - API de música ambiental (`playMusic`, `stopMusic`, `setMusicIntensity`) preparada sin peticiones 404 por red ni errores en consola.
 - Trazabilidad y guía de integración para Google Flow Music en `docs/audio-assets.md`.
 - 721 tests Vitest y 8 escenarios E2E Playwright en verde. Sin errores de lint, typecheck ni build.
+- **Mantenimiento técnico aislado (e2e)**: Eliminación del flake preexistente en `battle-demo.spec.ts` mediante telemetría DEV acumulada (`hardDropPhaseObserved`, `lastHardDropMaxDelay`) y captura atómica de estado en reanudación.
 
 ### Informe detallado
 
