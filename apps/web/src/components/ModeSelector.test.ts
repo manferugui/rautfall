@@ -59,4 +59,18 @@ describe('ModeSelector.vue', () => {
     expect(controlsCard.text()).toContain('Caída instantánea');
     wrapper.unmount();
   });
+
+  it('renderiza el botón de Mute y alterna el estado de silencio al hacer clic', async () => {
+    const wrapper = mount(ModeSelector);
+    const muteBtn = wrapper.find('[data-testid="audio-mute-button"]');
+    expect(muteBtn.exists()).toBe(true);
+
+    expect(muteBtn.attributes('aria-label')).toBe('Silenciar audio');
+
+    await muteBtn.trigger('click');
+    expect(muteBtn.attributes('aria-label')).toBe('Activar audio');
+    expect(muteBtn.attributes('data-audio-muted')).toBe('true');
+
+    wrapper.unmount();
+  });
 });

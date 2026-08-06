@@ -6,14 +6,36 @@
  * - Mostrar la identidad tipográfica y descriptor de Rautfall.
  * - Permitir la selección del modo de juego (Entrenamiento 1P o Batalla Local 2P contra IA).
  * - Exponer resumen de controles de teclado.
+ * - Proporcionar control de audio (Mute/Unmute) accesible y desbloqueo tras gesto.
  * - No contiene enlaces ni elementos ficticios de características fuera del MVP.
  */
 
+import { ref, onMounted } from 'vue';
 import type { GameMode } from '../game/types';
+import { getAudioManager } from '../audio';
 
 const emit = defineEmits<{
   (e: 'selectMode', mode: GameMode): void;
 }>();
+
+const audioManager = getAudioManager();
+const isMuted = ref(audioManager.isMuted());
+
+onMounted(() => {
+  audioManager.playMusic('menu');
+});
+
+function toggleAudioMute(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  isMuted.value = audioManager.toggleMute();
+}
+
+function onSelectMode(mode: GameMode): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  emit('selectMode', mode);
+}
 </script>
 
 <template>
@@ -27,12 +49,26 @@ const emit = defineEmits<{
 
     <div class="hazard-strip" aria-hidden="true"></div>
 
+    <div class="audio-controls-row">
+      <button
+        type="button"
+        class="audio-mute-btn"
+        data-testid="audio-mute-button"
+        :data-audio-muted="isMuted"
+        :aria-label="isMuted ? 'Activar audio' : 'Silenciar audio'"
+        @click="toggleAudioMute"
+      >
+        <span class="mute-icon" aria-hidden="true">{{ isMuted ? '🔇' : '🔊' }}</span>
+        <span class="mute-label">{{ isMuted ? 'AUDIO SILENCIADO' : 'AUDIO ACTIVO' }}</span>
+      </button>
+    </div>
+
     <div class="mode-actions">
       <button
         type="button"
         class="mode-btn mode-btn--training"
         data-testid="start-training-button"
-        @click="emit('selectMode', 'training')"
+        @click="onSelectMode('training')"
       >
         <span class="mode-btn-title">Modo Entrenamiento</span>
         <span class="mode-btn-sub">Práctica individual 1P sin sabotajes ni bot</span>
@@ -42,7 +78,7 @@ const emit = defineEmits<{
         type="button"
         class="mode-btn mode-btn--battle"
         data-testid="start-battle-button"
-        @click="emit('selectMode', 'battle')"
+        @click="onSelectMode('battle')"
       >
         <span class="mode-btn-title">Batalla contra la IA</span>
         <span class="mode-btn-sub">Combate táctico 2P determinista contra DeterministicBot</span>
@@ -122,6 +158,34 @@ const emit = defineEmits<{
     var(--rf-color-amber, #f39c12) 0 8px,
     var(--rf-color-graphite-900, #17181a) 8px 16px
   );
+}
+
+.audio-controls-row {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.audio-mute-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  background: var(--rf-color-graphite-700, #28292c);
+  color: var(--rf-color-text-primary, #e8e8ec);
+  border-radius: var(--rf-radius-sm, 3px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.audio-mute-btn:hover {
+  background: var(--rf-color-graphite-800, #1f2023);
+  border-color: var(--rf-color-cyan, #00d4ff);
 }
 
 .mode-actions {

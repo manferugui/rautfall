@@ -39,6 +39,7 @@ import {
   isRowVisible,
 } from '../coordinates';
 import { mapEngineToOpponentPresentation } from '../opponent-mapper';
+import { getAudioManager } from '../../audio';
 
 const FIXED_SEED = 42;
 
@@ -391,6 +392,7 @@ export class GameScene extends Phaser.Scene {
     if (this.battleSession) {
       const battleEvents = this.battleSession.drainEvents();
       for (const event of battleEvents) {
+        getAudioManager().handleBattleEvent(event);
         if (event.type === 'sabotageRouted') {
           this.lastSabotageRouted = `${event.sabotage} (${event.source} -> ${event.target})`;
         }
@@ -398,6 +400,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       const frameEvents = this.engine.drainEvents();
       for (const event of frameEvents) {
+        getAudioManager().handleEngineEvent(event);
         if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive() || isPolarityDemoActive())) {
           this.engine.receiveSabotage(event.sabotage);
         }

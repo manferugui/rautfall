@@ -16,6 +16,7 @@ import { isOverloadDemoActive } from './game/overload-demo';
 import { isGarbageDemoActive } from './game/garbage-demo';
 import { isPolarityDemoActive } from './game/polarity-demo';
 import { getLevelDemoTarget } from './game/level-demo';
+import { getAudioManager } from './audio';
 
 function hasDevDemoFlag(): boolean {
   return (
@@ -33,6 +34,15 @@ const isDevDemo = hasDevDemoFlag();
 const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
 const gameMode = ref<GameMode>(isBattleDemoActive() ? 'battle' : 'training');
 const isCanvasMounted = ref(isDevDemo);
+
+const audioManager = getAudioManager();
+const isAudioMuted = ref(audioManager.isMuted());
+
+function toggleAudioMute(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  isAudioMuted.value = audioManager.toggleMute();
+}
 
 const gameState = ref<GamePresentationState>({
   status: 'running',
@@ -105,6 +115,9 @@ function onControllerReady(c: PhaserGameController): void {
 }
 
 function selectMode(mode: GameMode): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  audioManager.playMusic('gameplay');
   gameMode.value = mode;
   gameResult.value = null;
   appScreen.value = 'playing';
@@ -112,16 +125,20 @@ function selectMode(mode: GameMode): void {
 }
 
 function doReset(): void {
+  audioManager.playSfx('uiClick');
   if (controller) {
     controller.reset();
   }
 }
 
 function doTogglePause(): void {
+  audioManager.playSfx('uiClick');
   controller?.togglePause();
 }
 
 async function doReplay(): Promise<void> {
+  audioManager.playSfx('uiClick');
+  audioManager.playMusic('gameplay');
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
@@ -132,6 +149,8 @@ async function doReplay(): Promise<void> {
 }
 
 function goToMenu(): void {
+  audioManager.playSfx('uiClick');
+  audioManager.playMusic('menu');
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
@@ -163,6 +182,16 @@ function goToMenu(): void {
           {{ gameMode === 'battle' ? 'Modo Batalla Local (2P)' : 'Modo Entrenamiento (1P)' }}
         </span>
         <div class="hazard-strip" aria-hidden="true"></div>
+        <button
+          type="button"
+          class="audio-mute-btn"
+          data-testid="audio-mute-button"
+          :data-audio-muted="isAudioMuted"
+          :aria-label="isAudioMuted ? 'Activar audio' : 'Silenciar audio'"
+          @click="toggleAudioMute"
+        >
+          {{ isAudioMuted ? '🔇 AUDIO SILENCIADO' : '🔊 AUDIO ACTIVO' }}
+        </button>
         <button
           type="button"
           class="exit-menu-btn"
@@ -490,8 +519,8 @@ body {
   color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
 }
 
+.audio-mute-btn,
 .exit-menu-btn {
-  margin-left: auto;
   padding: 0.35rem 0.85rem;
   font-size: 0.75rem;
   font-weight: 700;
@@ -503,6 +532,14 @@ body {
   border-radius: var(--rf-radius-sm, 3px);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+}
+
+.exit-menu-btn {
+  margin-left: 0.5rem;
+}
+
+.audio-mute-btn {
+  margin-left: auto;
 }
 
 .exit-menu-btn:hover {
