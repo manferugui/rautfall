@@ -27,8 +27,11 @@ export const PIECE_COLOR_HEX: Record<PieceType | 'garbage', string> = Object.fre
  * 6. Ordenación determinista: primero por yVisual creciente, luego por x creciente.
  * 7. Estructura inmutable.
  */
+import type { BattleParticipantStateSnapshot } from '@rautfall/battle-engine';
+
 export function mapEngineToOpponentPresentation(
   snapshot: EngineSnapshot,
+  participantState?: BattleParticipantStateSnapshot,
 ): OpponentPresentationState {
   const cellMap = new Map<string, CellPresentation>();
 
@@ -104,5 +107,9 @@ export function mapEngineToOpponentPresentation(
     activeEffects: Object.freeze([...snapshot.activeEffects]),
     pendingGarbage: snapshot.pendingGarbage,
     visibleCells: Object.freeze(visibleCells),
+    isInterfered: participantState?.isInterfered ?? false,
+    interferenciaRemainingMs: participantState?.interferenciaRemainingMs ?? 0,
+    warnings: participantState?.warnings ?? Object.freeze([]),
+    immunities: participantState?.immunities ?? Object.freeze([]),
   });
 }

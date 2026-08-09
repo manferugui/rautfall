@@ -90,4 +90,32 @@ test.describe('bot-sabotage E2E', () => {
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test('modo battle-demo=1&interference-demo=1: precarga interferencia en P1 y activa velo SEÑAL INTERFERIDA', async ({ page }) => {
+    test.setTimeout(30000);
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' && !msg.text().includes('404')) consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => pageErrors.push(err.message));
+
+    await page.goto('/?battle-demo=1&interference-demo=1');
+    await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
+    await expect(page.getByTestId('session-status')).toHaveText('running');
+    await expect(page.getByTestId('session-step')).not.toHaveText('0');
+
+    // Disparar primer Interferencia con pulsación sostenida para que JustDown de Phaser lo capture
+    await page.keyboard.down('a');
+    await page.waitForTimeout(100);
+    await page.keyboard.up('a');
+
+    // Comprobar que enrutó interferencia y activó velo visual SEÑAL INTERFERIDA tras el warning de 750ms
+    await expect(page.getByTestId('last-sabotage-routed')).toContainText('interferencia', { timeout: 5000 });
+    await expect(page.getByTestId('interferencia-overlay')).toBeVisible({ timeout: 5000 });
+
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
 });

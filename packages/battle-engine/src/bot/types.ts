@@ -43,7 +43,8 @@ export type SabotageDecisionReason =
   | 'poorTacticalWindow'
   | 'triggerGarbage'
   | 'triggerOverload'
-  | 'triggerPolarity';
+  | 'triggerPolarity'
+  | 'triggerInterferencia';
 
 export type SabotageDecision =
   | Readonly<{

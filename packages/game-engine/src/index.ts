@@ -4,7 +4,7 @@ import { type GameConfig, parseGameConfig } from '@rautfall/game-config';
 
 export type PieceType = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L';
 
-export type SabotageType = 'residuos' | 'sobrecarga' | 'polaridad';
+export type SabotageType = 'residuos' | 'sobrecarga' | 'polaridad' | 'interferencia';
 
 export type ActiveEffectType = 'sobrecarga' | 'polaridad';
 
@@ -330,7 +330,8 @@ const BACK_TO_BACK_ENERGY_BONUS_RATIO = 0.25;
 
 const OVERLOAD_GRAVITY_MULTIPLIER = 3;
 const OVERLOAD_DURATION_MS = 10000;
-const ALL_SABOTAGES: readonly SabotageType[] = Object.freeze(['residuos', 'sobrecarga', 'polaridad']);
+const MAX_PENDING_GARBAGE = 4;
+const ALL_SABOTAGES: readonly SabotageType[] = Object.freeze(['residuos', 'sobrecarga', 'polaridad', 'interferencia']);
 
 const MAX_LEVEL = 10;
 const BASE_GRAVITY_TABLE: readonly number[] = [
@@ -1589,7 +1590,7 @@ export function createGameEngine(
       if (status === 'gameOver') return;
 
       if (sabotage === 'residuos') {
-        pendingGarbage += 2;
+        pendingGarbage = Math.min(MAX_PENDING_GARBAGE, pendingGarbage + 2);
       } else if (sabotage === 'sobrecarga') {
         const existing = activeEffects.find((e) => e.type === 'sobrecarga') as
           | { type: 'sobrecarga'; remainingMs: number }
@@ -1639,6 +1640,9 @@ export function createGameEngine(
             durationPieces: 1,
           });
         }
+      } else if (sabotage === 'interferencia') {
+        // No-op defensivo en game-engine: la interferencia es un efecto de percepción gestionado por battle-engine
+        return;
       }
     },
 

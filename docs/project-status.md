@@ -657,6 +657,28 @@ Ver [Informe de implementación](implementation/0025-flujo-web-modos-y-resultado
 
 Ver [Informe de implementación](implementation/0026-audio-basico-e-identidad-sonora.md).
 
+## Task [0027 — Cierre de protecciones y mecánicas pendientes de combate del MVP](tasks/0027-cierre-protecciones-y-mecanicas-de-combate.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-09 |
+| **Resultado** | Protecciones y mecánicas de combate del MVP completamente cerradas: Sabotaje Interferencia (5.000 ms), Aviso previo de sabotajes (Warning 750 ms), Inmunidad post-efecto (4.000 ms), Límite máximo de basura pendiente (Garbage Cap = 4), orden canónico secuencial en `BattleSession.step()`, política estricta de rechazo de duplicados (`sabotageBlocked`), equivalencia humano/bot con congelación de percepción unívoca durante Interferencia y refinamiento de presentación en `OpponentMonitor.vue`. 761 tests Vitest, 9 tests Playwright E2E, lint, typecheck y build limpios. |
+
+### Resumen
+
+- Sabotaje **Interferencia** (5.000 ms) implementado como efecto de percepción en `packages/battle-engine` con bolsa determinista `Sabotage 4-Bag` en `packages/game-engine`.
+- **Aviso previo de sabotajes** (**Warning** 750 ms) para sabotajes temporales disruptivos/percepción (`sobrecarga`, `polaridad`, `interferencia`). `residuos` no participa en warning.
+- **Inmunidad post-efecto** (4.000 ms) tras finalizar efectos temporales, bloqueando re-ataques con `sabotageBlocked`.
+- **Límite máximo de basura pendiente** (`MAX_PENDING_GARBAGE = 4`) en `packages/game-engine` al recibir Residuos.
+- **Orden canónico secuencial de `step()`**: ningún timer creado en un step pierde tiempo en su paso de creación.
+- **Equivalencia Humano/Bot**: `OpponentMonitor.vue` muestra velo `SEÑAL INTERFERIDA`. Para el bot (`DeterministicBot`), la instantánea percibida del rival se congela al inicio de la Interferencia sin permitirle consultar el estado actualizado durante los 5 s.
+- 761 tests Vitest, 9 tests Playwright E2E, `lint`, `typecheck` y `build` en verde.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0027-cierre-protecciones-y-mecanicas-de-combate.md).
+
 ## Siguiente tarea
 
 - Pendiente de definición y auditoría por el usuario.

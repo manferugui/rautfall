@@ -7082,6 +7082,28 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       expect(snap.pendingGarbage).toBe(0);
       expect(snap.activeEffects).toEqual([]);
     });
+
+    it('satura pendingGarbage en un máximo de 4 (MAX_PENDING_GARBAGE = 4)', () => {
+      const engine = createGameEngine(makeValidOptions());
+      expect(engine.getSnapshot().pendingGarbage).toBe(0);
+
+      engine.receiveSabotage('residuos');
+      expect(engine.getSnapshot().pendingGarbage).toBe(2);
+
+      engine.receiveSabotage('residuos');
+      expect(engine.getSnapshot().pendingGarbage).toBe(4);
+
+      engine.receiveSabotage('residuos');
+      expect(engine.getSnapshot().pendingGarbage).toBe(4);
+    });
+
+    it('receiveSabotage("interferencia") en game-engine es un no-op defensivo', () => {
+      const engine = createGameEngine(makeValidOptions());
+      engine.receiveSabotage('interferencia');
+      const snap = engine.getSnapshot();
+      expect(snap.pendingGarbage).toBe(0);
+      expect(snap.activeEffects).toEqual([]);
+    });
   });
 
   // ════════════════════════════════════════════════════════════════════════
@@ -7129,8 +7151,8 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
 
       const sabotages = engine.getSnapshot().storedSabotages;
       expect(sabotages).toHaveLength(2);
-      expect(['residuos', 'sobrecarga', 'polaridad']).toContain(sabotages[0]);
-      expect(['residuos', 'sobrecarga', 'polaridad']).toContain(sabotages[1]);
+      expect(['residuos', 'sobrecarga', 'polaridad', 'interferencia']).toContain(sabotages[0]);
+      expect(['residuos', 'sobrecarga', 'polaridad', 'interferencia']).toContain(sabotages[1]);
       expect(sabotages[0]).not.toBe(sabotages[1]);
     });
 
@@ -7978,10 +8000,10 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
       expect(() => validateStepInput(invalid)).toThrow(EngineStepError);
     });
 
-    it('la separación de PRNG conserva la bolsa 3-bag conteniendo exactamente residuos, sobrecarga y polaridad', () => {
+    it('la separación de PRNG conserva la bolsa 4-bag conteniendo exactamente residuos, sobrecarga, polaridad e interferencia', () => {
       const board = emptyBoard();
-      // Preparar 3 Quads exactos (12 filas: 12..23 con cols 1..9 llenas, col 0 libre)
-      for (let y = 12; y < 24; y++) {
+      // Preparar 4 Quads exactos (16 filas: 8..23 con cols 1..9 llenas, col 0 libre)
+      for (let y = 8; y < 24; y++) {
         for (let x = 1; x < 10; x++) board[y]![x] = 'J';
       }
 
@@ -7998,67 +8020,37 @@ describe('T-Spin - Cobertura Funcional Completa', () => {
 
       const generatedSabotages: SabotageType[] = [];
 
-      // Quad 1: 190 + 70 = 260 -> extrae S1
-      drainAll(engine);
-      stepHardDrop(engine);
-      const snap1 = engine.getSnapshot();
-      expect(snap1.storedSabotages).toHaveLength(1);
-      const s1 = snap1.storedSabotages[0]!;
-      generatedSabotages.push(s1);
+      // Quad 1..4: extrae 4 sabotajes consecutivamente consumiendo el cartucho
+      for (let quad = 0; quad < 4; quad++) {
+        drainAll(engine);
+        if (quad > 0) {
+          engine.step({
+            leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+            softDropHeld: false, hardDrop: false, rotateClockwise: true,
+          });
+          for (let i = 0; i < 40; i++) {
+            engine.step({
+              leftHeld: true, rightHeld: false, leftPressed: i === 0, rightPressed: false,
+              softDropHeld: false, hardDrop: false,
+            });
+          }
+        }
+        stepHardDrop(engine);
+        const snap = engine.getSnapshot();
+        expect(snap.storedSabotages).toHaveLength(1);
+        const sab = snap.storedSabotages[0]!;
+        generatedSabotages.push(sab);
 
-      // Consumir S1 para dejar el cartucho libre
-      engine.step({
-        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
-        softDropHeld: false, hardDrop: false, triggerSabotage: true,
-      });
-      expect(engine.getSnapshot().storedSabotages).toHaveLength(0);
-
-      // Quad 2: Mover pieza 2 a col -2 (orientation Right) con 20 pasos DAS y hacer hard drop
-      drainAll(engine);
-      engine.step({
-        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
-        softDropHeld: false, hardDrop: false, rotateClockwise: true,
-      });
-      for (let i = 0; i < 40; i++) {
+        // Consumir sabotaje para liberar el cartucho
         engine.step({
-          leftHeld: true, rightHeld: false, leftPressed: i === 0, rightPressed: false,
-          softDropHeld: false, hardDrop: false,
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: false, hardDrop: false, triggerSabotage: true,
         });
+        expect(engine.getSnapshot().storedSabotages).toHaveLength(0);
       }
-      stepHardDrop(engine);
-      const snap2 = engine.getSnapshot();
-      // console.log('SNAP2:', snap2.storedSabotages, snap2.combatEnergy);
-      expect(snap2.storedSabotages).toHaveLength(1);
-      const s2 = snap2.storedSabotages[0]!;
-      generatedSabotages.push(s2);
 
-      // Consumir S2 para dejar el cartucho libre
-      engine.step({
-        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
-        softDropHeld: false, hardDrop: false, triggerSabotage: true,
-      });
-      expect(engine.getSnapshot().storedSabotages).toHaveLength(0);
-
-      // Quad 3: Mover pieza 3 a col -2 (orientation Right) con 20 pasos DAS y hacer hard drop
-      drainAll(engine);
-      engine.step({
-        leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
-        softDropHeld: false, hardDrop: false, rotateClockwise: true,
-      });
-      for (let i = 0; i < 40; i++) {
-        engine.step({
-          leftHeld: true, rightHeld: false, leftPressed: i === 0, rightPressed: false,
-          softDropHeld: false, hardDrop: false,
-        });
-      }
-      stepHardDrop(engine);
-      const snap3 = engine.getSnapshot();
-      expect(snap3.storedSabotages).toHaveLength(1);
-      const s3 = snap3.storedSabotages[0]!;
-      generatedSabotages.push(s3);
-
-      expect(generatedSabotages).toHaveLength(3);
-      expect(new Set(generatedSabotages)).toEqual(new Set(['residuos', 'sobrecarga', 'polaridad']));
+      expect(generatedSabotages).toHaveLength(4);
+      expect(new Set(generatedSabotages)).toEqual(new Set(['residuos', 'sobrecarga', 'polaridad', 'interferencia']));
     });
   });
 

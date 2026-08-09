@@ -169,5 +169,9 @@ export function evaluateSabotageDecision(
     return Object.freeze({ shouldTrigger: false, sabotage: null, reason: 'poorTacticalWindow' });
   }
 
+  if (frontSabotage === 'interferencia') {
+    return Object.freeze({ shouldTrigger: true, sabotage: 'interferencia', reason: 'triggerInterferencia' });
+  }
+
   return Object.freeze({ shouldTrigger: false, sabotage: null, reason: 'poorTacticalWindow' });
 }

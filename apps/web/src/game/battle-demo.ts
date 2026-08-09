@@ -39,6 +39,23 @@ export function isSuddenDeathDemoActive(searchOverride?: string): boolean {
 }
 
 /**
+ * Determina si el escenario de demostración de Interferencia está activo.
+ * Requiere: entorno de desarrollo + parámetro `?battle-demo=1` y (`?interference-demo=1` o `?bot-sabotage=interferencia`).
+ */
+export function isInterferenceDemoActive(searchOverride?: string): boolean {
+  if (typeof import.meta === 'undefined') return false;
+  if (!import.meta.env) return false;
+  if (!import.meta.env.DEV) return false;
+  if (searchOverride === undefined && typeof window === 'undefined') return false;
+  const search = searchOverride ?? (typeof window !== 'undefined' ? window.location.search : '');
+  const params = new URLSearchParams(search);
+  const battleDemo = params.get('battle-demo') === '1';
+  const interferenceParam = params.get('interference-demo') === '1';
+  const botSabotageParam = params.get('bot-sabotage') === 'interferencia';
+  return battleDemo && (interferenceParam || botSabotageParam);
+}
+
+/**
  * Crea la sesión de batalla del escenario de demostración.
  * Solo debe llamarse cuando `isBattleDemoActive()` devuelve true.
  */
@@ -52,7 +69,12 @@ export function createBattleDemoSession(
   let playerOneInitialState = options?.playerOneInitialState;
   let playerTwoInitialState = options?.playerTwoInitialState;
 
-  if (import.meta.env.DEV && botSabotageParam) {
+  if (import.meta.env.DEV && isInterferenceDemoActive(search)) {
+    playerOneInitialState = {
+      storedSabotages: ['interferencia', 'interferencia'],
+      ...playerOneInitialState,
+    };
+  } else if (import.meta.env.DEV && botSabotageParam) {
     playerTwoInitialState = {
       storedSabotages: ['residuos'],
       ...playerTwoInitialState,

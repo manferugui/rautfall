@@ -135,6 +135,11 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
           ></div>
         </template>
 
+        <!-- Velo de Interferencia -->
+        <div v-if="playerTwo?.isInterfered" class="interferencia-overlay" data-testid="interferencia-overlay" role="status">
+          SEÑAL INTERFERIDA
+        </div>
+
         <!-- Velo de Pausa -->
         <div v-if="isPaused" class="opponent-pause-overlay" data-testid="opponent-pause-overlay" role="status">
           PAUSA
@@ -328,6 +333,25 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
 
 .opponent-cell--active {
   box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+.interferencia-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 24, 26, 0.88);
+  color: var(--rf-color-amber, #f39c12);
+  font-size: 0.8rem;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  pointer-events: none;
+  border-radius: 3px;
+  border: 1px dashed var(--rf-color-amber, #f39c12);
+  z-index: 8;
 }
 
 .opponent-pause-overlay {

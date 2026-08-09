@@ -168,5 +168,20 @@ describe('OpponentMonitor.vue', () => {
 
       wrapper.unmount();
     });
+
+    it('muestra el velo de SEÑAL INTERFERIDA cuando isInterfered es true en playerTwo', () => {
+      const interferedState: OpponentPresentationState = {
+        ...mockOpponentState,
+        isInterfered: true,
+        interferenciaRemainingMs: 5000,
+      };
+      const wrapper = mount(OpponentMonitor, {
+        props: { playerTwo: interferedState },
+      });
+      const overlay = wrapper.find('[data-testid="interferencia-overlay"]');
+      expect(overlay.exists()).toBe(true);
+      expect(overlay.text()).toBe('SEÑAL INTERFERIDA');
+      wrapper.unmount();
+    });
   });
 });

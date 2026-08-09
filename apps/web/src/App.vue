@@ -318,6 +318,10 @@ function goToMenu(): void {
                   <span class="session-label">Último Enrutado</span>
                   <span class="session-value" data-testid="last-sabotage-routed">{{ gameState.battleState.lastSabotageRouted }}</span>
                 </div>
+                <div v-if="gameState.battleState.lastSabotageBlocked" class="session-item">
+                  <span class="session-label">Último Bloqueado</span>
+                  <span class="session-value" data-testid="last-sabotage-blocked">{{ gameState.battleState.lastSabotageBlocked }}</span>
+                </div>
                 <template v-if="gameState.battleState.botDevDiagnostic">
                   <div class="session-item">
                     <span class="session-label">P2 Piece ID</span>

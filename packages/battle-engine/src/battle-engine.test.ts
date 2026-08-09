@@ -439,4 +439,194 @@ describe('@rautfall/battle-engine', () => {
       }).toThrow('initialElapsedMs must be a non-negative finite number');
     });
   });
+
+  describe('Tarea 0027 — Protecciones y mecánicas pendientes de combate', () => {
+    it('1. Warning: un sabotaje temporal (sobrecarga) entra en warning de 750 ms y no actúa hasta expirar', () => {
+      const battle = createBattleSession(makeValidOptions());
+      const p1Engine = battle.getEngine('playerOne');
+      const fixedMs = prototypeConfig.fixedStepMs;
+      const warningSteps = Math.ceil(750 / fixedMs);
+
+      // Simular cartucho de P1 con sobrecarga
+      p1Engine.receiveSabotage('sobrecarga'); // esto añade sobrecarga a P1, lo reseteamos o disparamos
+      // Crear un estado donde P1 tiene storedSabotages = ['sobrecarga']
+      const p1Initial = { storedSabotages: ['sobrecarga' as const] };
+      const battle2 = createBattleSession(makeValidOptions({ playerOneInitialState: p1Initial }));
+      battle2.drainEvents();
+
+      // P1 dispara el sabotaje
+      battle2.step({
+        playerOne: { ...emptyInput(), triggerSabotage: true },
+        playerTwo: emptyInput(),
+      });
+
+      const events = battle2.drainEvents();
+      const warningStart = events.find((e) => e.type === 'warningStarted');
+      expect(warningStart).toBeDefined();
+      if (warningStart && warningStart.type === 'warningStarted') {
+        expect(warningStart.participant).toBe('playerTwo');
+        expect(warningStart.sabotage).toBe('sobrecarga');
+        expect(warningStart.durationMs).toBe(750);
+      }
+
+      // Durante los pasos de warning (< warningSteps), sobrecarga NO está activa en P2
+      for (let s = 1; s < warningSteps; s++) {
+        const snap = battle2.step(emptyBattleInput());
+        expect(snap.playerTwo.activeEffects.some((e) => e.type === 'sobrecarga')).toBe(false);
+        expect(snap.playerTwoState.warnings).toHaveLength(1);
+      }
+
+      // En el paso exacto en que expira el warning, se emite warningExpired y sobrecarga pasa a estar activa en P2
+      const finalSnap = battle2.step(emptyBattleInput());
+      const finalEvents = battle2.drainEvents();
+      expect(finalEvents.some((e) => e.type === 'warningExpired')).toBe(true);
+      expect(finalSnap.playerTwo.activeEffects.some((e) => e.type === 'sobrecarga')).toBe(true);
+    });
+
+    it('2. Bloqueo de duplicados: warning ya pendiente o efecto ya activo rechaza nuevo sabotaje con sabotageBlocked', () => {
+      const p1Initial = { storedSabotages: ['sobrecarga' as const, 'sobrecarga' as const] };
+      const battle = createBattleSession(makeValidOptions({ playerOneInitialState: p1Initial }));
+      battle.drainEvents();
+
+      // P1 dispara primer sobrecarga -> inicia warning en P2
+      battle.step({
+        playerOne: { ...emptyInput(), triggerSabotage: true },
+        playerTwo: emptyInput(),
+      });
+
+      // P1 dispara segundo sobrecarga en el paso siguiente mientras warning está pendiente -> sabotageBlocked (warningPending)
+      battle.step({
+        playerOne: { ...emptyInput(), triggerSabotage: true },
+        playerTwo: emptyInput(),
+      });
+
+      const events = battle.drainEvents();
+      const blocked = events.find((e) => e.type === 'sabotageBlocked');
+      expect(blocked).toBeDefined();
+      if (blocked && blocked.type === 'sabotageBlocked') {
+        expect(blocked.target).toBe('playerTwo');
+        expect(blocked.sabotage).toBe('sobrecarga');
+        expect(blocked.reason).toBe('warningPending');
+      }
+    });
+
+    it('3. Inmunidad post-efecto: al expirar un efecto (interferencia), P2 gana 4.000 ms de inmunidad', () => {
+      const fixedMs = prototypeConfig.fixedStepMs;
+      const warningSteps = Math.ceil(750 / fixedMs);
+      const interferenciaSteps = Math.ceil(5000 / fixedMs);
+
+      const p1Initial = { storedSabotages: ['interferencia' as const, 'interferencia' as const] };
+      const battle = createBattleSession(makeValidOptions({ playerOneInitialState: p1Initial }));
+      battle.drainEvents();
+
+      // P1 dispara Interferencia
+      battle.step({
+        playerOne: { ...emptyInput(), triggerSabotage: true },
+        playerTwo: emptyInput(),
+      });
+
+      // Avanzar warning (750 ms)
+      for (let i = 0; i < warningSteps; i++) {
+        battle.step(emptyBattleInput());
+      }
+      expect(battle.getSnapshot().playerTwoState.isInterfered).toBe(true);
+
+      // Avanzar Interferencia hasta expirar (5000 ms)
+      for (let i = 0; i < interferenciaSteps; i++) {
+        battle.step(emptyBattleInput());
+      }
+
+      const snapAfterExp = battle.getSnapshot();
+      expect(snapAfterExp.playerTwoState.isInterfered).toBe(false);
+      expect(snapAfterExp.playerTwoState.immunities).toHaveLength(1);
+      expect(snapAfterExp.playerTwoState.immunities[0]!.sabotage).toBe('interferencia');
+      expect(snapAfterExp.playerTwoState.immunities[0]!.remainingMs).toBe(4000);
+
+      // Intentar disparar segunda Interferencia durante inmunidad
+      battle.step({
+        playerOne: { ...emptyInput(), triggerSabotage: true },
+        playerTwo: emptyInput(),
+      });
+
+      const events = battle.drainEvents();
+      const blocked = events.find((e) => e.type === 'sabotageBlocked');
+      expect(blocked).toBeDefined();
+      if (blocked && blocked.type === 'sabotageBlocked') {
+        expect(blocked.reason).toBe('immunity');
+      }
+    });
+
+    it('4. Reataques frente a inmunidad: 1 step antes (bloqueado), paso exacto (permite warning) y 1 step después (permite warning)', () => {
+      const fixedMs = prototypeConfig.fixedStepMs;
+      const warningSteps = Math.ceil(750 / fixedMs);
+      const interferenciaSteps = Math.ceil(5000 / fixedMs);
+      const immunitySteps = Math.ceil(4000 / fixedMs);
+
+      // Probamos reataque en paso exacto de expiración de inmunidad
+      const p1Initial = { storedSabotages: ['interferencia' as const, 'interferencia' as const] };
+      const battle = createBattleSession(makeValidOptions({ playerOneInitialState: p1Initial }));
+      battle.drainEvents();
+
+      battle.step({ playerOne: { ...emptyInput(), triggerSabotage: true }, playerTwo: emptyInput() });
+      for (let i = 0; i < warningSteps + interferenciaSteps; i++) {
+        battle.step(emptyBattleInput());
+      }
+
+      // En este momento la inmunidad de P2 para interferencia durará exactamente immunitySteps
+      // Avanzar immunitySteps - 1 pasos (quedará 1 paso de inmunidad)
+      for (let i = 0; i < immunitySteps - 1; i++) {
+        battle.step(emptyBattleInput());
+      }
+      expect(battle.getSnapshot().playerTwoState.immunities).toHaveLength(1);
+
+      // Disparar en el paso en que expira la inmunidad (paso exacto)
+      battle.step({ playerOne: { ...emptyInput(), triggerSabotage: true }, playerTwo: emptyInput() });
+      const events = battle.drainEvents();
+
+      // Como la inmunidad expira en step 4.b, en step 8 cuando se rutea la inmunidad ya ha expirado, permitiendo el nuevo warning
+      const warningEvent = events.find((e) => e.type === 'warningStarted');
+      expect(warningEvent).toBeDefined();
+    });
+
+    it('5. Congelación de percepción unívoca al activar Interferencia y test explícito de cambio en el mismo step', () => {
+      const fixedMs = prototypeConfig.fixedStepMs;
+      const warningSteps = Math.ceil(750 / fixedMs);
+
+      const p2Initial = { storedSabotages: ['interferencia' as const] };
+      const battle = createBattleSession(makeValidOptions({ playerTwoInitialState: p2Initial }));
+      battle.drainEvents();
+
+      // P2 dispara Interferencia hacia P1
+      battle.step({ playerOne: emptyInput(), playerTwo: { ...emptyInput(), triggerSabotage: true } });
+
+      // Avanzar warning-1 pasos. En el paso previo a la activación, capturar la percepción de P1 sobre P2
+      for (let i = 0; i < warningSteps - 1; i++) {
+        battle.step(emptyBattleInput());
+      }
+
+      const perceptionBeforeActivation = battle.getPerceivedOpponentSnapshot('playerOne');
+
+      // En el paso de activación (expira warning), P2 (el rival) realiza un movimiento y fija pieza, cambiando su tablero real
+      battle.step({
+        playerOne: emptyInput(),
+        playerTwo: { ...emptyInput(), hardDrop: true },
+      });
+
+      const events = battle.drainEvents();
+      expect(events.some((e) => e.type === 'interferenciaStarted')).toBe(true);
+      expect(battle.getSnapshot().playerOneState.isInterfered).toBe(true);
+
+      // Obtener la percepción de P1 sobre P2 inmediatamente tras el step de activación
+      const perceptionAfterActivation = battle.getPerceivedOpponentSnapshot('playerOne');
+
+      // VERIFICACIÓN CLAVE: La percepción de P1 conserva la foto PREVIA y NO ha incorporado el hardDrop ni los cambios reales de P2 de ese mismo step
+      expect(perceptionAfterActivation.activePiece?.pieceId).toBe(perceptionBeforeActivation.activePiece?.pieceId);
+      expect(perceptionAfterActivation.clearedLines).toBe(perceptionBeforeActivation.clearedLines);
+      expect(perceptionAfterActivation.score).toBe(perceptionBeforeActivation.score);
+
+      // El estado real de P2 sí ha cambiado (pieza diferente/fijada)
+      const realP2Snap = battle.getEngine('playerTwo').getSnapshot();
+      expect(realP2Snap.activePiece?.pieceId).not.toBe(perceptionAfterActivation.activePiece?.pieceId);
+    });
+  });
 });

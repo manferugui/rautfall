@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isBattleDemoActive, isSuddenDeathDemoActive, createBattleDemoSession, BATTLE_DEMO_HELP } from './battle-demo';
+import {
+  isBattleDemoActive,
+  isSuddenDeathDemoActive,
+  isInterferenceDemoActive,
+  createBattleDemoSession,
+  BATTLE_DEMO_HELP,
+} from './battle-demo';
 
 describe('battle-demo', () => {
   it('isBattleDemoActive devuelve false cuando no está la query param ?battle-demo=1', () => {
@@ -28,15 +34,22 @@ describe('battle-demo', () => {
     expect(isSuddenDeathDemoActive('?sudden-death-demo=1')).toBe(false);
   });
 
-  it('createBattleDemoSession instancia una BattleSession válida', () => {
-    const session = createBattleDemoSession();
+  it('isInterferenceDemoActive devuelve true cuando ?battle-demo=1&interference-demo=1 o ?bot-sabotage=interferencia están en DEV', () => {
+    expect(isInterferenceDemoActive('?battle-demo=1&interference-demo=1')).toBe(true);
+    expect(isInterferenceDemoActive('?battle-demo=1&bot-sabotage=interferencia')).toBe(true);
+    expect(isInterferenceDemoActive('?battle-demo=1')).toBe(false);
+  });
+
+  it('createBattleDemoSession instancia una BattleSession válida y precarga P1 si isInterferenceDemoActive es true', () => {
+    const session = createBattleDemoSession({
+      playerOneInitialState: { storedSabotages: ['interferencia', 'interferencia'] },
+    });
     const snap = session.getSnapshot();
 
     expect(snap.step).toBe(0);
     expect(snap.status).toBe('running');
     expect(snap.winner).toBeNull();
-    expect(snap.playerOne.seed).toBe(42);
-    expect(snap.playerTwo.seed).toBe(42);
+    expect(snap.playerOne.storedSabotages).toEqual(['interferencia', 'interferencia']);
   });
 
   it('BATTLE_DEMO_HELP contiene el mensaje de ayuda', () => {

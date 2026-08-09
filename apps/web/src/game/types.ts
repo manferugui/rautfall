@@ -1,5 +1,5 @@
 import type { ActiveEffectSnapshot, PieceType, SabotageType } from '@rautfall/game-engine';
-import type { BattleStatus, BattleWinner } from '@rautfall/battle-engine';
+import type { BattleStatus, BattleWinner, BattleWarningSnapshot, BattleImmunitySnapshot } from '@rautfall/battle-engine';
 import type { SessionStatus } from './session-status';
 
 export type CellPresentation = Readonly<{
@@ -18,6 +18,10 @@ export type OpponentPresentationState = Readonly<{
   activeEffects: readonly ActiveEffectSnapshot[];
   pendingGarbage: number;
   visibleCells: readonly CellPresentation[];
+  isInterfered?: boolean;
+  interferenciaRemainingMs?: number;
+  warnings?: readonly BattleWarningSnapshot[];
+  immunities?: readonly BattleImmunitySnapshot[];
 }>;
 
 export type BotDevDiagnostic = Readonly<{
@@ -52,6 +56,7 @@ export type BattlePresentationState = Readonly<{
   winner: BattleWinner;
   step: number;
   lastSabotageRouted: string | null;
+  lastSabotageBlocked?: string | null;
   playerTwo: OpponentPresentationState;
   botDevDiagnostic?: BotDevDiagnostic | undefined;
 }>;

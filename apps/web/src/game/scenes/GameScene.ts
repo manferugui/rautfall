@@ -73,6 +73,7 @@ export class GameScene extends Phaser.Scene {
   private battleSession: BattleSession | null = null;
   private playerTwoBot: DeterministicBot | null = null;
   private lastSabotageRouted: string | null = null;
+  private lastSabotageBlocked: string | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
   private lastState: GamePresentationState | null = null;
@@ -400,6 +401,8 @@ export class GameScene extends Phaser.Scene {
         getAudioManager().handleBattleEvent(event);
         if (event.type === 'sabotageRouted') {
           this.lastSabotageRouted = `${event.sabotage} (${event.source} -> ${event.target})`;
+        } else if (event.type === 'sabotageBlocked') {
+          this.lastSabotageBlocked = `${event.sabotage} -> ${event.target} (${event.reason})`;
         }
       }
     } else {
@@ -513,6 +516,7 @@ export class GameScene extends Phaser.Scene {
       this.playerTwoBot = createDeterministicBot();
       this.engine = this.battleSession.getEngine('playerOne');
       this.lastSabotageRouted = null;
+      this.lastSabotageBlocked = null;
     } else {
       // Modo Entrenamiento normal de producción (1P)
       this.battleSession = null;
@@ -755,7 +759,11 @@ export class GameScene extends Phaser.Scene {
           winner: bSnap.winner,
           step: bSnap.step,
           lastSabotageRouted: this.lastSabotageRouted,
-          playerTwo: mapEngineToOpponentPresentation(bSnap.playerTwo),
+          lastSabotageBlocked: this.lastSabotageBlocked,
+          playerTwo: mapEngineToOpponentPresentation(
+            this.battleSession.getPerceivedOpponentSnapshot('playerOne'),
+            bSnap.playerTwoState,
+          ),
           botDevDiagnostic,
         },
       };
