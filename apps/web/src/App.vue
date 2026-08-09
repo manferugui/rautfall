@@ -47,6 +47,10 @@ const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 const audioManager = getAudioManager();
 const isAudioMuted = ref(audioManager.isMuted());
 
+if (isDevDemo && !isSfxLab) {
+  audioManager.playMusic('gameplay');
+}
+
 function toggleAudioMute(): void {
   void audioManager.unlock();
   audioManager.playSfx('uiClick');
@@ -135,6 +139,7 @@ function selectMode(mode: GameMode): void {
 
 function doReset(): void {
   audioManager.playSfx('uiClick');
+  audioManager.restartMusic('gameplay');
   if (controller) {
     controller.reset();
   }
@@ -147,7 +152,7 @@ function doTogglePause(): void {
 
 async function doReplay(): Promise<void> {
   audioManager.playSfx('uiClick');
-  audioManager.playMusic('gameplay');
+  audioManager.restartMusic('gameplay');
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;

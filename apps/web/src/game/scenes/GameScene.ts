@@ -172,6 +172,7 @@ export class GameScene extends Phaser.Scene {
     // Registrar listener de keydown para el orden real de pulsaciones horizontales.
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.repeat) return; // Ignorar auto-repeat del navegador
+      void getAudioManager().unlock();
       const before = this.pendingHorizontal;
       if (event.code === 'ArrowLeft') {
         this.pendingHorizontal = 'left';
@@ -428,6 +429,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   resetGame(): void {
+    getAudioManager().restartMusic('gameplay');
     this.resetEngine();
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };

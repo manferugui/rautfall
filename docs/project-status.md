@@ -679,6 +679,28 @@ Ver [Informe de implementación](implementation/0026-audio-basico-e-identidad-so
 
 Ver [Informe de implementación](implementation/0027-cierre-protecciones-y-mecanicas-de-combate.md).
 
+## Task [0028 — DEV Demo Launcher](tasks/0028-dev-demo-launcher.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-09 |
+| **Resultado** | Lanzador centralizado de escenarios de desarrollo (**DEV Demo Launcher**) accesible desde el menú principal únicamente cuando `import.meta.env.DEV === true`. Fuente única de verdad en `apps/web/src/dev/dev-demos.ts` con 13 definiciones canónicas auditadas (incluyendo la consolidación de SFX & Music Lab en **Audio Lab**). Componente `DevDemoLauncher.vue` simplificado con estilos tácticos existentes, navegación con URLs limpias desde cero (`pathname + '?' + exactDemoQuery`) y acción **Volver al menú** (`pathname`). Protección incondicional en producción comprobada en `dist` (cero código/chunk DEV residual). 773 tests unitarios, 10 tests E2E, lint, typecheck, build y diff --check en verde. |
+
+### Resumen
+
+- Auditoría completa de los 13 escenarios DEV reales del sistema (Batalla 2P, Muerte Súbita, Interferencia, Bot Sabotajes, Sabotaje Residuos 1P, Residuos en Tablero 1P, Sobrecarga 1P, Polaridad Inversa 1P, T-Spin Setup, Niveles 1 y 10, y Audio Lab).
+- Registro centralizado `dev-demos.ts` y helper utilitario `buildDemoTargetUrl` para construir URLs limpias desde cero.
+- Componente `DevDemoLauncher.vue` simplificado con tarjetas de demostración, badges de categoría, acción Abrir y botón **Volver al menú**.
+- Integración en `ModeSelector.vue` con importación asíncrona (`defineAsyncComponent`) condicionada por `import.meta.env.DEV === true`.
+- Verificación empírica tras `pnpm build`: exclusión física total del código del lanzador en el bundle de producción entregable (`dist/`).
+- 773 tests Vitest, 10 tests Playwright E2E, lint, typecheck y build en verde.
+- Paquetes de dominio `packages/game-engine` y `packages/battle-engine` intactos.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0028-dev-demo-launcher.md).
+
 ## Siguiente tarea
 
 - Pendiente de definición y auditoría por el usuario.

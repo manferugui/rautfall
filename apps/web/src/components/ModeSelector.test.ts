@@ -73,4 +73,16 @@ describe('ModeSelector.vue', () => {
 
     wrapper.unmount();
   });
+
+  it('renderiza la sección DEV Demo Launcher en entorno de desarrollo', async () => {
+    const wrapper = mount(ModeSelector);
+    // Como defineAsyncComponent resuelve asíncronamente en jsdom, esperamos tick
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await wrapper.vm.$nextTick();
+
+    const launcher = wrapper.find('[data-testid="dev-demo-launcher"]');
+    expect(launcher.exists()).toBe(true);
+
+    wrapper.unmount();
+  });
 });

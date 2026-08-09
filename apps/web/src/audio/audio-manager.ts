@@ -684,6 +684,12 @@ export class AudioManager implements AudioService {
     }
   }
 
+  public restartMusic(track: MusicTrack): void {
+    this.resetDucking();
+    this.stopMusic({ fadeOutDurationMs: 0 });
+    this.playMusic(track, { fadeOutDurationMs: 0 });
+  }
+
   public stopMusic(options?: { fadeOutDurationMs?: number }): void {
     this.currentMusicTrack = null;
     if (!this.ctx || !this.currentMusicSource || !this.currentTrackGainNode) {

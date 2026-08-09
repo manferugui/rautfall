@@ -677,4 +677,44 @@ describe('AudioManager', () => {
     expect(ctx?.close).toHaveBeenCalled();
     expect(manager.getAudioContext()).toBeNull();
   });
+
+  it('restartMusic() reinicia la pista seleccionada desde offset 0 sin violar mute ni desbloqueo diferido', async () => {
+    const manager = AudioManager.getInstance();
+    const mockBuffer = {
+      duration: 30,
+      length: 1440000,
+      sampleRate: 48000,
+      numberOfChannels: 2,
+    } as unknown as AudioBuffer;
+
+    manager.registerMusicBuffer('gameplay', mockBuffer);
+    manager.registerMusicBuffer('suddenDeath', mockBuffer);
+    manager.registerMusicBuffer('victory', mockBuffer);
+
+    // 1. Contexto no inicializado: restartMusic no crea ni desbloquea AudioContext
+    manager.restartMusic('gameplay');
+    expect(manager.getAudioContextState()).toBe('uninitialized');
+    expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+
+    // 2. Desbloquear contexto
+    await manager.unlock();
+    expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+
+    // 3. Reiniciar la misma pista 'gameplay': crea una nueva reproducción desde 0
+    expect(() => manager.restartMusic('gameplay')).not.toThrow();
+    expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+
+    // 4. Cambiar a suddenDeath BGM y luego ejecutar restartMusic('gameplay')
+    manager.playMusic('suddenDeath');
+    expect(manager.getCurrentMusicTrack()).toBe('suddenDeath');
+
+    manager.restartMusic('gameplay');
+    expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+
+    // 5. Mute activo: conserva mute y buses
+    manager.setMuted(true);
+    expect(manager.isMuted()).toBe(true);
+    expect(() => manager.restartMusic('gameplay')).not.toThrow();
+    expect(manager.isMuted()).toBe(true);
+  });
 });

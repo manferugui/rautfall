@@ -161,7 +161,11 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
     wrapper.unmount();
   });
 
-  it('en la pantalla de Resultados, el botón "Volver a jugar" destruye el controlador y crea una nueva partida', async () => {
+  it('en la pantalla de Resultados, el botón "Volver a jugar" destruye el controlador, invoca restartMusic("gameplay") y crea una nueva partida', async () => {
+    const { getAudioManager } = await import('./audio');
+    const audioManager = getAudioManager();
+    const restartSpy = vi.spyOn(audioManager, 'restartMusic');
+
     const wrapper = mountApp();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
 
@@ -174,9 +178,11 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
     await wrapper.find('[data-testid="replay-button"]').trigger('click');
     await wrapper.vm.$nextTick();
 
+    expect(restartSpy).toHaveBeenCalledWith('gameplay');
     expect(mockController.destroy).toHaveBeenCalledTimes(1);
     expect(mockCreatePhaserGame).toHaveBeenCalledTimes(2);
 
+    restartSpy.mockRestore();
     wrapper.unmount();
   });
 
@@ -213,7 +219,11 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
     wrapper.unmount();
   });
 
-  it('el botón "Reiniciar" está presente y habilitado durante el juego', async () => {
+  it('el botón "Reiniciar" está presente y habilitado durante el juego e invoca restartMusic("gameplay")', async () => {
+    const { getAudioManager } = await import('./audio');
+    const audioManager = getAudioManager();
+    const restartSpy = vi.spyOn(audioManager, 'restartMusic');
+
     const wrapper = mountApp();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
 
@@ -223,7 +233,34 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
 
     await resetButton.trigger('click');
     expect(mockController.reset).toHaveBeenCalledTimes(1);
+    expect(restartSpy).toHaveBeenCalledWith('gameplay');
+
+    restartSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('registra gameplay como pista deseada al ingresar directamente por flag DEV sin crear AudioContext ansiosamente', async () => {
+    const originalLocation = window.location;
+    delete (window as unknown as { location?: Location }).location;
+    (window as unknown as { location: Location }).location = {
+      pathname: '/',
+      search: '?tspin-demo=1',
+      href: 'http://localhost/?tspin-demo=1',
+    } as unknown as Location;
+
+    const { getAudioManager } = await import('./audio');
+    const audioManager = getAudioManager();
+
+    const wrapper = mountApp();
+    await wrapper.vm.$nextTick();
+
+    expect(audioManager.getCurrentMusicTrack()).toBe('gameplay');
+    expect(audioManager.getAudioContextState()).toBe('uninitialized');
+
+    await audioManager.unlock();
+    expect(audioManager.getCurrentMusicTrack()).toBe('gameplay');
 
     wrapper.unmount();
+    (window as unknown as { location: Location }).location = originalLocation;
   });
 });

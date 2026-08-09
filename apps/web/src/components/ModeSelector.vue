@@ -10,9 +10,13 @@
  * - No contiene enlaces ni elementos ficticios de características fuera del MVP.
  */
 
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, defineAsyncComponent, type Component } from 'vue';
 import type { GameMode } from '../game/types';
 import { getAudioManager } from '../audio';
+
+const DevDemoLauncherComponent: Component | null = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('./DevDemoLauncher.vue'))
+  : null;
 
 const emit = defineEmits<{
   (e: 'selectMode', mode: GameMode): void;
@@ -99,6 +103,10 @@ function onSelectMode(mode: GameMode): void {
         <li><kbd>R</kbd> Reiniciar partida</li>
       </ul>
     </div>
+
+    <template v-if="DevDemoLauncherComponent">
+      <component :is="DevDemoLauncherComponent" />
+    </template>
   </div>
 </template>
 

@@ -60,6 +60,8 @@ export interface AudioService {
   handleBattleEvent(event: BattleEvent): void;
   /** Prepara/reproduce una pista de música ambiental (preparado para activos futuros). */
   playMusic(track: MusicTrack): void;
+  /** Reinicia la reproducción musical seleccionando la pista indicada desde el segundo 0. */
+  restartMusic(track: MusicTrack): void;
   /** Detiene la música ambiental actual. */
   stopMusic(): void;
   /** Ajusta la intensidad de la música ambiental actual. */
