@@ -2,6 +2,11 @@ import type { EngineEvent } from '@rautfall/game-engine';
 import type { BattleEvent } from '@rautfall/battle-engine';
 
 /**
+ * Niveles de prioridad jerárquicos de mezcla para los efectos de sonido.
+ */
+export type AudioSfxPriority = 'low' | 'medium' | 'high' | 'terminal';
+
+/**
  * Identificadores de efectos de sonido sintéticos esenciales (SFX).
  */
 export type AudioSfxType =
@@ -10,16 +15,23 @@ export type AudioSfxType =
   | 'linesCleared'
   | 'quadOrTSpin'
   | 'sabotageTriggered'
+  | 'residuesTriggered'
+  | 'residuesReceived'
+  | 'overloadTriggered'
+  | 'overloadReceived'
+  | 'reversePolarityTriggered'
+  | 'reversePolarityReceived'
   | 'suddenDeathWarning'
   | 'suddenDeathStarted'
   | 'gameOver'
   | 'victory'
+  | 'victoryFallback'
   | 'uiClick';
 
 /**
  * Pistas de música ambiental previstas para el sistema.
  */
-export type MusicTrack = 'menu' | 'gameplay' | 'suddenDeath';
+export type MusicTrack = 'menu' | 'gameplay' | 'suddenDeath' | 'victory';
 
 /**
  * Preferencias de audio persistidas.
@@ -40,8 +52,8 @@ export interface AudioService {
   toggleMute(): boolean;
   /** Establece explícitamente el estado de silencio global. */
   setMuted(muted: boolean): void;
-  /** Reproduce un efecto de sonido sintético. */
-  playSfx(type: AudioSfxType): void;
+  /** Reproduce un efecto de sonido (muestra o fallback sintético). */
+  playSfx(type: AudioSfxType, options?: { forceSynthetic?: boolean }): void;
   /** Procesa un evento de motor de juego e invoca el SFX correspondiente. */
   handleEngineEvent(event: EngineEvent): void;
   /** Procesa un evento de motor de batalla e invoca el SFX correspondiente. */

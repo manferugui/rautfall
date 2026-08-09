@@ -18,6 +18,15 @@ import { isPolarityDemoActive } from './game/polarity-demo';
 import { getLevelDemoTarget } from './game/level-demo';
 import { getAudioManager } from './audio';
 
+import { isSfxLabActive } from './game/sfx-lab-demo';
+import { defineAsyncComponent, type Component } from 'vue';
+
+const SfxLabComponent: Component | null = import.meta.env.DEV
+  ? defineAsyncComponent(() => import('./components/SfxLab.vue'))
+  : null;
+
+const isSfxLab = isSfxLabActive();
+
 function hasDevDemoFlag(): boolean {
   return (
     isBattleDemoActive() ||
@@ -33,7 +42,7 @@ function hasDevDemoFlag(): boolean {
 const isDevDemo = hasDevDemoFlag();
 const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
 const gameMode = ref<GameMode>(isBattleDemoActive() ? 'battle' : 'training');
-const isCanvasMounted = ref(isDevDemo);
+const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 
 const audioManager = getAudioManager();
 const isAudioMuted = ref(audioManager.isMuted());
@@ -160,20 +169,26 @@ function goToMenu(): void {
 
 <template>
   <div class="app">
-    <!-- Aviso de ancho insuficiente -->
-    <div class="width-warning" data-testid="width-warning" role="status">
-      Rautfall Tactical está pensado para escritorio o portátil con más ancho de pantalla.
-      La experiencia puede resultar incómoda por debajo de 760 px.
-    </div>
+    <!-- Vista DEV aislada: SFX LAB (sin Phaser ni partida normal) -->
+    <template v-if="isSfxLab && SfxLabComponent">
+      <component :is="SfxLabComponent" />
+    </template>
 
-    <!-- Menú Principal -->
-    <ModeSelector
-      v-if="appScreen === 'menu'"
-      @select-mode="selectMode"
-    />
+    <template v-else>
+      <!-- Aviso de ancho insuficiente -->
+      <div class="width-warning" data-testid="width-warning" role="status">
+        Rautfall Tactical está pensado para escritorio o portátil con más ancho de pantalla.
+        La experiencia puede resultar incómoda por debajo de 760 px.
+      </div>
 
-    <!-- Pantalla de Juego ('playing' o 'results') -->
-    <div v-else class="tactical-chassis panel-riveted">
+      <!-- Menú Principal -->
+      <ModeSelector
+        v-if="appScreen === 'menu'"
+        @select-mode="selectMode"
+      />
+
+      <!-- Pantalla de Juego ('playing' o 'results') -->
+      <div v-else class="tactical-chassis panel-riveted">
       <header class="app-header">
         <div class="title-tag">
           <h1 class="app-title">Rautfall</h1>
@@ -435,6 +450,7 @@ function goToMenu(): void {
     </div>
 
     <p class="footnote">Rautfall TFM — Tarea 0025</p>
+    </template>
   </div>
 </template>
 

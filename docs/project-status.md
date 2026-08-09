@@ -636,9 +636,9 @@ Ver [Informe de implementación](implementation/0025-flujo-web-modos-y-resultado
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | 🚧 En progreso (Primera fase técnica completada; integración musical pendiente) |
-| **Fecha de actualización** | 2026-08-06 |
-| **Resultado** | Primera fase técnica del subsistema de audio desacoplado en `apps/web` (`AudioManager`) basado en Web Audio API pura, instancia singleton de `AudioContext` con creación diferida tras gesto del usuario, silencio global (mute) persistido en `localStorage`, control Mute accesible (`data-testid="audio-mute-button"`), sintetizador de SFX sintéticos para 10 eventos esenciales, deduplicación indexada con cooldown de 40ms por SFX, degradación segura en entornos sin audio, API de música ambiental preparada sin peticiones 404 ni errores en consola, registro de trazabilidad `docs/audio-assets.md`. 721 tests Vitest y 8 escenarios E2E Playwright en verde. Lint, typecheck, build y git diff --check limpios. |
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-09 |
+| **Resultado** | Subsistema de audio desacoplado en `apps/web` (`AudioManager`) basado en Web Audio API pura, instancia singleton de `AudioContext` con desbloqueo diferido, silencio global (mute) persistido en `localStorage`, control Mute accesible, sintetizador de SFX sintéticos para 16 eventos esenciales, laboratorio DEV (**SFX LAB**) accesible vía `?sfx-lab=1` únicamente en desarrollo con exportación PCM WAV y audición BGM, 13 muestras SFX procesadas de producción integradas con resiliencia total, pieza musical definitiva de victoria `victory.wav` (*Sector Secured - Option 2* 42,0s estéreo PCM 48 kHz, peak -7.40 dBFS, RMS -25.75 dBFS, crossfade 150 ms), pista musical de **Menu BGM** `menu.wav` (*Terminal Pulse Loop v01* 31,5s), pista de combate **Gameplay BGM** `gameplay.wav` (*Breach Protocol Loop v04* 126,1s) y pista final **Sudden Death BGM** `sudden-death.wav` (*Breach Protocol 138 BPM Loop v01* 100,5s) procesadas e integradas en producción (bus `musicGain`, `loop = true`, crossfade 600 ms, ducking de alarma EAS a -10 dB durante 10,0 s con recuperación suave de 800 ms y silent fallback defensivo). Tests unitarios, de componentes y E2E Playwright en verde. Lint, typecheck, build y git diff --check limpios. |
 
 ### Resumen
 
@@ -646,12 +646,12 @@ Ver [Informe de implementación](implementation/0025-flujo-web-modos-y-resultado
 - Instancia singleton de `AudioContext` desbloqueada tras el primer clic o pulsación del usuario.
 - Control de Mute global accesible en Menú Principal y cabecera de juego (`data-testid="audio-mute-button"`).
 - Estado de Mute persistido en `localStorage['rautfall_audio_muted']`.
-- Sintetizador `sfx-synth.ts` para 10 eventos sonoros clave (Hard Drop, Piece Locked, Line Clear, Quad/T-Spin, Sabotage, Sudden Death Warning/Started, GameOver, Victory, UI Click).
-- Ventana de deduplicación de 40ms por SFX para prevenir distorsiones por ráfagas.
-- API de música ambiental (`playMusic`, `stopMusic`, `setMusicIntensity`) preparada sin peticiones 404 por red ni errores en consola.
-- Trazabilidad y guía de integración para Google Flow Music en `docs/audio-assets.md`.
-- 721 tests Vitest y 8 escenarios E2E Playwright en verde. Sin errores de lint, typecheck ni build.
-- **Mantenimiento técnico aislado (e2e)**: Eliminación del flake preexistente en `battle-demo.spec.ts` mediante telemetría DEV acumulada (`hardDropPhaseObserved`, `lastHardDropMaxDelay`) y captura atómica de estado en reanudación.
+- Sintetizador `sfx-synth.ts` para 16 eventos sonoros clave.
+- 13 muestras sonoras procesadas de producción integradas (`uiClick`, `pieceLocked`, `hardDrop`, `linesCleared`, `residuesTriggered`, `residuesReceived`, `overloadTriggered`, `overloadReceived`, `reversePolarityTriggered`, `reversePolarityReceived`, `suddenDeathStarted`, `gameOver`, `victoryFallback`).
+- Colección completa de 4 piezas BGM reales de producción integradas (`menu.wav` 31,5s, `gameplay.wav` 126,1s, `sudden-death.wav` 100,5s y nueva pista definitiva `victory.wav` *Option 2* 42,0s).
+- Transición fluida `Gameplay -> Sudden Death` con crossfade de 600 ms y alarma EAS `suddenDeathStarted` duckeada a **-10 dB** durante 10,0 s con rampa de recuperación progresiva de 800 ms.
+- Laboratorio DEV (**SFX LAB**) en `?sfx-lab=1` actualizado con tarjetas BGM completas, controles de audición directos, botón `▶ PROBAR TRANSICIÓN + ALARMA` y botón `▶ PROBAR LOOP` para Victory BGM.
+- Trazabilidad documental completa en `docs/audio-assets.md` y `docs/implementation/0026-audio-basico-e-identidad-sonora.md`.
 
 ### Informe detallado
 
