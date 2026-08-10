@@ -14,6 +14,7 @@ import type { GameResultSummary } from '../game/types';
 
 const props = defineProps<{
   result: GameResultSummary;
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }>();
 
 const emit = defineEmits<{
@@ -47,6 +48,12 @@ const titleClass = computed(() => {
           {{ result.title }}
         </h2>
         <p v-if="result.subtitle" class="results-subtitle">{{ result.subtitle }}</p>
+
+        <div v-if="saveStatus" class="save-status-tag" data-testid="save-status-tag">
+          <span v-if="saveStatus === 'saving'" class="save-status save-status--saving">⏳ Guardando en ranking...</span>
+          <span v-else-if="saveStatus === 'saved'" class="save-status save-status--saved">✓ Partida registrada</span>
+          <span v-else-if="saveStatus === 'error'" class="save-status save-status--error">⚠️ Modo local (sin servidor)</span>
+        </div>
       </div>
 
       <div class="results-divider"></div>
@@ -155,6 +162,24 @@ const titleClass = computed(() => {
   font-size: 0.8125rem;
   color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
   margin-top: 0.25rem;
+}
+
+.save-status-tag {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.save-status--saving {
+  color: var(--rf-color-amber, #f39c12);
+}
+
+.save-status--saved {
+  color: var(--rf-color-cyan, #00d4ff);
+}
+
+.save-status--error {
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
 }
 
 .results-divider {

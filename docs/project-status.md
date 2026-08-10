@@ -725,6 +725,22 @@ Ver [Informe de implementación](implementation/0028-dev-demo-launcher.md).
 
 Ver [Informe de implementación](implementation/0029-settings-y-controles-remapeables.md).
 
-## Siguiente tarea
+## Task [0030 — Backend base, persistencia de partidas, History y Ranking](tasks/0030-backend-persistencia-ranking-history.md)
 
-- Pendiente de definición y auditoría por el usuario.
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-10 |
+| **Resultado** | Backend base con Fastify, Drizzle ORM y PostgreSQL implementado. Contratos tipados en `@rautfall/contracts`, persistencia de partidas idempotente (con detección de conflicto 409), historial por jugador, ranking único por modo e integración en `apps/web`. |
+
+### Resumen
+
+- Paquete de contratos `@rautfall/contracts` con esquemas TypeBox estrictos y discriminated unions para result por modo.
+- Servidor Fastify `@rautfall/api` con Drizzle ORM y PostgreSQL.
+- Idempotencia del POST por `clientMatchId` con respuesta 409 Conflict si el payload contractual difiere.
+- Historial por jugador (`GET /api/matches?playerId=<uuid>`).
+- Ranking individual por modo (`GET /api/ranking?mode=<training|battle>`) con tie-break determinista (`score DESC, created_at ASC, id ASC`).
+- Identidad anónima MVP con `rautfall_player_id` UUID local y alias derivado determinista.
+- Integración en `apps/web` con envío non-blocking y pantallas de History y Ranking en Vue.
+
+Ver [Informe de implementación](implementation/0030-backend-persistencia-ranking-history.md).

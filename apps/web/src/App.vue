@@ -8,6 +8,8 @@ import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import ModeSelector from './components/ModeSelector.vue';
 import SettingsScreen from './components/SettingsScreen.vue';
+import HistoryScreen from './components/HistoryScreen.vue';
+import RankingScreen from './components/RankingScreen.vue';
 import ResultsModal from './components/ResultsModal.vue';
 import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive } from './game/battle-demo';
@@ -18,6 +20,9 @@ import { isGarbageDemoActive } from './game/garbage-demo';
 import { isPolarityDemoActive } from './game/polarity-demo';
 import { getLevelDemoTarget } from './game/level-demo';
 import { getAudioManager } from './audio';
+import { getOrCreatePlayerId, getPlayerName } from './api/identity';
+import { submitMatch } from './api/client';
+import type { CreateMatchInput } from '@rautfall/contracts';
 
 import { isSfxLabActive } from './game/sfx-lab-demo';
 import { defineAsyncComponent, type Component } from 'vue';
@@ -77,8 +82,66 @@ const gameState = ref<GamePresentationState>({
 });
 
 const gameResult = ref<GameResultSummary | null>(null);
+const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
+
+// Idempotencia de envío de partidas
+let currentClientMatchId = crypto.randomUUID();
+const submittedMatchIdsSet = new Set<string>();
+
+async function trySaveMatchResult(state: GamePresentationState): Promise<void> {
+  if (submittedMatchIdsSet.has(currentClientMatchId)) {
+    return;
+  }
+  submittedMatchIdsSet.add(currentClientMatchId);
+  saveStatus.value = 'saving';
+
+  const playerId = getOrCreatePlayerId();
+  const playerName = getPlayerName(playerId);
+
+  let payload: CreateMatchInput;
+
+  if (gameMode.value === 'training') {
+    payload = {
+      clientMatchId: currentClientMatchId,
+      playerId,
+      playerName,
+      score: state.score,
+      linesCleared: Math.floor(state.score / 100), // Estimación o total acumulado
+      durationMs: state.elapsedMs,
+      level: state.level,
+      mode: 'training',
+      result: 'finished',
+      opponentProfile: null,
+    };
+  } else {
+    const winner = state.battleState?.winner;
+    let result: 'victory' | 'defeat' | 'draw' = 'defeat';
+    if (winner === 'playerOne') result = 'victory';
+    else if (winner === 'draw') result = 'draw';
+
+    payload = {
+      clientMatchId: currentClientMatchId,
+      playerId,
+      playerName,
+      score: state.score,
+      linesCleared: Math.floor(state.score / 100),
+      durationMs: state.elapsedMs,
+      level: state.level,
+      mode: 'battle',
+      result,
+      opponentProfile: 'bot-deterministic-v1',
+    };
+  }
+
+  try {
+    await submitMatch(payload);
+    saveStatus.value = 'saved';
+  } catch {
+    saveStatus.value = 'error';
+  }
+}
 
 function onStateUpdate(state: GamePresentationState): void {
   gameState.value = state;
@@ -121,6 +184,7 @@ function onStateUpdate(state: GamePresentationState): void {
     };
 
     appScreen.value = 'results';
+    void trySaveMatchResult(state);
   }
 }
 
@@ -132,6 +196,8 @@ function selectMode(mode: GameMode): void {
   void audioManager.unlock();
   audioManager.playSfx('uiClick');
   audioManager.playMusic('gameplay');
+  currentClientMatchId = crypto.randomUUID();
+  saveStatus.value = 'idle';
   gameMode.value = mode;
   gameResult.value = null;
   appScreen.value = 'playing';
@@ -141,6 +207,8 @@ function selectMode(mode: GameMode): void {
 function doReset(): void {
   audioManager.playSfx('uiClick');
   audioManager.restartMusic('gameplay');
+  currentClientMatchId = crypto.randomUUID();
+  saveStatus.value = 'idle';
   if (controller) {
     controller.reset();
   }
@@ -154,6 +222,8 @@ function doTogglePause(): void {
 async function doReplay(): Promise<void> {
   audioManager.playSfx('uiClick');
   audioManager.restartMusic('gameplay');
+  currentClientMatchId = crypto.randomUUID();
+  saveStatus.value = 'idle';
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
@@ -176,6 +246,16 @@ function openSettings(): void {
   audioManager.playSfx('uiClick');
   appScreen.value = 'settings';
 }
+
+function openHistory(): void {
+  audioManager.playSfx('uiClick');
+  appScreen.value = 'history';
+}
+
+function openRanking(): void {
+  audioManager.playSfx('uiClick');
+  appScreen.value = 'ranking';
+}
 </script>
 
 <template>
@@ -197,12 +277,26 @@ function openSettings(): void {
         v-if="appScreen === 'menu'"
         @select-mode="selectMode"
         @open-settings="openSettings"
+        @open-history="openHistory"
+        @open-ranking="openRanking"
       />
 
       <!-- Pantalla de Configuración -->
       <SettingsScreen
         v-else-if="appScreen === 'settings'"
         @back="goToMenu"
+      />
+
+      <!-- Pantalla de Historial -->
+      <HistoryScreen
+        v-else-if="appScreen === 'history'"
+        @back-to-menu="goToMenu"
+      />
+
+      <!-- Pantalla de Ranking -->
+      <RankingScreen
+        v-else-if="appScreen === 'ranking'"
+        @back-to-menu="goToMenu"
       />
 
       <!-- Pantalla de Juego ('playing' o 'results') -->
@@ -466,6 +560,7 @@ function openSettings(): void {
       <ResultsModal
         v-if="appScreen === 'results' && gameResult"
         :result="gameResult"
+        :save-status="saveStatus"
         @replay="doReplay"
         @main-menu="goToMenu"
       />

@@ -24,6 +24,8 @@ const DevDemoLauncherComponent: Component | null = import.meta.env.DEV
 const emit = defineEmits<{
   (e: 'selectMode', mode: GameMode): void;
   (e: 'openSettings'): void;
+  (e: 'openHistory'): void;
+  (e: 'openRanking'): void;
 }>();
 
 const audioManager = getAudioManager();
@@ -50,6 +52,18 @@ function onOpenSettings(): void {
   void audioManager.unlock();
   audioManager.playSfx('uiClick');
   emit('openSettings');
+}
+
+function onOpenHistory(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  emit('openHistory');
+}
+
+function onOpenRanking(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  emit('openRanking');
 }
 </script>
 
@@ -85,6 +99,28 @@ function onOpenSettings(): void {
       >
         <span class="mute-icon" aria-hidden="true">{{ isMuted ? '🔇' : '🔊' }}</span>
         <span class="mute-label">{{ isMuted ? 'AUDIO SILENCIADO' : 'AUDIO ACTIVO' }}</span>
+      </button>
+    </div>
+
+    <div class="platform-actions-row">
+      <button
+        type="button"
+        class="platform-btn"
+        data-testid="open-history-button"
+        @click="onOpenHistory"
+      >
+        <span class="platform-icon" aria-hidden="true">📜</span>
+        <span class="platform-label">HISTORIAL</span>
+      </button>
+
+      <button
+        type="button"
+        class="platform-btn"
+        data-testid="open-ranking-button"
+        @click="onOpenRanking"
+      >
+        <span class="platform-icon" aria-hidden="true">🏆</span>
+        <span class="platform-label">RANKING</span>
       </button>
     </div>
 
@@ -194,6 +230,36 @@ function onOpenSettings(): void {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.platform-actions-row {
+  width: 100%;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.platform-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  background: var(--rf-color-graphite-900, #17181a);
+  color: var(--rf-color-text-primary, #e8e8ec);
+  border-radius: var(--rf-radius-sm, 3px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.platform-btn:hover {
+  background: var(--rf-color-graphite-700, #28292c);
+  border-color: var(--rf-color-cyan, #00d4ff);
 }
 
 .settings-btn {

@@ -69,7 +69,8 @@ export type GameMode = 'training' | 'battle';
 /**
  * Pantallas principales de la aplicación web.
  */
-export type AppScreen = 'menu' | 'playing' | 'results' | 'settings';
+export type AppScreen = 'menu' | 'playing' | 'results' | 'settings' | 'history' | 'ranking';
+
 
 /**
  * Resumen oficial de resultados al finalizar una partida.
