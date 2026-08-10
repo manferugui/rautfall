@@ -7,6 +7,7 @@ import HeldPiecePreview from './components/HeldPiecePreview.vue';
 import OpponentMonitor from './components/OpponentMonitor.vue';
 import CombatStatusPanel from './components/CombatStatusPanel.vue';
 import ModeSelector from './components/ModeSelector.vue';
+import SettingsScreen from './components/SettingsScreen.vue';
 import ResultsModal from './components/ResultsModal.vue';
 import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive } from './game/battle-demo';
@@ -170,6 +171,11 @@ function goToMenu(): void {
   gameResult.value = null;
   appScreen.value = 'menu';
 }
+
+function openSettings(): void {
+  audioManager.playSfx('uiClick');
+  appScreen.value = 'settings';
+}
 </script>
 
 <template>
@@ -190,6 +196,13 @@ function goToMenu(): void {
       <ModeSelector
         v-if="appScreen === 'menu'"
         @select-mode="selectMode"
+        @open-settings="openSettings"
+      />
+
+      <!-- Pantalla de Configuración -->
+      <SettingsScreen
+        v-else-if="appScreen === 'settings'"
+        @back="goToMenu"
       />
 
       <!-- Pantalla de Juego ('playing' o 'results') -->

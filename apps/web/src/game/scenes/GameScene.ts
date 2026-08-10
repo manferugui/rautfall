@@ -40,6 +40,8 @@ import {
 } from '../coordinates';
 import { mapEngineToOpponentPresentation } from '../opponent-mapper';
 import { getAudioManager } from '../../audio';
+import { loadUserSettings } from '../../settings/settings-storage';
+import { getActionByCode, type ControlAction, type ControlBindings } from '../../settings/control-bindings';
 
 const FIXED_SEED = 42;
 
@@ -65,6 +67,7 @@ type ConsumedFlags = {
 
 export type GameSceneCallbacks = {
   onStateUpdate: (state: GamePresentationState) => void;
+  onPauseRequested?: () => void;
 };
 
 export class GameScene extends Phaser.Scene {
@@ -87,18 +90,9 @@ export class GameScene extends Phaser.Scene {
     triggerSabotage: false,
   };
 
-  private cursors!: {
-    left: Phaser.Input.Keyboard.Key;
-    right: Phaser.Input.Keyboard.Key;
-    up: Phaser.Input.Keyboard.Key;
-    down: Phaser.Input.Keyboard.Key;
-    space: Phaser.Input.Keyboard.Key;
-    z: Phaser.Input.Keyboard.Key;
-    r: Phaser.Input.Keyboard.Key;
-    esc: Phaser.Input.Keyboard.Key;
-    c: Phaser.Input.Keyboard.Key;
-    a: Phaser.Input.Keyboard.Key;
-  };
+  private controlBindings!: ControlBindings;
+  private physicallyHeldCodes = new Set<string>();
+  private pendingPressedActions = new Set<ControlAction>();
 
   /** true mientras la sesión web está pausada. El motor no recibe step() durante la pausa. */
   private isPaused = false;
@@ -123,6 +117,8 @@ export class GameScene extends Phaser.Scene {
    */
   private horizontalListeners: (() => void) | null = null;
 
+  private bountyInterval: ReturnType<typeof setInterval> | null = null;
+
   /** Telemetría acumulativa de diagnóstico exclusiva para entornos DEV. */
   private devHardDropPhaseStepCount = 0;
   private devMaxActionsInSingleStep = 0;
@@ -138,22 +134,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    const kb = this.input.keyboard!;
-
-    // Construir this.cursors antes de resetEngine() para que pueda leer el
-    // estado físico de las teclas al armar el guardián de liberación.
-    this.cursors = {
-      left: kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
-      right: kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
-      up: kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
-      down: kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
-      space: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
-      z: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
-      r: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
-      esc: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
-      c: kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
-      a: kb.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-    };
+    this.controlBindings = loadUserSettings().controls;
+    this.physicallyHeldCodes.clear();
+    this.pendingPressedActions.clear();
+    this.pendingHorizontal = null;
 
     this.resetEngine();
 
@@ -163,59 +147,69 @@ export class GameScene extends Phaser.Scene {
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     this.lastState = null;
-    this.pendingHorizontal = null;
 
     // Suscribir shutdown() una sola vez a los eventos de ciclo de vida
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.shutdown, this);
 
-    // Registrar listener de keydown para el orden real de pulsaciones horizontales.
+    // Registrar listener de keydown para el orden real de pulsaciones horizontales y acciones discretas.
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.repeat) return; // Ignorar auto-repeat del navegador
       void getAudioManager().unlock();
-      const before = this.pendingHorizontal;
-      if (event.code === 'ArrowLeft') {
-        this.pendingHorizontal = 'left';
-      } else if (event.code === 'ArrowRight') {
-        this.pendingHorizontal = 'right';
+
+      // Tecla Escape fija: solicitar pausa
+      if (event.code === 'Escape') {
+        if (!event.repeat) {
+          this.callbacks.onPauseRequested?.();
+        }
+        return;
       }
-      logDebug({
-        source: 'keyboard',
-        event: 'keydown',
-        code: event.code,
-        repeat: event.repeat,
-        timestamp: performance.now(),
-        pendingHorizontalBefore: before,
-        pendingHorizontalAfter: this.pendingHorizontal,
-      });
+
+      // Tecla KeyR fija: reiniciar partida
+      if (event.code === 'KeyR') {
+        if (!event.repeat) {
+          getAudioManager().restartMusic('gameplay');
+          this.resetEngine();
+        }
+        return;
+      }
+
+      const action = getActionByCode(this.controlBindings, event.code);
+
+      // Prevenir scroll/navegación del navegador para teclas asignadas a gameplay
+      if (action !== null && (event.code === 'Space' || event.code.startsWith('Arrow') || event.code.startsWith('Alt'))) {
+        event.preventDefault();
+      }
+
+      if (event.repeat) return; // Ignorar auto-repeat del navegador
+
+      this.physicallyHeldCodes.add(event.code);
+
+      if (action === 'moveLeft') {
+        this.pendingHorizontal = 'left';
+      } else if (action === 'moveRight') {
+        this.pendingHorizontal = 'right';
+      } else if (action !== null) {
+        this.pendingPressedActions.add(action);
+      }
+    };
+
+    // Registrar keyup para actualizar el conjunto físico y limpiar el guardián de liberación
+    const onKeyUp = (event: KeyboardEvent): void => {
+      this.physicallyHeldCodes.delete(event.code);
+
+      const action = getActionByCode(this.controlBindings, event.code);
+      if (action === 'moveLeft') {
+        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'left');
+      } else if (action === 'moveRight') {
+        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'right');
+      } else if (action === 'softDrop') {
+        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'softDrop');
+      }
     };
 
     this.input.keyboard!.on('keydown', onKeyDown);
-
-    // Registrar keyup para teclas horizontales, de soft drop y para limpiar el guardián de liberación
-    const onKeyUp = (event: KeyboardEvent): void => {
-      if (event.code === 'ArrowLeft') {
-        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'left');
-      } else if (event.code === 'ArrowRight') {
-        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'right');
-      } else if (event.code === 'ArrowDown') {
-        this.releaseGuard = clearReleaseGuardKey(this.releaseGuard, 'softDrop');
-      } else {
-        return; // Solo registrar log si es una tecla que nos interesa
-      }
-      logDebug({
-        source: 'keyboard',
-        event: 'keyup',
-        code: event.code,
-        repeat: false,
-        timestamp: performance.now(),
-        pendingHorizontalBefore: this.pendingHorizontal,
-        pendingHorizontalAfter: this.pendingHorizontal,
-      });
-    };
     this.input.keyboard!.on('keyup', onKeyUp);
 
-    // Guardar referencia para limpiar al destruir (ahora retira ambos listeners)
     this.horizontalListeners = () => {
       this.input.keyboard!.off('keydown', onKeyDown);
       this.input.keyboard!.off('keyup', onKeyUp);
@@ -229,52 +223,44 @@ export class GameScene extends Phaser.Scene {
    * Limpia listeners y estado pendiente.
    */
   shutdown(): void {
-    this.pendingHorizontal = null;
-
-    logDebug({ source: 'lifecycle', event: 'shutdown' });
-
-    // Retirar las propias suscripciones de ciclo de vida (seguridad adicional)
-    this.events.off(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
-    this.events.off(Phaser.Scenes.Events.DESTROY, this.shutdown, this);
-
-    // Retirar listener horizontal de keydown y keyup
     if (this.horizontalListeners) {
       this.horizontalListeners();
       this.horizontalListeners = null;
     }
+    this.physicallyHeldCodes.clear();
+    this.pendingPressedActions.clear();
+    this.pendingHorizontal = null;
+
+    logDebug({ source: 'lifecycle', event: 'shutdown' });
+
+    if (this.bountyInterval !== null) {
+      clearInterval(this.bountyInterval);
+      this.bountyInterval = null;
+    }
+
+    // Retirar las propias suscripciones de ciclo de vida (seguridad adicional)
+    this.events.off(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+    this.events.off(Phaser.Scenes.Events.DESTROY, this.shutdown, this);
   }
 
   update(_time: number, delta: number): void {
     // Reiniciar banderas de consumo al empezar el frame
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
 
-    // R tiene prioridad máxima: funciona en cualquier estado (running, paused, gameOver)
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.r)) {
-      this.resetGame();
-      return;
-    }
-
     const engineStatus = this.engine.getSnapshot().status;
 
     // gameOver prevalece sobre cualquier otro estado
     if (engineStatus === 'gameOver') {
-      if (this.isPaused) this.isPaused = false;              // precedencia defensiva
-      Phaser.Input.Keyboard.JustDown(this.cursors.esc);       // drenar sin efecto
+      if (this.isPaused) this.isPaused = false;
       this.renderFrame();
       this.engine.drainEvents();
       this.notifyState();
       return;
     }
 
-    // Escape solo se evalúa cuando el motor no está en gameOver
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.esc)) {
-      this.togglePause();
-      return;
-    }
-
     // Mientras está pausado: drenar entrada, renderizar (congelado) y notificar
     if (this.isPaused) {
-      this.readKeys();               // drenar entrada durante la pausa (§11.4)
+      this.readKeys();
       this.renderFrame();
       this.notifyState();
       return;
@@ -310,16 +296,16 @@ export class GameScene extends Phaser.Scene {
       for (let i = 0; i < stepsToExecute; i++) {
         if (this.engine.getSnapshot().status === 'gameOver') break;
 
-      const [input, updatedConsumed] = buildStepInput(
-        i === 0 ? keys : this.emptyInput(),
-        i === 0
-          ? this.consumedThisFrame
-          : { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true, triggerSabotage: true },
-      );
+        const [input, updatedConsumed] = buildStepInput(
+          i === 0 ? keys : this.emptyInput(),
+          i === 0
+            ? this.consumedThisFrame
+            : { horizontal: true, clockwise: true, counterclockwise: true, hardDrop: true, hold: true, triggerSabotage: true },
+        );
 
-      if (i === 0) {
-        this.consumedThisFrame = updatedConsumed;
-      }
+        if (i === 0) {
+          this.consumedThisFrame = updatedConsumed;
+        }
 
         if (this.battleSession) {
           const bSnap = this.battleSession.getSnapshot();
@@ -444,31 +430,34 @@ export class GameScene extends Phaser.Scene {
    */
   togglePause(): void {
     const engineStatus = this.engine.getSnapshot().status;
-    if (!canTogglePause(engineStatus)) return; // 1. no-op durante gameOver
+    if (!canTogglePause(engineStatus)) return;
 
-    this.isPaused = !this.isPaused;             // 2. cambiar estado de sesión
+    this.isPaused = !this.isPaused;
 
-    this.pendingHorizontal = null;              // 3. limpiar entrada pendiente
-    this.readKeys();                            //    drenar flancos residuales del instante de la transición
+    this.pendingHorizontal = null;
+    this.pendingPressedActions.clear();
+    this.readKeys();
 
     if (this.isPaused) {
-      this.accumulator = 0;                     // 4. limpiar acumulador temporal
+      this.accumulator = 0;
       logDebug({ source: 'lifecycle', event: 'pause' });
     } else {
-      this.releaseGuard = armReleaseGuard({      // arma el rearme por liberación
-        left: this.cursors.left.isDown,
-        right: this.cursors.right.isDown,
-        softDrop: this.cursors.down.isDown,
+      this.releaseGuard = armReleaseGuard({
+        left: this.physicallyHeldCodes.has(this.controlBindings.moveLeft),
+        right: this.physicallyHeldCodes.has(this.controlBindings.moveRight),
+        softDrop: this.physicallyHeldCodes.has(this.controlBindings.softDrop),
       });
-      this.accumulator = 0;                     // establecer la nueva referencia temporal
+      this.accumulator = 0;
       logDebug({ source: 'lifecycle', event: 'resume' });
     }
 
-    this.renderFrame();                         // 5. renderizar inmediatamente con el nuevo estado
-    this.notifyState();                         // 6. notificar el nuevo estado a Vue
+    this.renderFrame();
+    this.notifyState();
   }
 
   private resetEngine(): void {
+    this.controlBindings = this.controlBindings ?? loadUserSettings().controls;
+
     if (import.meta.env.DEV) {
       this.devHardDropPhaseStepCount = 0;
       this.devMaxActionsInSingleStep = 0;
@@ -477,7 +466,6 @@ export class GameScene extends Phaser.Scene {
 
     const levelDemoTarget = getLevelDemoTarget();
     if (isBattleDemoActive()) {
-      // Escenario cerrado de desarrollo: Capa de Batalla Local (2P)
       this.battleSession = createBattleDemoSession();
       this.playerTwoBot = createDeterministicBot();
       this.engine = this.battleSession.getEngine('playerOne');
@@ -485,42 +473,34 @@ export class GameScene extends Phaser.Scene {
     } else if (levelDemoTarget !== null) {
       this.battleSession = null;
       this.playerTwoBot = null;
-      // Escenario cerrado de desarrollo: demo de Nivel y Gravedad
       this.engine = createLevelDemoEngine(levelDemoTarget);
     } else if (isTSpinDemoActive()) {
       this.battleSession = null;
       this.playerTwoBot = null;
-      // Escenario cerrado de desarrollo: tablero preparado + pieza T
       this.engine = createTSpinDemoEngine();
     } else if (isSabotageDemoActive()) {
       this.battleSession = null;
       this.playerTwoBot = null;
-      // Escenario cerrado de desarrollo: demo de Residuos
       this.engine = createSabotageDemoEngine();
     } else if (isOverloadDemoActive()) {
       this.battleSession = null;
       this.playerTwoBot = null;
-      // Escenario cerrado de desarrollo: demo de Sobrecarga
       this.engine = createOverloadDemoEngine();
     } else if (isGarbageDemoActive()) {
       this.battleSession = null;
       this.playerTwoBot = null;
-      // Escenario cerrado de desarrollo: demo de Residuos (Garbage Demo)
       this.engine = createGarbageDemoEngine();
     } else if (isPolarityDemoActive()) {
       this.battleSession = null;
       this.playerTwoBot = null;
-      // Escenario cerrado de desarrollo: demo de Polaridad inversa
       this.engine = createPolarityDemoEngine();
     } else if (this.mode === 'battle') {
-      // Modo Batalla normal de producción (2P)
       this.battleSession = createBattleSession({ seed: FIXED_SEED, config: prototypeConfig });
       this.playerTwoBot = createDeterministicBot();
       this.engine = this.battleSession.getEngine('playerOne');
       this.lastSabotageRouted = null;
       this.lastSabotageBlocked = null;
     } else {
-      // Modo Entrenamiento normal de producción (1P)
       this.battleSession = null;
       this.playerTwoBot = null;
       this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
@@ -532,13 +512,14 @@ export class GameScene extends Phaser.Scene {
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     this.pendingHorizontal = null;
-    this.isPaused = false;                       // el reinicio siempre deja la sesión en running
+    this.pendingPressedActions.clear();
+    this.isPaused = false;
     this.releaseGuard = armReleaseGuard({
-      left: this.cursors.left.isDown,
-      right: this.cursors.right.isDown,
-      softDrop: this.cursors.down.isDown,
+      left: this.physicallyHeldCodes.has(this.controlBindings.moveLeft),
+      right: this.physicallyHeldCodes.has(this.controlBindings.moveRight),
+      softDrop: this.physicallyHeldCodes.has(this.controlBindings.softDrop),
     });
-    this.readKeys();                             // drena cualquier flanco pendiente antes del reinicio
+    this.readKeys();
     logDebug({ source: 'lifecycle', event: 'reset – engine' });
   }
 
@@ -555,14 +536,10 @@ export class GameScene extends Phaser.Scene {
    */
   private readKeys(): KeyState {
     let horizontalPressed: 'left' | 'right' | null = null;
-    let leftHeld = resolveHeld(this.releaseGuard, 'left', this.cursors.left.isDown);
-    let rightHeld = resolveHeld(this.releaseGuard, 'right', this.cursors.right.isDown);
+    let leftHeld = resolveHeld(this.releaseGuard, 'left', this.physicallyHeldCodes.has(this.controlBindings.moveLeft));
+    let rightHeld = resolveHeld(this.releaseGuard, 'right', this.physicallyHeldCodes.has(this.controlBindings.moveRight));
 
     if (this.pendingHorizontal !== null) {
-      // Se recibió un keydown real desde la última vez. Siempre entregar el flanco,
-      // incluso si la tecla ya no está físicamente mantenida (pulsación ultracorta
-      // dentro del mismo tick). Forzar el held correspondiente para que el motor
-      // acepte pressed+held.
       if (this.pendingHorizontal === 'left') {
         horizontalPressed = 'left';
         leftHeld = true;
@@ -573,16 +550,31 @@ export class GameScene extends Phaser.Scene {
       this.pendingHorizontal = null; // consumido para el frame
     }
 
+    const justPressedUp = this.pendingPressedActions.has('rotateClockwise');
+    this.pendingPressedActions.delete('rotateClockwise');
+
+    const justPressedZ = this.pendingPressedActions.has('rotateCounterClockwise');
+    this.pendingPressedActions.delete('rotateCounterClockwise');
+
+    const justPressedSpace = this.pendingPressedActions.has('hardDrop');
+    this.pendingPressedActions.delete('hardDrop');
+
+    const justPressedC = this.pendingPressedActions.has('hold');
+    this.pendingPressedActions.delete('hold');
+
+    const justPressedA = this.pendingPressedActions.has('triggerSabotage');
+    this.pendingPressedActions.delete('triggerSabotage');
+
     return {
       horizontalPressed,
       leftHeld,
       rightHeld,
-      justPressedUp: Phaser.Input.Keyboard.JustDown(this.cursors.up),
-      justPressedZ: Phaser.Input.Keyboard.JustDown(this.cursors.z),
-      justPressedSpace: Phaser.Input.Keyboard.JustDown(this.cursors.space),
-      justPressedC: Phaser.Input.Keyboard.JustDown(this.cursors.c),
-      justPressedA: Phaser.Input.Keyboard.JustDown(this.cursors.a),
-      softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
+      justPressedUp,
+      justPressedZ,
+      justPressedSpace,
+      justPressedC,
+      justPressedA,
+      softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.physicallyHeldCodes.has(this.controlBindings.softDrop)),
     };
   }
 
@@ -599,14 +591,14 @@ export class GameScene extends Phaser.Scene {
   private emptyInput(): KeyState {
     return {
       horizontalPressed: null,
-      leftHeld: resolveHeld(this.releaseGuard, 'left', this.cursors.left.isDown),
-      rightHeld: resolveHeld(this.releaseGuard, 'right', this.cursors.right.isDown),
+      leftHeld: resolveHeld(this.releaseGuard, 'left', this.physicallyHeldCodes.has(this.controlBindings.moveLeft)),
+      rightHeld: resolveHeld(this.releaseGuard, 'right', this.physicallyHeldCodes.has(this.controlBindings.moveRight)),
       justPressedUp: false,
       justPressedZ: false,
       justPressedSpace: false,
       justPressedC: false,
       justPressedA: false,
-      softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.cursors.down.isDown),
+      softDropHeld: resolveHeld(this.releaseGuard, 'softDrop', this.physicallyHeldCodes.has(this.controlBindings.softDrop)),
     };
   }
 

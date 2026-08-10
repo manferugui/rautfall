@@ -701,6 +701,30 @@ Ver [Informe de implementación](implementation/0027-cierre-protecciones-y-mecan
 
 Ver [Informe de implementación](implementation/0028-dev-demo-launcher.md).
 
+## Task [0029 — Settings y controles remapeables](tasks/0029-settings-y-controles-remapeables.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-10 |
+| **Resultado** | Pantalla y flujo funcional de Settings con controles de teclado remapeables y persistencia local (`rautfall.settings.v1`). Fuente única de verdad en `control-bindings.ts` y persistencia con validación estricta en `settings-storage.ts` con fallback completo a defaults ante inconsistencias. Componente `SettingsScreen.vue` con captura interactiva de teclas físicamente por `KeyboardEvent.code`, ignorado de auto-repeat, cancelación segura con `Escape`, detección y rechazo explícito de teclas duplicadas, restauración de predeterminados y control de mute mediante `AudioManager`. Integración en `GameScene.ts` mediante canal de traducción único que preserva intactos DAS, ARR, `input-release-guard`, `StepInput` y compatibilidad transparente con Polaridad Inversa en el motor. 795 tests unitarios, 11 tests E2E, lint, typecheck, build y git diff --check en verde. |
+
+### Resumen
+
+- Auditoría completa de la capa de input, teclas hardcodeadas, navegación y persistencia.
+- Contrato de controles `control-bindings.ts` con acciones de control tipadas (`moveLeft`, `moveRight`, `softDrop`, `hardDrop`, `rotateClockwise`, `rotateCounterClockwise`, `hold`, `triggerSabotage`, `pause`) y defaults basados en `KeyboardEvent.code`.
+- Respeto del contrato real de sabotajes (`triggerSabotage` FIFO, por defecto `KeyA`) y hotkey fija de soporte para Reset (`KeyR`).
+- Módulos `settings-storage.ts` y `settings-store.ts` con almacenamiento local versionado y validación estricta sin merge parcial silencioso.
+- Componente `SettingsScreen.vue` con estética Industrial Dramatic, modo captura, feedback de duplicados, soporte de `Escape` para cancelar y limpieza rigurosa de listeners.
+- Integración en `ModeSelector.vue` y `App.vue` (`AppScreen = 'menu' | 'playing' | 'results' | 'settings'`).
+- Integración en `GameScene.ts` sin Phaser KeyCodes hardcodeados sobrantes, consumiendo las configuraciones de usuario desde la misma fuente de verdad basada en `KeyboardEvent.code`.
+- Compatibilidad transparente con Polaridad Inversa sin modificar `@rautfall/game-engine`.
+- 795 tests Vitest, 11 tests Playwright E2E, lint, typecheck, build y git diff --check en verde.
+
+### Informe detallado
+
+Ver [Informe de implementación](implementation/0029-settings-y-controles-remapeables.md).
+
 ## Siguiente tarea
 
 - Pendiente de definición y auditoría por el usuario.

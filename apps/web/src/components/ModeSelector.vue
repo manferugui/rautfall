@@ -14,16 +14,21 @@ import { ref, onMounted, defineAsyncComponent, type Component } from 'vue';
 import type { GameMode } from '../game/types';
 import { getAudioManager } from '../audio';
 
+import { useSettings } from '../settings/settings-store';
+import { formatKeyDisplay } from '../settings/control-bindings';
+
 const DevDemoLauncherComponent: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./DevDemoLauncher.vue'))
   : null;
 
 const emit = defineEmits<{
   (e: 'selectMode', mode: GameMode): void;
+  (e: 'openSettings'): void;
 }>();
 
 const audioManager = getAudioManager();
 const isMuted = ref(audioManager.isMuted());
+const { bindings } = useSettings();
 
 onMounted(() => {
   audioManager.playMusic('menu');
@@ -40,6 +45,12 @@ function onSelectMode(mode: GameMode): void {
   audioManager.playSfx('uiClick');
   emit('selectMode', mode);
 }
+
+function onOpenSettings(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  emit('openSettings');
+}
 </script>
 
 <template>
@@ -54,6 +65,16 @@ function onSelectMode(mode: GameMode): void {
     <div class="hazard-strip" aria-hidden="true"></div>
 
     <div class="audio-controls-row">
+      <button
+        type="button"
+        class="settings-btn"
+        data-testid="open-settings-button"
+        @click="onOpenSettings"
+      >
+        <span class="settings-icon" aria-hidden="true">⚙️</span>
+        <span class="settings-label">CONFIGURACIÓN</span>
+      </button>
+
       <button
         type="button"
         class="audio-mute-btn"
@@ -92,13 +113,13 @@ function onSelectMode(mode: GameMode): void {
     <div class="controls-card">
       <h2 class="controls-heading">Controles de teclado</h2>
       <ul class="controls-list">
-        <li><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Mover horizontalmente</li>
-        <li><kbd>&uarr;</kbd> Rotación horaria (CW)</li>
-        <li><kbd>Z</kbd> Rotación antihoraria (CCW)</li>
-        <li><kbd>Space</kbd> Caída instantánea (Hard Drop)</li>
-        <li><kbd>&darr;</kbd> Caída suave (Soft Drop)</li>
-        <li><kbd>C</kbd> Reserva de pieza (Hold)</li>
-        <li><kbd>A</kbd> Lanzar sabotaje táctico</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.moveLeft) }}</kbd> <kbd>{{ formatKeyDisplay(bindings.moveRight) }}</kbd> Mover horizontalmente</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.rotateClockwise) }}</kbd> Rotación horaria (CW)</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.rotateCounterClockwise) }}</kbd> Rotación antihoraria (CCW)</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.hardDrop) }}</kbd> Caída instantánea (Hard Drop)</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.softDrop) }}</kbd> Caída suave (Soft Drop)</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.hold) }}</kbd> Reserva de pieza (Hold)</li>
+        <li><kbd>{{ formatKeyDisplay(bindings.triggerSabotage) }}</kbd> Lanzar sabotaje táctico</li>
         <li><kbd>Esc</kbd> Pausar / Reanudar</li>
         <li><kbd>R</kbd> Reiniciar partida</li>
       </ul>
@@ -171,7 +192,30 @@ function onSelectMode(mode: GameMode): void {
 .audio-controls-row {
   width: 100%;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  background: var(--rf-color-graphite-700, #28292c);
+  color: var(--rf-color-text-primary, #e8e8ec);
+  border-radius: var(--rf-radius-sm, 3px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-btn:hover {
+  background: var(--rf-color-graphite-800, #1f2023);
+  border-color: var(--rf-color-amber, #f39c12);
 }
 
 .audio-mute-btn {
