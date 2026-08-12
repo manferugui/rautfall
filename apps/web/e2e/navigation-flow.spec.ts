@@ -22,7 +22,9 @@ test('flujo completo de navegación, selección de modos, resultados y menú', a
     await page.getByTestId('start-battle-button').click();
     await expect(page.getByTestId('own-board-column')).toBeVisible();
     await expect(page.getByTestId('opponent-monitor')).toBeVisible();
-    await expect(page.getByTestId('real-badge')).toBeVisible();
+    // El header del monitor rival ya no tiene badge "Lvl N" (rediseño
+    // industrial, Tarea 0031) — el nivel real de P2 vive en la telemetría.
+    await expect(page.getByTestId('opponent-level')).toBeVisible();
     await expect(page.getByTestId('session-status')).toHaveText('running');
   });
 

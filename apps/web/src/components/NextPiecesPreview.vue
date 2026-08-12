@@ -27,8 +27,6 @@ const PIECE_DISPLAY_COLORS: Record<PieceType, string> = {
   L: '#f39c12',
 };
 
-const CELL_SIZE_PX = 16;
-
 interface PreviewPiece {
   type: PieceType;
   label: string;
@@ -55,21 +53,21 @@ const previews = computed<PreviewPiece[]>(() => {
 
 <template>
   <div class="next-pieces-preview" data-testid="next-pieces-preview">
-    <h2 class="preview-heading">Próximas piezas</h2>
-    <ol class="preview-list">
-      <li
+    <div class="next-header">
+      <span class="preview-heading">NEXT</span>
+    </div>
+    <div class="preview-slots-container">
+      <div
         v-for="(preview, index) in previews"
         :key="index"
-        class="preview-slot"
+        class="preview-slot-recessed"
         :aria-label="`Próxima pieza ${index + 1}: ${preview.label}`"
       >
-        <span class="preview-order">{{ index + 1 }}.</span>
-        <span class="preview-type">{{ preview.label }}</span>
         <div
           class="piece-grid"
           :style="{
-            width: preview.width * CELL_SIZE_PX + 'px',
-            height: preview.height * CELL_SIZE_PX + 'px',
+            width: preview.width * 20 + 'px',
+            height: preview.height * 20 + 'px',
           }"
         >
           <div
@@ -77,64 +75,91 @@ const previews = computed<PreviewPiece[]>(() => {
             :key="cellIndex"
             class="piece-cell"
             :style="{
-              left: cell.x * CELL_SIZE_PX + 'px',
-              top: cell.y * CELL_SIZE_PX + 'px',
-              width: CELL_SIZE_PX + 'px',
-              height: CELL_SIZE_PX + 'px',
+              left: cell.x * 20 + 'px',
+              top: cell.y * 20 + 'px',
+              width: '20px',
+              height: '20px',
               backgroundColor: preview.color,
             }"
           ></div>
         </div>
-      </li>
-    </ol>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.preview-heading {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0.625rem;
-  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
-}
-
-.preview-list {
-  list-style: none;
+.next-pieces-preview {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
 }
 
-.preview-slot {
+.next-header {
+  width: 100%;
+  text-align: center;
+  padding: 4px 0 8px;
+}
+
+.preview-heading {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #a0a4b0;
+  margin: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.preview-slots-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+}
+
+.preview-slot-recessed {
+  width: 110px;
+  height: 90px;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.preview-order {
-  font-size: 0.75rem;
-  font-family: monospace;
-  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
-  min-width: 1rem;
-}
-
-.preview-type {
-  font-size: 0.75rem;
-  font-family: monospace;
-  color: var(--rf-color-text-primary, #e8e8ec);
-  min-width: 1rem;
+  justify-content: center;
+  background: #08090b;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 10px 10px;
+  border: 2px solid #1c1e22;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 4px 12px rgba(0, 0, 0, 0.95),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .piece-grid {
   position: relative;
-  flex-shrink: 0;
 }
 
 .piece-cell {
   position: absolute;
-  border: 1px solid rgba(0, 0, 0, 0.3);
   box-sizing: border-box;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+  border-right: 1px solid rgba(0, 0, 0, 0.5);
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0) 38%,
+    rgba(0, 0, 0, 0) 62%,
+    rgba(0, 0, 0, 0.22) 100%
+  );
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.22),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.4);
+  border-radius: 2px;
 }
 </style>

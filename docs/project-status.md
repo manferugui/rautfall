@@ -744,3 +744,23 @@ Ver [Informe de implementación](implementation/0029-settings-y-controles-remape
 - Integración en `apps/web` con envío non-blocking y pantallas de History y Ranking en Vue.
 
 Ver [Informe de implementación](implementation/0030-backend-persistencia-ranking-history.md).
+
+## Task [0031 — Pulido visual, FX e identidad industrial del MVP](tasks/0031-pulido-visual-fx-identidad-industrial.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada y validada |
+| **Fecha de actualización** | 2026-08-12 |
+| **Resultado** | MVP llevado a su acabado visual Industrial Dramatic completo: wordmark textual `RAUTFALL` (`Oswald 700`, acabado grafito/acero mate mediante CSS) con descriptor "BUILD · DISRUPT · SURVIVE" en el menú y placa `RAUTFALL` en Battle, `favicon.svg` propio (monograma "R"), tokens CSS globales `--rf-*` consolidados en `tactical-theme.css`, biseles y profundidades en relieve/inset, remaches y rejillas de ventilación reutilizables, botones tácticos mecánicos con traslación `:active`, keycaps metálicos, FX de Interferencia con scanlines y jitter, Sobrecarga con alerta ambarina, Polaridad Inversa con acento magnético violeta, Residuos con renderizado exclusivo de celda corroída en Phaser (física y lógica intactas), Sudden Death con atmósfera de emergencia industrial, ResultsModal con resplandor triunfal / distorsión mermada, y reglas estrictas `@media (prefers-reduced-motion: reduce)`. Validación final ejecutada sobre el working tree definitivo: `pnpm test` (832/832), `pnpm lint`, `pnpm typecheck`, `pnpm build` (warning no bloqueante de tamaño de chunk) y `pnpm test:e2e` (11/11) en verde; `git diff --check` limpio. |
+
+### Resumen
+
+- Branding final como wordmark textual: `RAUTFALL` en `Oswald 700` con acabado grafito/acero mate mediante CSS (menú y placa de Battle), descriptor "BUILD · DISRUPT · SURVIVE" en el menú, y favicon propio (monograma "R") integrado en HTML.
+- Consolidación de tokens globales en `tactical-theme.css` con superficies metálicas, óxido controlado en bordes, acentos semánticos, biseles de muesca metálica y anillo de enfoque táctico.
+- Botones unificados `.rf-btn-tactical` con elevación y pulsación mecánica real.
+- Reestructuración de `ModeSelector`, `SettingsScreen`, `HistoryScreen`, `RankingScreen` y `ResultsModal` con identidad Industrial Dramatic consistente.
+- FX enriquecidos: Interferencia con scanlines y jitter, Sobrecarga con pulso ámbar, Polaridad Inversa con tono magnético violeta, Sudden Death con alerta industrial y Residuos renderizados visualmente en Phaser como metal corroído.
+- Soporte estricto para `@media (prefers-reduced-motion: reduce)` que sustituye jitter y pulsos por señalización estática clara.
+- Validación final: `pnpm test` (832/832), `pnpm lint`, `pnpm typecheck`, `pnpm build` (warning no bloqueante de tamaño de chunk) y `pnpm test:e2e` (11/11) en verde; `git diff --check` limpio.
+
+Ver [Informe de implementación](implementation/0031-pulido-visual-fx-identidad-industrial.md).

@@ -1,9 +1,13 @@
 <template>
-  <div class="settings-screen" data-testid="settings-screen">
+  <div class="settings-screen rf-panel rf-riveted-panel" data-testid="settings-screen">
     <header class="settings-header">
-      <h1 class="settings-title">CONFIGURACIÓN DE CONTROLES</h1>
+      <div class="title-tag">
+        <h1 class="settings-title">CONFIGURACIÓN DE CONTROLES</h1>
+      </div>
       <p class="settings-subtitle">REMAPEO DE TECLADO Y PERSISTENCIA LOCAL</p>
     </header>
+
+    <div class="rf-hazard-strip hazard-strip" aria-hidden="true"></div>
 
     <main class="settings-content">
       <div v-if="errorMessage" class="error-banner" data-testid="settings-error-banner" role="alert">
@@ -11,7 +15,7 @@
         <span class="error-text">{{ errorMessage }}</span>
       </div>
 
-      <div class="controls-section">
+      <div class="controls-section rf-panel-inset">
         <div class="section-title">CONTROLES DE GAMEPLAY</div>
         <table class="controls-table">
           <thead>
@@ -33,14 +37,14 @@
                 <span v-if="capturingAction === action" class="capturing-prompt" data-testid="capture-prompt">
                   PULSA UNA TECLA (ESC para cancelar)
                 </span>
-                <span v-else class="key-badge" data-testid="key-badge">
+                <span v-else class="rf-keycap key-badge" data-testid="key-badge">
                   {{ formatKeyDisplay(bindings[action]) }}
                 </span>
               </td>
               <td class="action-button-cell">
                 <button
                   type="button"
-                  class="remap-btn"
+                  class="rf-btn-tactical remap-btn"
                   :data-testid="`change-btn-${action}`"
                   :disabled="capturingAction !== null"
                   @click="startCapture(action)"
@@ -56,7 +60,7 @@
       <div class="settings-actions">
         <button
           type="button"
-          class="reset-btn"
+          class="rf-btn-tactical rf-btn-destructive reset-btn"
           data-testid="reset-defaults-button"
           :disabled="capturingAction !== null"
           @click="onResetDefaults"
@@ -66,7 +70,7 @@
 
         <button
           type="button"
-          class="back-btn"
+          class="rf-btn-tactical rf-btn-secondary back-btn"
           data-testid="settings-back-button"
           :disabled="capturingAction !== null"
           @click="onBack"
@@ -166,179 +170,130 @@ onUnmounted(() => {
 <style scoped>
 .settings-screen {
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem 1.5rem;
+  max-width: 780px;
+  margin: 1.5rem auto;
+  padding: 1.75rem;
   box-sizing: border-box;
-  color: var(--color-text, #f0f0f0);
-  font-family: var(--font-family, system-ui, sans-serif);
+  color: var(--rf-color-text-primary, #e8e8ec);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .settings-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
   text-align: center;
-  margin-bottom: 2rem;
-  border-bottom: 2px solid var(--color-border, #333);
-  padding-bottom: 1rem;
+}
+
+.header-tag {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--rf-color-graphite-700, #28292c);
+  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  border-left: 4px solid var(--rf-color-amber, #f39c12);
+  padding: 0.5rem 1.5rem 0.5rem 1rem;
 }
 
 .settings-title {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-weight: 800;
+  text-transform: uppercase;
   letter-spacing: 0.1em;
-  margin: 0 0 0.5rem 0;
-  color: var(--color-primary, #00f0ff);
+  color: var(--rf-color-text-primary, #e8e8ec);
 }
 
 .settings-subtitle {
-  font-size: 0.9rem;
-  color: var(--color-text-secondary, #888);
-  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
+}
+
+.hazard-strip {
+  width: 100%;
+  height: 8px;
+  border-radius: 2px;
 }
 
 .error-banner {
-  background-color: rgba(255, 0, 60, 0.15);
-  border: 1px solid #ff003c;
-  color: #ff4d6d;
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid var(--rf-color-red, #e74c3c);
+  color: var(--rf-color-red, #e74c3c);
   padding: 0.75rem 1rem;
-  border-radius: 4px;
-  margin-bottom: 1.5rem;
+  border-radius: var(--rf-radius-sm, 3px);
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .controls-section {
-  background: rgba(20, 20, 25, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
   padding: 1.25rem;
-  margin-bottom: 2rem;
 }
 
 .section-title {
-  font-size: 1.1rem;
+  font-size: 0.8125rem;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
   margin-bottom: 1rem;
-  color: var(--color-text-highlight, #fff);
-  letter-spacing: 0.05em;
 }
 
 .controls-table {
   width: 100%;
   border-collapse: collapse;
+}
 
-  th {
-    text-align: left;
-    padding: 0.75rem 0.5rem;
-    font-size: 0.8rem;
-    color: #888;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
+.controls-table th {
+  text-align: left;
+  padding: 0.6rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
+  border-bottom: 1px solid var(--rf-color-metal-600, #3a3b3f);
+}
 
-  td {
-    padding: 0.75rem 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    vertical-align: middle;
-  }
+.controls-table td {
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid var(--rf-color-graphite-700, #28292c);
+  vertical-align: middle;
 }
 
 .row-capturing {
-  background-color: rgba(0, 240, 255, 0.08);
+  background-color: rgba(0, 212, 255, 0.08);
 }
 
 .action-label {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
 }
 
 .key-badge-cell {
-  width: 40%;
+  width: 45%;
 }
 
 .key-badge {
-  display: inline-block;
-  background: #1e1e24;
-  border: 1px solid #00f0ff;
-  color: #00f0ff;
-  font-family: monospace;
-  font-weight: 700;
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 1rem;
-  min-width: 2rem;
+  font-size: 0.85rem;
+  min-width: 2.2rem;
   text-align: center;
 }
 
 .capturing-prompt {
-  color: #ff00ff;
+  color: var(--rf-color-amber, #f39c12);
   font-weight: 700;
-  font-size: 0.85rem;
-  animation: blink 1s infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-.remap-btn {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 600;
   font-size: 0.8rem;
-  transition: all 0.15s ease;
-
-  &:hover:not(:disabled) {
-    background: #00f0ff;
-    color: #000;
-    border-color: #00f0ff;
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+  letter-spacing: 0.05em;
 }
 
 .settings-actions {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-}
-
-.reset-btn, .back-btn {
-  padding: 0.75rem 1.25rem;
-  border-radius: 4px;
-  font-weight: 700;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.reset-btn {
-  background: rgba(255, 0, 60, 0.1);
-  border: 1px solid #ff003c;
-  color: #ff4d6d;
-
-  &:hover:not(:disabled) {
-    background: #ff003c;
-    color: #fff;
-  }
-}
-
-.back-btn {
-  background: #2a2a35;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-
-  &:hover:not(:disabled) {
-    background: #3a3a48;
-  }
+  margin-top: 0.5rem;
 }
 </style>

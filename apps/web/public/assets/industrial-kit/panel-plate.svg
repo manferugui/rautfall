@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160" viewBox="0 0 320 160">
+  <defs>
+    <radialGradient id="rf-bolt" cx="0.34" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#6b737b"/>
+      <stop offset="0.42" stop-color="#3d4349"/>
+      <stop offset="1" stop-color="#191c1f"/>
+    </radialGradient>
+    <linearGradient id="rf-steel" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#3a4046"/>
+      <stop offset="0.45" stop-color="#272b30"/>
+      <stop offset="1" stop-color="#1a1d20"/>
+    </linearGradient>
+  </defs>
+  <path d="M10 2 H310 L318 10 V150 L310 158 H10 L2 150 V10 Z" fill="url(#rf-steel)"/>
+  <path d="M10 2 H310 L318 10 V150 L310 158 H10 L2 150 V10 Z" fill="none" stroke="#5b636a" stroke-opacity="0.55" stroke-width="1"/>
+  <path d="M10 3 H309 L317 11" fill="none" stroke="#7d868e" stroke-opacity="0.5" stroke-width="1.5"/>
+  <path d="M3 150 L10 157 H310" fill="none" stroke="#000" stroke-opacity="0.6" stroke-width="1.5"/>
+  <path d="M18 14 H302 V146 H18 Z" fill="none" stroke="#0d0f10" stroke-opacity="0.8" stroke-width="2"/>
+  <path d="M19 15 H301" fill="none" stroke="#565e65" stroke-opacity="0.35"/>
+  <g>
+    <circle cx="11" cy="11" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="11" cy="11" r="4.4" fill="none" stroke="#0a0b0c" stroke-opacity="0.7"/>
+    <circle cx="309" cy="11" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="309" cy="11" r="4.4" fill="none" stroke="#0a0b0c" stroke-opacity="0.7"/>
+    <circle cx="11" cy="149" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="11" cy="149" r="4.4" fill="none" stroke="#0a0b0c" stroke-opacity="0.7"/>
+    <circle cx="309" cy="149" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="309" cy="149" r="4.4" fill="none" stroke="#0a0b0c" stroke-opacity="0.7"/>
+  </g>
+</svg>

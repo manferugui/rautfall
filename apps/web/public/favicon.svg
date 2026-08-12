@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="RAUTFALL">
+  <!-- Favicon RAUTFALL — placa compacta con "R" geométrica (equivalente a
+       Oswald 700), acero claro mate sobre grafito oscuro. Un único
+       chaflán discreto (esquina superior-izquierda, más grande que el
+       resto) como detalle mecanizado. Sin gradientes, sin óxido, sin
+       glow: formas planas y grandes para mantenerse legible a 16px. -->
+
+  <!-- Placa: 3 esquinas con chaflán mínimo (casi recta), 1 esquina
+       (superior-izquierda) con chaflán mayor — el detalle mecanizado. -->
+  <path d="M16,0 L60,0 L64,4 L64,60 L60,64 L4,64 L0,60 L0,16 Z"
+        fill="#17181b" stroke="#2a2c30" stroke-width="1.5"/>
+
+  <!-- "R" — trazado geométrico plano, sin fuentes externas. Escala +10%
+       (Tarea 0031) alrededor de su propio centro (38,36), manteniendo la
+       posición/centrado y el margen respecto a la placa. -->
+  <g transform="translate(38,36) scale(1.1) translate(-38,-36)">
+    <g transform="translate(18,14)" fill="#c9ccd1">
+      <path d="M0,0 L11,0 L11,44 L0,44 Z"/>
+      <path d="M0,0 L34,0 L34,11 L0,11 Z"/>
+      <path d="M23,0 L34,0 L34,35 L23,35 Z"/>
+      <path d="M0,24 L34,24 L34,35 L0,35 Z"/>
+      <path d="M11,35 L28,35 L40,44 L23,44 Z"/>
+    </g>
+  </g>
+</svg>

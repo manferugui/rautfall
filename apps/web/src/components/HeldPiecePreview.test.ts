@@ -4,6 +4,10 @@
  *
  * Verifica que muestra correctamente el estado vacío y la representación
  * de cada tipo de pieza mediante getPieceShape de @rautfall/game-engine.
+ *
+ * El rediseño industrial (Tarea 0031) quitó el label de texto `.piece-type`
+ * (el tipo de pieza ya no se muestra como texto, solo visualmente vía las
+ * celdas de color) y subió el tamaño de celda de 18px a 22px.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -21,12 +25,12 @@ describe('HeldPiecePreview.vue', () => {
     expect(wrapper.find('[data-testid="held-piece-preview"]').exists()).toBe(true);
   });
 
-  it('con heldPiece=null muestra el texto Vacío', () => {
+  it('con heldPiece=null muestra el texto VACÍO', () => {
     const wrapper = mount(HeldPiecePreview, {
       props: { heldPiece: null },
     });
     expect(wrapper.find('.empty-slot').exists()).toBe(true);
-    expect(wrapper.find('.empty-text').text()).toBe('Vacío');
+    expect(wrapper.find('.empty-text').text()).toBe('VACÍO');
   });
 
   it('con heldPiece=null no muestra la sección de pieza', () => {
@@ -34,14 +38,6 @@ describe('HeldPiecePreview.vue', () => {
       props: { heldPiece: null },
     });
     expect(wrapper.find('.piece-grid').exists()).toBe(false);
-    expect(wrapper.find('.piece-type').exists()).toBe(false);
-  });
-
-  it.each(ALL_TYPES)('muestra el tipo de pieza %s como texto', (type) => {
-    const wrapper = mount(HeldPiecePreview, {
-      props: { heldPiece: type },
-    });
-    expect(wrapper.find('.piece-type').text()).toBe(type);
   });
 
   it.each(ALL_TYPES)('representa exactamente cuatro celdas para la pieza %s', (type) => {
@@ -59,8 +55,8 @@ describe('HeldPiecePreview.vue', () => {
       });
       const shape = getPieceShape(type);
       const grid = wrapper.find('.piece-grid').element as HTMLElement;
-      const expectedWidth = shape.width * 18;
-      const expectedHeight = shape.height * 18;
+      const expectedWidth = shape.width * 22;
+      const expectedHeight = shape.height * 22;
       expect(grid.style.width).toBe(`${expectedWidth}px`);
       expect(grid.style.height).toBe(`${expectedHeight}px`);
     }

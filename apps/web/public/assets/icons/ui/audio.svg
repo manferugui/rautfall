@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Altavoz robusto + 2 ondas simples. El estado mute se dibuja aparte
+       (barra diagonal CSS) para no crear un quinto archivo. -->
+  <path d="M3 9v6h4l6 5V4L7 9H3Z" fill="#000"/>
+  <path d="M16.2 8.6c1.6 1 2.6 2.7 2.6 4.6s-1 3.6-2.6 4.6" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+  <path d="M18.7 5.8c2.6 1.7 4.2 4.5 4.2 7.4s-1.6 5.7-4.2 7.4" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -25,6 +25,19 @@ export function isBattleDemoActive(searchOverride?: string): boolean {
 }
 
 /**
+ * Determina si el panel de telemetría técnica DEV está activo.
+ * Requiere: entorno de desarrollo + parámetro `?debug-panel=1`.
+ */
+export function isDebugPanelActive(searchOverride?: string): boolean {
+  if (typeof import.meta === 'undefined') return false;
+  if (!import.meta.env) return false;
+  if (!import.meta.env.DEV) return false;
+  if (searchOverride === undefined && typeof window === 'undefined') return false;
+  const search = searchOverride ?? (typeof window !== 'undefined' ? window.location.search : '');
+  return new URLSearchParams(search).get('debug-panel') === '1';
+}
+
+/**
  * Determina si el escenario de demostración de Muerte Súbita está activo.
  * Requiere: entorno de desarrollo + parámetros `?battle-demo=1&sudden-death-demo=1`.
  */

@@ -78,21 +78,21 @@ function formatDate(isoString: string): string {
 </script>
 
 <template>
-  <div class="ranking-screen" data-testid="ranking-screen">
+  <div class="ranking-screen rf-riveted-panel" data-testid="ranking-screen">
     <div class="ranking-header">
-      <div class="header-tag">
-        <h1 class="header-title">CLASIFICACIÓN Y RANKING</h1>
+      <div class="title-tag">
+        <h1 class="ranking-title">CLASIFICACIÓN TÁCTICA</h1>
       </div>
       <p class="header-subtitle">Mejor puntuación individual por jugador</p>
     </div>
 
-    <div class="hazard-strip" aria-hidden="true"></div>
+    <div class="rf-hazard-strip hazard-strip" aria-hidden="true"></div>
 
     <div class="mode-tabs">
       <button
         type="button"
-        class="tab-btn"
-        :class="{ 'tab-btn--active': selectedMode === 'battle' }"
+        class="rf-btn-tactical rf-btn-tab"
+        :class="{ 'rf-btn-tab--active': selectedMode === 'battle' }"
         data-testid="ranking-tab-battle"
         @click="onSelectMode('battle')"
       >
@@ -101,8 +101,8 @@ function formatDate(isoString: string): string {
 
       <button
         type="button"
-        class="tab-btn"
-        :class="{ 'tab-btn--active': selectedMode === 'training' }"
+        class="rf-btn-tactical rf-btn-tab"
+        :class="{ 'rf-btn-tab--active': selectedMode === 'training' }"
         data-testid="ranking-tab-training"
         @click="onSelectMode('training')"
       >
@@ -119,7 +119,7 @@ function formatDate(isoString: string): string {
       <div v-else-if="status === 'error'" class="state-panel state-panel--error" data-testid="ranking-error">
         <p class="error-msg">⚠️ No se pudo obtener la clasificación</p>
         <p class="error-sub">{{ errorMessage }}</p>
-        <button type="button" class="retry-btn" data-testid="ranking-retry-button" @click="loadRanking(selectedMode)">
+        <button type="button" class="rf-btn-tactical rf-btn-utility retry-btn" data-testid="ranking-retry-button" @click="loadRanking(selectedMode)">
           REINTENTAR CONEXIÓN
         </button>
       </div>
@@ -129,7 +129,7 @@ function formatDate(isoString: string): string {
         <p class="empty-sub">Sé el primero en completar una partida en este modo para inaugurar la tabla.</p>
       </div>
 
-      <div v-else-if="status === 'success'" class="table-container" data-testid="ranking-table">
+      <div v-else-if="status === 'success'" class="table-container rf-panel-inset" data-testid="ranking-table">
         <table class="ranking-table">
           <thead>
             <tr>
@@ -164,7 +164,7 @@ function formatDate(isoString: string): string {
     <div class="ranking-footer">
       <button
         type="button"
-        class="back-btn"
+        class="rf-btn-tactical rf-btn-secondary back-btn"
         data-testid="ranking-back-button"
         @click="onBack"
       >
@@ -236,26 +236,6 @@ function formatDate(isoString: string): string {
   gap: 0.5rem;
 }
 
-.tab-btn {
-  flex: 1;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  background: var(--rf-color-graphite-900, #17181a);
-  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
-  border-radius: var(--rf-radius-sm, 3px);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.tab-btn--active {
-  background: var(--rf-color-graphite-700, #28292c);
-  color: var(--rf-color-amber, #f39c12);
-  border-color: var(--rf-color-amber, #f39c12);
-}
 
 .ranking-content {
   width: 100%;
@@ -287,14 +267,8 @@ function formatDate(isoString: string): string {
 }
 
 .retry-btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  border: 1px solid var(--rf-color-amber, #f39c12);
-  background: var(--rf-color-graphite-700, #28292c);
+  border-color: var(--rf-color-amber, #f39c12);
   color: var(--rf-color-amber, #f39c12);
-  border-radius: var(--rf-radius-sm, 3px);
-  cursor: pointer;
 }
 
 .table-container {
@@ -387,13 +361,6 @@ function formatDate(isoString: string): string {
 .back-btn {
   padding: 0.75rem 1.5rem;
   font-size: 0.8125rem;
-  font-weight: 700;
-  font-family: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  background: var(--rf-color-graphite-700, #28292c);
-  color: var(--rf-color-text-primary, #e8e8ec);
   border-radius: var(--rf-radius-sm, 3px);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;

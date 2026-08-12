@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="80" viewBox="0 0 128 80">
+  <defs>
+    <linearGradient id="rf-steel" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#3a4046"/>
+      <stop offset="0.45" stop-color="#272b30"/>
+      <stop offset="1" stop-color="#1a1d20"/>
+    </linearGradient>
+    <linearGradient id="rf-lamella" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a5158"/>
+      <stop offset="0.35" stop-color="#2b2f34"/>
+      <stop offset="1" stop-color="#0f1113"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 1 H122 L127 6 V74 L122 79 H6 L1 74 V6 Z" fill="url(#rf-steel)"/>
+  <path d="M6 1 H122 L127 6 V74 L122 79 H6 L1 74 V6 Z" fill="none" stroke="#5b636a" stroke-opacity="0.5" stroke-width="0.8"/>
+  <rect x="9" y="9" width="110" height="62" fill="#0b0c0d"/>
+  <rect x="9" y="9" width="110" height="62" fill="none" stroke="#000" stroke-opacity="0.9" stroke-width="1.6"/>
+  <g>
+    <rect x="11" y="12" width="106" height="7" fill="url(#rf-lamella)"/>
+    <rect x="11" y="12" width="106" height="1" fill="#8d959c" opacity="0.4"/>
+    <rect x="11" y="23" width="106" height="7" fill="url(#rf-lamella)"/>
+    <rect x="11" y="23" width="106" height="1" fill="#8d959c" opacity="0.4"/>
+    <rect x="11" y="34" width="106" height="7" fill="url(#rf-lamella)"/>
+    <rect x="11" y="34" width="106" height="1" fill="#8d959c" opacity="0.4"/>
+    <rect x="11" y="45" width="106" height="7" fill="url(#rf-lamella)"/>
+    <rect x="11" y="45" width="106" height="1" fill="#8d959c" opacity="0.4"/>
+    <rect x="11" y="56" width="106" height="7" fill="url(#rf-lamella)"/>
+    <rect x="11" y="56" width="106" height="1" fill="#8d959c" opacity="0.4"/>
+  </g>
+</svg>

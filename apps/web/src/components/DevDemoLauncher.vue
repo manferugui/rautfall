@@ -1,10 +1,12 @@
 <script setup lang="ts">
 /**
- * Componente Lanzador de Escenarios de Desarrollo (DEV Demo Launcher).
+ * Rejilla de escenarios de desarrollo (DEV Demos).
  *
- * Exclusivo para entorno de desarrollo (`import.meta.env.DEV === true`).
- * Muestra el registro centralizado de demos en el menú principal y
- * permite navegar directamente construyendo URLs limpias desde cero.
+ * Responsabilidad única: listar `DEV_DEMOS` y lanzar cada uno construyendo
+ * una URL limpia desde cero. Sin cabecera ni navegación propia — eso vive
+ * en el contenedor de pantalla (`DevLauncherScreen.vue`) que la usa.
+ * Exclusivo para entorno de desarrollo (`import.meta.env.DEV === true`),
+ * cargado siempre vía `defineAsyncComponent` condicionado a esa guarda.
  */
 
 import { DEV_DEMOS, buildDemoTargetUrl, type DevDemoDefinition, type DevDemoCategory } from '../dev/dev-demos';
@@ -26,110 +28,50 @@ function launchDemo(demo: DevDemoDefinition): void {
     window.location.href = targetUrl;
   }
 }
-
-function returnToMenu(): void {
-  const cleanUrl = buildDemoTargetUrl({});
-  if (typeof window !== 'undefined') {
-    window.location.href = cleanUrl;
-  }
-}
 </script>
 
 <template>
-  <div class="dev-demo-launcher" data-testid="dev-demo-launcher">
-    <div class="launcher-header">
-      <h2 class="launcher-title">DEV Demo Launcher</h2>
+  <div class="demos-grid" data-testid="dev-demo-launcher">
+    <div
+      v-for="demo in DEV_DEMOS"
+      :key="demo.id"
+      class="demo-card"
+      :data-testid="`demo-card-${demo.id}`"
+    >
+      <div class="demo-info">
+        <div class="demo-title-row">
+          <span class="demo-label">{{ demo.label }}</span>
+          <span class="category-badge" :data-category="demo.category">
+            {{ categoryLabel(demo.category) }}
+          </span>
+        </div>
+        <p class="demo-description">{{ demo.description }}</p>
+      </div>
       <button
         type="button"
-        class="return-menu-btn"
-        data-testid="return-to-menu-button"
-        @click="returnToMenu"
+        class="launch-btn"
+        :data-testid="`launch-${demo.id}`"
+        @click="launchDemo(demo)"
       >
-        Volver al menú
+        Abrir
       </button>
-    </div>
-
-    <div class="demos-grid">
-      <div
-        v-for="demo in DEV_DEMOS"
-        :key="demo.id"
-        class="demo-card"
-        :data-testid="`demo-card-${demo.id}`"
-      >
-        <div class="demo-info">
-          <div class="demo-title-row">
-            <span class="demo-label">{{ demo.label }}</span>
-            <span class="category-badge" :data-category="demo.category">
-              {{ categoryLabel(demo.category) }}
-            </span>
-          </div>
-          <p class="demo-description">{{ demo.description }}</p>
-        </div>
-        <button
-          type="button"
-          class="launch-btn"
-          :data-testid="`launch-${demo.id}`"
-          @click="launchDemo(demo)"
-        >
-          Abrir
-        </button>
-      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.dev-demo-launcher {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background: var(--rf-color-graphite-900, #17181a);
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  border-radius: var(--rf-radius-md, 6px);
-  padding: 1.25rem;
-}
-
-.launcher-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.launcher-title {
-  font-size: 0.875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--rf-color-amber, #f39c12);
-  margin: 0;
-}
-
-.return-menu-btn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  background: var(--rf-color-graphite-700, #28292c);
-  color: var(--rf-color-text-primary, #e8e8ec);
-  border-radius: var(--rf-radius-sm, 3px);
-  cursor: pointer;
-}
-
-.return-menu-btn:hover {
-  background: var(--rf-color-graphite-800, #1f2023);
-  border-color: var(--rf-color-cyan, #00d4ff);
-}
-
 .demos-grid {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
 
 .demo-card {
+  box-sizing: border-box;
+  max-width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -145,6 +87,7 @@ function returnToMenu(): void {
   flex-direction: column;
   gap: 0.25rem;
   flex: 1;
+  min-width: 0;
 }
 
 .demo-title-row {
@@ -188,6 +131,9 @@ function returnToMenu(): void {
 }
 
 .launch-btn {
+  box-sizing: border-box;
+  max-width: 100%;
+  flex-shrink: 0;
   padding: 0.4rem 0.85rem;
   font-size: 0.75rem;
   font-weight: 700;

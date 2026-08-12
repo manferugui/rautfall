@@ -57,6 +57,7 @@ export type BattlePresentationState = Readonly<{
   step: number;
   lastSabotageRouted: string | null;
   lastSabotageBlocked?: string | null;
+  suddenDeathPhase?: string | null;
   playerTwo: OpponentPresentationState;
   botDevDiagnostic?: BotDevDiagnostic | undefined;
 }>;
@@ -69,7 +70,7 @@ export type GameMode = 'training' | 'battle';
 /**
  * Pantallas principales de la aplicación web.
  */
-export type AppScreen = 'menu' | 'playing' | 'results' | 'settings' | 'history' | 'ranking';
+export type AppScreen = 'menu' | 'playing' | 'results' | 'settings' | 'history' | 'ranking' | 'devTools';
 
 
 /**

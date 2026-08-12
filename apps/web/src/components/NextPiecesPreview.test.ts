@@ -4,11 +4,30 @@
  *
  * Verifica que renderiza tres previews en orden, que usa getPieceShape
  * para obtener geometría, y que se actualiza correctamente.
+ *
+ * El rediseño industrial (Tarea 0031) renombró el slot a
+ * `.preview-slot-recessed`, quitó los labels de texto `.preview-order` y
+ * `.preview-type` (el orden y el tipo ya no se muestran como texto, solo
+ * visualmente vía el orden de los slots y el color de las celdas) y subió
+ * el tamaño de celda a 20px.
  */
 
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import NextPiecesPreview from './NextPiecesPreview.vue';
+
+// Mismo mapeo de color que PIECE_DISPLAY_COLORS en NextPiecesPreview.vue —
+// se usa para verificar que el orden/tipo de pieza se conserva ahora que
+// ya no hay un label de texto por slot.
+const PIECE_DISPLAY_COLORS: Record<string, string> = {
+  I: 'rgb(0, 212, 255)',
+  O: 'rgb(255, 215, 0)',
+  T: 'rgb(155, 89, 182)',
+  S: 'rgb(46, 204, 113)',
+  Z: 'rgb(231, 76, 60)',
+  J: 'rgb(52, 152, 219)',
+  L: 'rgb(243, 156, 18)',
+};
 
 describe('NextPiecesPreview.vue', () => {
   it('muestra tres elementos para tres piezas', () => {
@@ -18,34 +37,25 @@ describe('NextPiecesPreview.vue', () => {
       },
     });
 
-    const slots = wrapper.findAll('.preview-slot');
+    const slots = wrapper.findAll('.preview-slot-recessed');
     expect(slots).toHaveLength(3);
   });
 
-  it('conserva el orden recibido (primera, segunda, tercera)', () => {
+  it('conserva el orden recibido (primera, segunda, tercera) vía el color de cada slot', () => {
     const wrapper = mount(NextPiecesPreview, {
       props: {
         nextPieces: ['S', 'Z', 'J'],
       },
     });
 
-    const orderLabels = wrapper.findAll('.preview-order');
-    expect(orderLabels[0]!.text()).toBe('1.');
-    expect(orderLabels[1]!.text()).toBe('2.');
-    expect(orderLabels[2]!.text()).toBe('3.');
-  });
+    const grids = wrapper.findAll('.piece-grid');
+    const firstCellColor = (grids[0]!.find('.piece-cell').element as HTMLElement).style.backgroundColor;
+    const secondCellColor = (grids[1]!.find('.piece-cell').element as HTMLElement).style.backgroundColor;
+    const thirdCellColor = (grids[2]!.find('.piece-cell').element as HTMLElement).style.backgroundColor;
 
-  it('muestra el tipo de cada pieza como texto', () => {
-    const wrapper = mount(NextPiecesPreview, {
-      props: {
-        nextPieces: ['L', 'J', 'I'],
-      },
-    });
-
-    const typeLabels = wrapper.findAll('.preview-type');
-    expect(typeLabels[0]!.text()).toBe('L');
-    expect(typeLabels[1]!.text()).toBe('J');
-    expect(typeLabels[2]!.text()).toBe('I');
+    expect(firstCellColor).toBe(PIECE_DISPLAY_COLORS.S);
+    expect(secondCellColor).toBe(PIECE_DISPLAY_COLORS.Z);
+    expect(thirdCellColor).toBe(PIECE_DISPLAY_COLORS.J);
   });
 
   it('se actualiza al cambiar la prop nextPieces', async () => {
@@ -55,13 +65,15 @@ describe('NextPiecesPreview.vue', () => {
       },
     });
 
-    expect(wrapper.findAll('.preview-slot')).toHaveLength(3);
-    expect(wrapper.find('.preview-type').text()).toBe('I');
+    expect(wrapper.findAll('.preview-slot-recessed')).toHaveLength(3);
+    const firstCell = wrapper.findAll('.piece-grid')[0]!.find('.piece-cell').element as HTMLElement;
+    expect(firstCell.style.backgroundColor).toBe(PIECE_DISPLAY_COLORS.I);
 
     await wrapper.setProps({ nextPieces: ['S', 'Z', 'J'] });
 
-    expect(wrapper.findAll('.preview-slot')).toHaveLength(3);
-    expect(wrapper.find('.preview-type').text()).toBe('S');
+    expect(wrapper.findAll('.preview-slot-recessed')).toHaveLength(3);
+    const firstCellAfter = wrapper.findAll('.piece-grid')[0]!.find('.piece-cell').element as HTMLElement;
+    expect(firstCellAfter.style.backgroundColor).toBe(PIECE_DISPLAY_COLORS.S);
   });
 
   it('representa correctamente la pieza I (4×1)', () => {
@@ -111,11 +123,11 @@ describe('NextPiecesPreview.vue', () => {
       },
     });
 
-    // Verificar que I tiene bounding box 4×1 (64px × 16px)
+    // Verificar que I tiene bounding box 4×1 (80px × 20px a celda de 20px)
     const grids = wrapper.findAll('.piece-grid');
     const iGrid = grids[0]!.element as HTMLElement;
-    expect(iGrid.style.width).toBe('64px');
-    expect(iGrid.style.height).toBe('16px');
+    expect(iGrid.style.width).toBe('80px');
+    expect(iGrid.style.height).toBe('20px');
   });
 
   it('incluye aria-label descriptivo en cada slot', () => {
@@ -125,7 +137,7 @@ describe('NextPiecesPreview.vue', () => {
       },
     });
 
-    const slots = wrapper.findAll('.preview-slot');
+    const slots = wrapper.findAll('.preview-slot-recessed');
     expect(slots[0]!.attributes('aria-label')).toBe('Próxima pieza 1: T');
     expect(slots[1]!.attributes('aria-label')).toBe('Próxima pieza 2: S');
     expect(slots[2]!.attributes('aria-label')).toBe('Próxima pieza 3: Z');

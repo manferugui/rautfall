@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { DEV_DEMOS, buildDemoTargetUrl } from './dev-demos';
+import { DEV_DEMOS, buildDemoTargetUrl, clearDevDemoQueryParams } from './dev-demos';
 
 describe('dev-demos (Registro Centralizado de Demos DEV)', () => {
-  it('contiene 13 escenarios canónicos registrados', () => {
-    expect(DEV_DEMOS.length).toBe(13);
+  it('contiene 14 escenarios canónicos registrados', () => {
+    expect(DEV_DEMOS.length).toBe(14);
   });
 
   it('garantiza que todos los identificadores (ID) son únicos', () => {
@@ -35,5 +35,32 @@ describe('dev-demos (Registro Centralizado de Demos DEV)', () => {
   it('devuelve únicamente el pathname si la query está vacía', () => {
     const cleanUrl = buildDemoTargetUrl({}, '/');
     expect(cleanUrl).toBe('/');
+  });
+
+  describe('clearDevDemoQueryParams', () => {
+    it('elimina battle-demo de la URL', () => {
+      const result = clearDevDemoQueryParams('/?battle-demo=1');
+      expect(result).toBe('/');
+    });
+
+    it('elimina debug-panel de la URL', () => {
+      const result = clearDevDemoQueryParams('/?debug-panel=1');
+      expect(result).toBe('/');
+    });
+
+    it('elimina combinaciones de múltiples flags DEV', () => {
+      const result = clearDevDemoQueryParams('/?battle-demo=1&debug-panel=1&sudden-death-demo=1');
+      expect(result).toBe('/');
+    });
+
+    it('preserva parámetros de consulta no DEV / desconocidos', () => {
+      const result = clearDevDemoQueryParams('/?battle-demo=1&foo=bar');
+      expect(result).toBe('/?foo=bar');
+    });
+
+    it('sin query no altera la URL original', () => {
+      const result = clearDevDemoQueryParams('/path#section');
+      expect(result).toBe('/path#section');
+    });
   });
 });

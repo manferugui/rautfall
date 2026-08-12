@@ -20,7 +20,6 @@ import {
   OPPONENT_STATIC_BOARD,
   OPPONENT_BOARD_COLS,
   OPPONENT_BOARD_ROWS,
-  OPPONENT_CELL_SIZE,
   SIMULATED_OPPONENT_LINK_STATUS,
   SIMULATED_OPPONENT_SECTOR,
   SIMULATED_OPPONENT_CHANNEL,
@@ -71,26 +70,30 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
   }
   return '';
 }
+const CELL_SIZE = 20;
 </script>
 
 <template>
   <div class="opponent-monitor" data-testid="opponent-monitor">
+    <!-- Header del módulo rival -->
     <div class="opponent-header">
-      <span class="opponent-title">RIVAL</span>
-      <span v-if="isTraining" class="standby-badge" data-testid="standby-badge">SIN OPONENTE</span>
-      <span v-else-if="!isRealMode" class="simulated-badge" data-testid="simulated-badge">SIMULADO</span>
-      <span v-else class="real-badge" data-testid="real-badge">Lvl {{ playerTwo?.level }}</span>
+      <div class="header-title-box">
+        <span class="red-bar-indicator"></span>
+        <span class="opponent-title">OPPONENT</span>
+      </div>
+      <div class="header-vent-grid" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
     </div>
 
-    <div class="opponent-vent" aria-hidden="true"></div>
-
+    <!-- Viewport hundido del tablero rival -->
     <div class="opponent-board-frame">
       <div
         class="opponent-board"
         data-testid="opponent-board"
         :style="{
-          width: OPPONENT_BOARD_COLS * OPPONENT_CELL_SIZE + 'px',
-          height: OPPONENT_BOARD_ROWS * OPPONENT_CELL_SIZE + 'px',
+          width: OPPONENT_BOARD_COLS * CELL_SIZE + 'px',
+          height: OPPONENT_BOARD_ROWS * CELL_SIZE + 'px',
         }"
       >
         <!-- Modo Entrenamiento (1P sin rival) -->
@@ -108,10 +111,10 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
             class="opponent-cell"
             data-testid="opponent-cell"
             :style="{
-              left: cell.x * OPPONENT_CELL_SIZE + 'px',
-              top: cell.y * OPPONENT_CELL_SIZE + 'px',
-              width: OPPONENT_CELL_SIZE + 'px',
-              height: OPPONENT_CELL_SIZE + 'px',
+              left: cell.x * CELL_SIZE + 'px',
+              top: cell.y * CELL_SIZE + 'px',
+              width: CELL_SIZE + 'px',
+              height: CELL_SIZE + 'px',
               backgroundColor: cell.color,
             }"
           ></div>
@@ -126,10 +129,10 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
             :class="`opponent-cell--${cell.appearance}`"
             data-testid="opponent-cell"
             :style="{
-              left: cell.x * OPPONENT_CELL_SIZE + 'px',
-              top: cell.y * OPPONENT_CELL_SIZE + 'px',
-              width: OPPONENT_CELL_SIZE + 'px',
-              height: OPPONENT_CELL_SIZE + 'px',
+              left: cell.x * CELL_SIZE + 'px',
+              top: cell.y * CELL_SIZE + 'px',
+              width: CELL_SIZE + 'px',
+              height: CELL_SIZE + 'px',
               backgroundColor: cell.color,
             }"
           ></div>
@@ -207,25 +210,24 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
         <span class="telemetry-value telemetry-value--amber" data-testid="opponent-pending-garbage">+{{ playerTwo?.pendingGarbage }} filas</span>
       </div>
     </div>
-
-    <p class="opponent-footnote">
-      {{ isTraining ? 'Modo entrenamiento individual' : isRealMode ? 'Monitor táctico en tiempo real' : 'Vista de prototipo — sin lógica de combate' }}
-    </p>
   </div>
 
 </template>
 
 <style scoped>
 .opponent-monitor {
-  background: var(--rf-color-graphite-900, #17181a);
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  position: relative;
+  background-image: url('/assets/industrial-kit/dark-metal-tile.svg');
+  background-size: 512px 512px;
+  background-repeat: repeat;
+  border: 2px solid #36383e;
   border-radius: var(--rf-radius-md, 6px);
-  box-shadow: var(--rf-shadow-opponent, inset 0 1px 0 rgba(255,255,255,0.03), inset 0 -1px 2px rgba(0,0,0,0.3), 0 1px 3px rgba(0,0,0,0.2));
+  box-shadow: var(--rf-shadow-panel);
   padding: 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  width: 240px;
+  width: 340px;
   flex-shrink: 0;
 }
 
@@ -293,23 +295,23 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
 }
 
 .opponent-vent {
-  height: 6px;
+  height: 8px;
   border-radius: 2px;
-  opacity: 0.8;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--rf-color-graphite-700, #28292c) 0 3px,
-    transparent 3px 6px
-  );
+  opacity: 0.9;
+  background-image: url('/assets/industrial-kit/vent-grille.svg');
+  background-size: cover;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .opponent-board-frame {
   display: flex;
   justify-content: center;
-  background: var(--rf-color-graphite-900, #17181a);
+  background: #0e0f11;
+  border: 1px solid #2a2c32;
   border-radius: var(--rf-radius-sm, 3px);
-  box-shadow: var(--rf-shadow-recessed, inset 0 2px 10px rgba(0,0,0,0.8));
-  padding: 6px;
+  box-shadow: inset 0 4px 14px rgba(0, 0, 0, 0.95), inset 0 0 0 1px rgba(0, 0, 0, 0.9);
+  padding: 8px;
 }
 
 .opponent-board {
@@ -322,8 +324,21 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
 
 .opponent-cell {
   position: absolute;
-  border: 1px solid rgba(0, 0, 0, 0.3);
   box-sizing: border-box;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+  border-right: 1px solid rgba(0, 0, 0, 0.42);
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0) 38%,
+    rgba(0, 0, 0, 0) 62%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.16),
+    inset -1px -1px 1px rgba(0, 0, 0, 0.35);
 }
 
 .opponent-cell--ghost {
@@ -332,7 +347,13 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
 }
 
 .opponent-cell--active {
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.8);
+  /* Fusiona el mismo bisel de .opponent-cell (highlight sup./izq. + sombra
+     inf./der.) en vez de sustituirlo, y añade un anillo nítido sin blur
+     (énfasis contenido, no glow) para seguir identificando la pieza activa. */
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.16),
+    inset -1px -1px 1px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 .interferencia-overlay {
@@ -341,7 +362,11 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(23, 24, 26, 0.88);
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(23, 24, 26, 0.95) 0 2px,
+    rgba(11, 11, 13, 0.9) 2px 4px
+  );
   color: var(--rf-color-amber, #f39c12);
   font-size: 0.8rem;
   font-weight: bold;
@@ -352,6 +377,15 @@ function formatEffect(effect: ActiveEffectSnapshot): string {
   border-radius: 3px;
   border: 1px dashed var(--rf-color-amber, #f39c12);
   z-index: 8;
+  animation: rf-jitter 0.3s infinite;
+  box-shadow: inset 0 0 12px rgba(243, 156, 18, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interferencia-overlay {
+    animation: none;
+    background: rgba(23, 24, 26, 0.95);
+  }
 }
 
 .opponent-pause-overlay {

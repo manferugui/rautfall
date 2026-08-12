@@ -22,7 +22,9 @@ test('flujo esencial de principio a fin', async ({ page }) => {
   await test.step('estado inicial running, próximas piezas, reserva, paneles y puntuación', async () => {
     await expect(page.getByTestId('session-status')).toHaveText('running');
     await expect(page.getByTestId('held-piece-preview')).toBeVisible();
-    const nextPiecesItems = page.getByTestId('next-pieces-preview').getByRole('listitem');
+    // El rediseño industrial (Tarea 0031) sustituyó <ol>/<li> por divs
+    // (`.preview-slot-recessed`), ya no expone role="listitem".
+    const nextPiecesItems = page.getByTestId('next-pieces-preview').locator('.preview-slot-recessed');
     await expect(nextPiecesItems).toHaveCount(3);
     await expect(page.getByTestId('opponent-column')).toContainText('SIN OPONENTE');
     await expect(page.getByTestId('score-value')).toHaveText('0');
@@ -55,7 +57,7 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     await expect
       .poll(async () => Number(await page.getByTestId('session-step').textContent()))
       .toBeLessThan(Number(stepBeforeReset));
-    await expect(page.getByTestId('next-pieces-preview').getByRole('listitem')).toHaveCount(3);
+    await expect(page.getByTestId('next-pieces-preview').locator('.preview-slot-recessed')).toHaveCount(3);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
   });
 

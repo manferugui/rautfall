@@ -5,6 +5,10 @@ import { mount } from '@vue/test-utils';
 import DevDemoLauncher from './DevDemoLauncher.vue';
 import { DEV_DEMOS } from '../dev/dev-demos';
 
+// Nota: el botón "Volver al menú" y la cabecera de DEV Tools ya no viven
+// aquí — DevDemoLauncher.vue es solo la rejilla de tarjetas (responsabilidad
+// única, ver su propia cabecera). Esa navegación se prueba en
+// DevLauncherScreen.test.ts, el contenedor de pantalla que la usa.
 describe('DevDemoLauncher.vue', () => {
   const originalLocation = window.location;
 
@@ -20,23 +24,15 @@ describe('DevDemoLauncher.vue', () => {
     (window as unknown as { location: Location }).location = originalLocation;
   });
 
-  it('renderiza el contenedor del lanzador DEV y el título principal', () => {
+  it('renderiza el contenedor de la rejilla con data-testid="dev-demo-launcher"', () => {
     const wrapper = mount(DevDemoLauncher);
     expect(wrapper.find('[data-testid="dev-demo-launcher"]').exists()).toBe(true);
-    expect(wrapper.find('.launcher-title').text()).toMatch(/DEV Demo Launcher/i);
   });
 
   it('renderiza la lista completa de tarjetas de demos registradas', () => {
     const wrapper = mount(DevDemoLauncher);
     const cards = wrapper.findAll('.demo-card');
     expect(cards.length).toBe(DEV_DEMOS.length);
-  });
-
-  it('ofrece el botón Volver al menú', () => {
-    const wrapper = mount(DevDemoLauncher);
-    const returnBtn = wrapper.find('[data-testid="return-to-menu-button"]');
-    expect(returnBtn.exists()).toBe(true);
-    expect(returnBtn.text()).toBe('Volver al menú');
   });
 
   it('navega a la URL limpia de la demo elegida al hacer clic en Abrir', async () => {
@@ -48,13 +44,5 @@ describe('DevDemoLauncher.vue', () => {
 
     await launchBtn.trigger('click');
     expect(window.location.href).toBe('/?battle-demo=1');
-  });
-
-  it('navega a la URL sin query params al hacer clic en Volver al menú', async () => {
-    const wrapper = mount(DevDemoLauncher);
-
-    const returnBtn = wrapper.find('[data-testid="return-to-menu-button"]');
-    await returnBtn.trigger('click');
-    expect(window.location.href).toBe('/');
   });
 });

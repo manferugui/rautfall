@@ -78,11 +78,13 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
   let moveActionStep: number | null = null;
 
   await test.step('Escenario 1 — Visibilidad completa y retardo de reacción de 20 pasos', async () => {
-    await page.goto('/?battle-demo=1');
+    await page.goto('/?battle-demo=1&debug-panel=1');
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
 
-    await expect(page.getByTestId('real-badge')).toBeVisible();
-    await expect(page.getByTestId('real-badge')).toHaveText('Lvl 1');
+    // El header del monitor rival ya no tiene badge "Lvl N" (rediseño
+    // industrial, Tarea 0031) — el nivel real de P2 vive en la telemetría.
+    await expect(page.getByTestId('opponent-level')).toBeVisible();
+    await expect(page.getByTestId('opponent-level')).toHaveText('1');
     await expect(page.getByTestId('battle-demo-dev-panel')).toBeVisible();
     await expect(page.getByTestId('battle-status')).toHaveText('running');
 

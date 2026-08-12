@@ -1,60 +1,543 @@
 /**
- * Hoja de variables de tema Industrial Dramatic para Rautfall.
+ * Hoja de variables y sistema visual Industrial Dramatic para Rautfall.
  *
- * No define clases ni selectores de componente. Es únicamente un conjunto
- * de variables CSS (`:root { --rf-* }`) que se importa una sola vez desde
- * main.ts. Su propósito es que los cuatro componentes principales
- * (App.vue, NextPiecesPreview.vue, OpponentMonitor.vue,
- * CombatStatusPanel.vue) compartan la misma paleta, sombras, radios y
- * tipografía sin duplicar literales.
+ * Importada una sola vez desde main.ts.
+ * Define la paleta de tokens `--rf-*`, utilidades de paneles metálicos, remaches,
+ * rejillas, bandas de peligro, botones mecánicos, keycaps y reglas estrictas para
+ * `@media (prefers-reduced-motion: reduce)`.
  *
- * Ver docs/tasks/0009-marco-tactical-identidad-visual-industrial-dramatic.md §10.
+ * Ver docs/tasks/0031-pulido-visual-fx-identidad-industrial.md
  */
 
 :root {
-  /* Paleta base — grafito y metal oscuro */
-  --rf-color-void: #0b0b0d;
-  --rf-color-graphite-900: #17181a;
-  --rf-color-graphite-800: #1f2023;
-  --rf-color-graphite-700: #28292c;
-  --rf-color-metal-600: #3a3b3f;
-  --rf-color-metal-400: #55565b;
+  /* Paleta base — grafito, acero y metal oscuro */
+  --rf-color-void: #09090b;
+  --rf-color-graphite-900: #121315;
+  --rf-color-graphite-800: #1a1b1e;
+  --rf-color-graphite-700: #242529;
+  --rf-color-metal-600: #36383e;
+  --rf-color-metal-400: #585a62;
+  --rf-color-metal-highlight: rgba(255, 255, 255, 0.14);
+  --rf-color-rust-700: #5c2a18;
+  --rf-color-rust-500: #8b3a1b;
 
-  /* Acentos cian/ámbar/rojo — reutilizan los colores de PIECE_DISPLAY_COLORS */
+  /* Acentos tácticos semánticos */
   --rf-color-cyan: #00d4ff;
   --rf-color-amber: #f39c12;
   --rf-color-red: #e74c3c;
+  --rf-color-purple: #a060d0;
+  --rf-color-success: #2ecc71;
 
   /* Texto */
   --rf-color-text-primary: #e8e8ec;
   --rf-color-text-muted: rgba(232, 232, 236, 0.6);
 
-  /* Radios */
+  /* Radios rígidos mecánicos */
   --rf-radius-sm: 3px;
   --rf-radius-md: 6px;
 
-  /* Bisel estándar de panel */
-  --rf-shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.5),
-    0 2px 6px rgba(0, 0, 0, 0.35);
+  /* Anillo de enfoque táctico visible */
+  --rf-focus-ring: 0 0 0 2px var(--rf-color-cyan, #00d4ff), 0 0 8px rgba(0, 212, 255, 0.4);
 
-  /* Bisel más pronunciado para el marco del tablero propio */
-  --rf-shadow-board-frame: inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.6),
-    0 3px 8px rgba(0, 0, 0, 0.4);
+  /* Biseles de profundidad y muesca industrial */
+  --rf-shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.7),
+    0 4px 14px rgba(0, 0, 0, 0.6);
 
-  /* Bisel más apagado para el monitor rival */
-  --rf-shadow-opponent: inset 0 1px 0 rgba(255, 255, 255, 0.03),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
-    0 1px 3px rgba(0, 0, 0, 0.2);
+  --rf-shadow-board-frame: inset 0 2px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.9),
+    0 8px 24px rgba(0, 0, 0, 0.7);
 
-  /* Sombra de contacto de la carcasa general contra el fondo de página */
-  --rf-shadow-chassis: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --rf-shadow-opponent: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.6),
+    0 4px 10px rgba(0, 0, 0, 0.4);
 
-  /* Hueco interior hundido (tablero propio, displays) */
-  --rf-shadow-recessed: inset 0 2px 10px rgba(0, 0, 0, 0.8),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --rf-shadow-chassis: inset 0 2px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -4px 12px rgba(0, 0, 0, 0.95),
+    0 24px 64px rgba(0, 0, 0, 0.85);
 
-  /* Marca decorativa de remache de esquina */
-  --rf-rivet: radial-gradient(circle at 35% 30%, var(--rf-color-metal-400), var(--rf-color-metal-600) 70%);
+  --rf-shadow-recessed: inset 0 3px 10px rgba(0, 0, 0, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+
+  --rf-shadow-btn: inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.7),
+    0 3px 6px rgba(0, 0, 0, 0.5);
+
+  --rf-shadow-keycap: inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.9),
+    0 2px 5px rgba(0, 0, 0, 0.6);
+
+  /* Marca decorativa de remache metálico 3D */
+  --rf-rivet: radial-gradient(circle at 35% 30%, #7a7c85 0%, #4a4c52 50%, #202124 100%);
+}
+
+/* Base de resets globales de Rautfall */
+*:focus-visible {
+  outline: none;
+  box-shadow: var(--rf-focus-ring) !important;
+}
+
+/* Utilitarios de paneles metálicos */
+.rf-panel {
+  background: linear-gradient(180deg, var(--rf-color-graphite-800), var(--rf-color-graphite-900));
+  border: 1px solid var(--rf-color-metal-600);
+  border-radius: var(--rf-radius-md);
+  box-shadow: var(--rf-shadow-panel);
+}
+
+.rf-panel-inset {
+  background: var(--rf-color-graphite-900);
+  border: 1px solid var(--rf-color-metal-600);
+  border-radius: var(--rf-radius-sm);
+  box-shadow: var(--rf-shadow-recessed);
+}
+
+/* Placa decorada con remaches 3D en esquinas */
+.rf-riveted-panel {
+  position: relative;
+}
+
+.rf-riveted-panel::before,
+.rf-riveted-panel::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rf-rivet);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  z-index: 2;
+}
+
+.rf-riveted-panel::before {
+  left: 10px;
+}
+
+.rf-riveted-panel::after {
+  right: 10px;
+}
+
+/* Rejillas de ventilación industrial con asset vent-grille */
+.rf-vent-grille {
+  background-image: url('/assets/industrial-kit/vent-grille.svg');
+  background-size: auto 100%;
+  background-repeat: repeat-x;
+  border-top: 1px solid var(--rf-color-metal-600);
+  border-bottom: 1px solid var(--rf-color-metal-600);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Asset Kit Integration Classes (Fase B.2) */
+.rf-asset-dark-metal {
+  background-image: url('/assets/industrial-kit/dark-metal-tile.svg');
+  background-repeat: repeat;
+}
+
+.rf-asset-corner-reinforcement {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  background-image: url('/assets/industrial-kit/corner-reinforcement.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.rf-asset-corner--tl {
+  top: -2px;
+  left: -2px;
+}
+
+.rf-asset-corner--tr {
+  top: -2px;
+  right: -2px;
+  transform: scaleX(-1);
+}
+
+.rf-asset-corner--bl {
+  bottom: -2px;
+  left: -2px;
+  transform: scaleY(-1);
+}
+
+.rf-asset-corner--br {
+  bottom: -2px;
+  right: -2px;
+  transform: scale(-1, -1);
+}
+
+/* Franjas de advertencia semánticas */
+.rf-hazard-strip {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--rf-color-amber) 0 8px,
+    var(--rf-color-graphite-900) 8px 16px
+  );
+  opacity: 0.75;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.rf-hazard-strip--danger {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--rf-color-red) 0 8px,
+    var(--rf-color-graphite-900) 8px 16px
+  );
+  opacity: 0.85;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.rf-hazard-strip--cyan {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--rf-color-cyan) 0 8px,
+    var(--rf-color-graphite-900) 8px 16px
+  );
+  opacity: 0.7;
+}
+
+/* Teclas físicamente extruidas / Keycaps tácticos */
+.rf-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, var(--rf-color-graphite-700), var(--rf-color-graphite-800));
+  border: 1px solid var(--rf-color-metal-400);
+  color: var(--rf-color-text-primary);
+  font-family: monospace;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--rf-radius-sm);
+  box-shadow: var(--rf-shadow-keycap);
+  font-size: 0.75rem;
+}
+
+/* Botones mecánicos unificados */
+.rf-btn-tactical {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.15rem;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--rf-color-metal-600);
+  background: linear-gradient(180deg, var(--rf-color-graphite-700), var(--rf-color-graphite-800));
+  color: var(--rf-color-text-primary);
+  border-radius: var(--rf-radius-sm);
+  box-shadow: var(--rf-shadow-btn);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s;
+  user-select: none;
+}
+
+.rf-btn-tactical:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--rf-color-graphite-800), var(--rf-color-metal-600));
+  border-color: var(--rf-color-cyan);
+  color: var(--rf-color-text-primary);
+}
+
+.rf-btn-tactical:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.rf-btn-tactical:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.rf-btn-primary {
+  border-color: var(--rf-color-cyan);
+  color: var(--rf-color-cyan);
+}
+
+.rf-btn-primary:hover:not(:disabled) {
+  background: var(--rf-color-cyan);
+  color: var(--rf-color-void);
+  border-color: var(--rf-color-cyan);
+}
+
+.rf-btn-destructive {
+  border-color: var(--rf-color-red);
+  color: var(--rf-color-red);
+}
+
+.rf-btn-destructive:hover:not(:disabled) {
+  background: var(--rf-color-red);
+  color: #ffffff;
+}
+
+/* SECONDARY: alias explícito de la base neutra (acero/grafito), para que
+   las pantallas dejen de inventar su propio botón "neutro" por su cuenta. */
+.rf-btn-secondary {
+  border-color: var(--rf-color-metal-600);
+  color: var(--rf-color-text-primary);
+}
+
+.rf-btn-secondary:hover:not(:disabled) {
+  border-color: var(--rf-color-metal-400);
+  background: linear-gradient(180deg, var(--rf-color-graphite-800), var(--rf-color-metal-600));
+}
+
+/* UTILITY: variante compacta para acciones secundarias frecuentes
+   (settings/audio/historial/ranking) — mismo lenguaje físico, menos
+   énfasis y menos padding que PRIMARY/SECONDARY/DANGER. */
+.rf-btn-utility {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.75rem;
+  gap: 0.5rem;
+  color: var(--rf-color-text-muted);
+}
+
+.rf-btn-utility:hover:not(:disabled) {
+  color: var(--rf-color-text-primary);
+  border-color: var(--rf-color-metal-400);
+}
+
+/* Pestaña de selección (History/Ranking): estaban duplicadas letra por
+   letra en dos pantallas — ahora es una sola variante compartida. */
+.rf-btn-tab {
+  flex: 1;
+  background: var(--rf-color-graphite-900);
+  color: var(--rf-color-text-muted);
+}
+
+.rf-btn-tab--active {
+  background: var(--rf-color-graphite-700);
+  color: var(--rf-color-amber);
+  border-color: var(--rf-color-amber);
+}
+
+/* ===================================================================
+   BOTÓN DE CONSOLA — chrome construido en DOS capas reales, como
+   `.mode-module` (plate + face), no una sola superficie CSS:
+
+     .rf-btn-console       → MARCO: SVG real (control-button-bezel.svg),
+                              FIJO, nunca se anima. El padding de esta
+                              capa es el grosor de marco visible.
+     .rf-btn-console-face  → SUPERFICIE INTERIOR: fondo oscuro propio,
+                              chaflán (clip-path) que sigue la geometría
+                              del marco, bisel vía box-shadow — esta es
+                              la parte que cambia con hover/active.
+
+   Nace en el menú principal (CONFIGURACIÓN / AUDIO / HISTORIAL /
+   RANKING) pero vive en la hoja global para poder aplicarse más
+   adelante a Settings/History/Ranking/Results sin duplicar chrome
+   (Tarea 0031).
+   =================================================================== */
+.rf-btn-console {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  height: 42px;
+  padding: 5px 7px;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+  background-image: url('/assets/industrial-kit/control-button-bezel.svg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+
+.rf-btn-console-face {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #7d8389;
+  background: linear-gradient(160deg, rgba(34, 36, 40, 0.95) 0%, rgba(16, 17, 19, 0.98) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  /* Chaflán pequeño: la cara sigue la geometría angular del marco en
+     vez de ser un rectángulo de esquinas rectas. */
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.7),
+    inset 0 0 10px rgba(0, 0, 0, 0.35);
+  transition: background 0.1s, border-color 0.1s, color 0.1s, box-shadow 0.1s, transform 0.08s;
+}
+
+/* HOVER: mismo material (grafito), incremento contenido de luminosidad
+   (~15%) — NO un salto a acero claro. El filo superior es un matiz, no
+   una decoración. El marco (`.rf-btn-console`) no recibe ninguna regla
+   de hover — permanece pieza fija. */
+.rf-btn-console:hover:not(:disabled) .rf-btn-console-face {
+  background: linear-gradient(160deg, rgba(46, 49, 54, 0.97) 0%, rgba(22, 23, 26, 0.98) 100%);
+  color: #d8dade;
+}
+
+/* ACTIVE/PRESSED: hundimiento claro — fondo casi negro, sombra inset
+   pesada, highlight superior casi anulado, contenido desplazado 1px.
+   El marco no se mueve ni cambia (ninguna regla lo toca). */
+.rf-btn-console:active:not(:disabled) .rf-btn-console-face {
+  transform: translateY(1px);
+  background: linear-gradient(160deg, rgba(6, 6, 7, 0.98) 0%, rgba(0, 0, 0, 1) 100%);
+  border-color: rgba(0, 0, 0, 0.85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    inset 0 5px 11px rgba(0, 0, 0, 0.95),
+    inset 0 0 18px rgba(0, 0, 0, 0.7);
+  color: #6b7076;
+}
+
+/* FOCUS-VISIBLE: el marco solo anula el reset global (sin cambiar su
+   aspecto — misma sombra que el default, con !important). El indicador
+   real (brackets cian) vive DENTRO de la superficie interior, no
+   alrededor del marco exterior. */
+.rf-btn-console:focus-visible {
+  outline: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45) !important;
+}
+
+.rf-btn-console:focus-visible .rf-btn-console-face::before,
+.rf-btn-console:focus-visible .rf-btn-console-face::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}
+
+.rf-btn-console:focus-visible .rf-btn-console-face::before {
+  top: 2px;
+  left: 2px;
+  border-top: 2px solid var(--rf-color-cyan);
+  border-left: 2px solid var(--rf-color-cyan);
+}
+
+.rf-btn-console:focus-visible .rf-btn-console-face::after {
+  bottom: 2px;
+  right: 2px;
+  border-bottom: 2px solid var(--rf-color-cyan);
+  border-right: 2px solid var(--rf-color-cyan);
+}
+
+/* Icono: 20px (antes 16px) para que se lea a la nueva altura del botón
+   (40-44px). currentColor + mask-image (SVG externo real, no inline). */
+.rf-btn-console-icon {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
+/* Animaciones Keyframes */
+@keyframes rf-jitter {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(1px, -1px); }
+  75% { transform: translate(-1px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes rf-pulse-amber {
+  0%, 100% { border-color: var(--rf-color-amber); box-shadow: 0 0 4px rgba(243, 156, 18, 0.3); }
+  50% { border-color: rgba(243, 156, 18, 0.4); box-shadow: 0 0 12px rgba(243, 156, 18, 0.7); }
+}
+
+@keyframes rf-pulse-red {
+  0%, 100% { border-color: var(--rf-color-red); box-shadow: 0 0 4px rgba(231, 76, 60, 0.4); }
+  50% { border-color: rgba(231, 76, 60, 0.4); box-shadow: 0 0 16px rgba(231, 76, 60, 0.8); }
+}
+
+@keyframes rf-emergency-alert {
+  0%, 100% { border-color: var(--rf-color-metal-600); }
+  50% { border-color: var(--rf-color-red); box-shadow: inset 0 0 12px rgba(231, 76, 60, 0.3), 0 0 24px rgba(231, 76, 60, 0.4); }
+}
+
+/* ===================================================================
+   Consola central: ENERGY / SCORE / COMBO / ATTACK SLOTS como una
+   única columna de instrumentación mecánica ensamblada (no 4 cards).
+   =================================================================== */
+
+/* Placa exterior atornillada. panel-plate.svg aporta bisel, chaflanes
+   y los 4 tornillos de esquina alojados dentro del marco; el degradado
+   oscuro superpuesto empuja el acero claro del asset hacia grafito. */
+.rf-console-module {
+  position: relative;
+  background-image:
+    linear-gradient(rgba(6, 7, 8, 0.5), rgba(6, 7, 8, 0.5)),
+    url('/assets/industrial-kit/panel-plate.svg');
+  background-size: 100% 100%, 100% 100%;
+  background-repeat: no-repeat, no-repeat;
+  padding: 10px 14px;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Rebaje interior: la cara del instrumento. Todo el contenido (labels,
+   valores) vive aquí, con margen real hasta el bisel/tornillos. */
+.rf-console-face {
+  position: relative;
+  background: linear-gradient(135deg, rgba(26, 28, 31, 0.75) 0%, rgba(8, 9, 10, 0.92) 100%);
+  border-radius: 3px;
+  padding: 9px 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.75),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
+.rf-console-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #7e828e;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+/* Regla estricta para usuario con preferencia reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .rf-jitter,
+  .interferencia-overlay,
+  .opponent-board {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .rf-pulse-amber,
+  .rf-pulse-red,
+  .tactical-chassis--sudden-death {
+    animation: none !important;
+    border-color: var(--rf-color-red) !important;
+    box-shadow: var(--rf-shadow-panel) !important;
+  }
 }

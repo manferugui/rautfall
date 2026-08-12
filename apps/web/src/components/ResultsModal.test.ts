@@ -57,7 +57,9 @@ describe('ResultsModal.vue', () => {
     expect(wrapper.find('[data-testid="final-score"]').text()).toBe('3400');
     expect(wrapper.find('[data-testid="final-level"]').text()).toBe('4');
     expect(wrapper.find('[data-testid="final-time"]').text()).toBe('02:22');
-    expect(wrapper.find('[data-testid="final-battle-step"]').text()).toBe('1420');
+    // El paso global de Battle mantiene formato es-ES con separador de miles
+    // (a diferencia del SCORE, unificado sin separador con el HUD).
+    expect(wrapper.find('[data-testid="final-battle-step"]').text()).toBe('1.420');
 
     wrapper.unmount();
   });

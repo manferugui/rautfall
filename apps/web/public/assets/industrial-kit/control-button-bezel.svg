@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="42" viewBox="0 0 200 42">
+  <!--
+    MARCO físico del botón de consola (v2, Tarea 0031 — iteración de
+    corrección: el v1 era "demasiado tímido"). Solo geometría/material
+    del marco exterior — la superficie interior (oscura, la parte que
+    parece pulsarse) es responsabilidad de `.rf-btn-console-face` en CSS,
+    que se monta ENCIMA de este marco dejando visible un margen de acero
+    claramente grueso alrededor (ver padding de `.rf-btn-console`).
+
+    Chaflán grande (9px sobre 42 de alto ≈ 21%, el doble que la v1) +
+    contraste marcado highlight/sombra para que el marco se lea como
+    pieza física incluso antes de que la cara interior aporte su propio
+    bisel. Se consume con background-size: 100% 100% (mismo patrón que
+    module-bezel.svg / panel-plate.svg).
+  -->
+  <defs>
+    <linearGradient id="rf-steel" x1="0" y1="0" x2="0.65" y2="1">
+      <stop offset="0" stop-color="#5b636b" />
+      <stop offset="0.4" stop-color="#33373c" />
+      <stop offset="1" stop-color="#16171a" />
+    </linearGradient>
+  </defs>
+
+  <!-- Placa exterior: chaflán pronunciado, degradado de alto contraste
+       iluminado desde arriba-izquierda. -->
+  <path d="M9,0 H191 L200,9 V33 L191,42 H9 L0,33 V9 Z" fill="url(#rf-steel)" />
+
+  <!-- Filo superior/izquierdo: highlight grueso y marcado. -->
+  <path d="M9,1 H191 L198.7,9" fill="none" stroke="#c3c9cf" stroke-opacity="0.55" stroke-width="1.6" />
+  <!-- Filo inferior/derecho: sombra de contacto, igual de marcada. -->
+  <path d="M1.3,33 L9,40.6 H191" fill="none" stroke="#000000" stroke-opacity="0.8" stroke-width="1.6" />
+
+  <!-- Borde exterior completo: canto duro contra el fondo del marco del
+       menú. -->
+  <path d="M9,0 H191 L200,9 V33 L191,42 H9 L0,33 V9 Z" fill="none" stroke="#050506" stroke-opacity="0.9" stroke-width="1.4" />
+</svg>

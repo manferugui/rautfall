@@ -23,6 +23,13 @@ export const DEV_DEMOS: readonly DevDemoDefinition[] = [
     query: { 'battle-demo': '1' },
   },
   {
+    id: 'battle-debug-2p',
+    label: 'Inspector de Batalla 2P (Telemetría DEV)',
+    description: 'Batalla 2P con panel de telemetría técnica completa (timers, bot phase, step, coords)',
+    category: 'battle',
+    query: { 'battle-demo': '1', 'debug-panel': '1' },
+  },
+  {
     id: 'sudden-death-2p',
     label: 'Muerte Súbita 2P',
     description: 'Batalla 2P iniciada a los 04:40 min con aviso de Muerte Súbita',
@@ -121,4 +128,36 @@ export function buildDemoTargetUrl(
   const params = new URLSearchParams(query);
   const searchString = params.toString();
   return searchString ? `${pathname}?${searchString}` : pathname;
+}
+
+export const DEV_QUERY_PARAMS: readonly string[] = [
+  'battle-demo',
+  'debug-panel',
+  'sudden-death-demo',
+  'interference-demo',
+  'bot-sabotage',
+  'sabotage-demo',
+  'garbage-demo',
+  'overload-demo',
+  'polarity-demo',
+  'tspin-demo',
+  'level-demo',
+  'sfx-lab',
+] as const;
+
+/**
+ * Elimina todos los parámetros de consulta DEV conocidos de una URL.
+ * Mantiene la ruta (pathname), parámetros no DEV y hash intactos.
+ */
+export function clearDevDemoQueryParams(urlStr: string): string {
+  try {
+    const url = new URL(urlStr, 'http://localhost');
+    for (const param of DEV_QUERY_PARAMS) {
+      url.searchParams.delete(param);
+    }
+    const search = url.searchParams.toString();
+    return `${url.pathname}${search ? `?${search}` : ''}${url.hash}`;
+  } catch {
+    return urlStr;
+  }
 }

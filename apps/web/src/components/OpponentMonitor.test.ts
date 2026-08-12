@@ -32,26 +32,26 @@ const mockOpponentState: OpponentPresentationState = Object.freeze({
 
 describe('OpponentMonitor.vue', () => {
   describe('Modo Entrenamiento (1P)', () => {
-    it('renderiza la insignia "SIN OPONENTE" y no muestra celdas ficticias', () => {
+    // La cabecera ya no tiene badges de estado (standby/simulado/real) — es
+    // un título fijo "OPPONENT" en los 3 modos. El estado se distingue por
+    // el contenido del tablero y la telemetría, no por un badge.
+    it('no muestra celdas ficticias y renderiza el overlay STANDBY con su telemetría', () => {
       const wrapper = mount(OpponentMonitor, {
         props: { mode: 'training' },
       });
-      expect(wrapper.find('[data-testid="standby-badge"]').exists()).toBe(true);
-      expect(wrapper.find('[data-testid="standby-badge"]').text()).toBe('SIN OPONENTE');
-      expect(wrapper.find('[data-testid="simulated-badge"]').exists()).toBe(false);
       expect(wrapper.findAll('[data-testid="opponent-cell"]').length).toBe(0);
       expect(wrapper.find('[data-testid="standby-board-overlay"]').text()).toBe('STANDBY');
       expect(wrapper.find('[data-testid="training-telemetry"]').exists()).toBe(true);
-      expect(wrapper.text()).toContain('Modo entrenamiento individual');
+      expect(wrapper.text()).toContain('ENTRENAMIENTO');
       wrapper.unmount();
     });
   });
 
   describe('Modo Simulado (1P legacy demo)', () => {
-    it('renderiza la etiqueta "SIMULADO"', () => {
+    it('no muestra el overlay STANDBY ni la telemetría de entrenamiento', () => {
       const wrapper = mount(OpponentMonitor);
-      expect(wrapper.find('[data-testid="simulated-badge"]').exists()).toBe(true);
-      expect(wrapper.text()).toContain('SIMULADO');
+      expect(wrapper.find('[data-testid="standby-board-overlay"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="training-telemetry"]').exists()).toBe(false);
       wrapper.unmount();
     });
 
@@ -86,12 +86,12 @@ describe('OpponentMonitor.vue', () => {
   });
 
   describe('Modo Real (2P Battle)', () => {
-    it('oculta la insignia SIMULADO cuando recibe playerTwo', () => {
+    it('cambia a la telemetría real (nivel de P2) cuando recibe playerTwo', () => {
       const wrapper = mount(OpponentMonitor, {
         props: { playerTwo: mockOpponentState },
       });
-      expect(wrapper.find('[data-testid="simulated-badge"]').exists()).toBe(false);
-      expect(wrapper.find('[data-testid="real-badge"]').text()).toBe('Lvl 3');
+      expect(wrapper.find('[data-testid="training-telemetry"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="opponent-level"]').text()).toBe('3');
       wrapper.unmount();
     });
 

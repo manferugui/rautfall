@@ -1,32 +1,25 @@
 <script setup lang="ts">
 /**
- * Panel de combate (energía real, cartucho real de sabotajes, Residuos encolados, efectos activos).
+ * Módulo ENERGY de la consola central (energía de combate real, 20 segmentos).
  *
  * Responsabilidades:
  * - Mostrar la energía de combate real con 20 segmentos (5 puntos por segmento).
- * - Mostrar los sabotajes almacenados en el cartucho FIFO (máx 2).
- * - Mostrar la basura pendiente por aplicar (Residuos).
- * - Mostrar los efectos activos temporales (Sobrecarga) con tiempo restante en segundos.
  * - 4 estados de color estáticos: 0-49 cian, 50-74 cian intenso/azul, 75-99 ámbar, 100 READY.
+ *
+ * ATTACK SLOTS vive en AttackSlotsPanel.vue (separado para poder ordenar la
+ * consola como ENERGY → SCORE → COMBO → ATTACK SLOTS).
  */
 
 import { computed } from 'vue';
-import type { ActiveEffectSnapshot, SabotageType } from '@rautfall/game-engine';
 
 const TOTAL_SEGMENTS = 20;
 
 const props = withDefaults(
   defineProps<{
     combatEnergy?: number;
-    storedSabotages?: readonly SabotageType[];
-    pendingGarbage?: number;
-    activeEffects?: readonly ActiveEffectSnapshot[];
   }>(),
   {
     combatEnergy: 0,
-    storedSabotages: () => [],
-    pendingGarbage: 0,
-    activeEffects: () => [],
   },
 );
 
@@ -50,252 +43,113 @@ function energySegments(): boolean[] {
   }
   return result;
 }
-
-const cartridgeDisplay = computed(() => {
-  if (!props.storedSabotages || props.storedSabotages.length === 0) {
-    return 'VACÍO';
-  }
-  return props.storedSabotages.join(', ');
-});
-
-const activeEffectsDisplay = computed(() => {
-  if (!props.activeEffects || props.activeEffects.length === 0) {
-    return 'NINGUNO';
-  }
-  return props.activeEffects
-    .map((e) => {
-      if (e.type === 'sobrecarga') {
-        return `SOBRECARGA ${Math.ceil(e.remainingMs / 1000)}s`;
-      }
-      if (e.type === 'polaridad') {
-        const pText = e.remainingPieces === 1 ? 'PIEZA' : 'PIEZAS';
-        return `POLARIDAD · ${e.remainingPieces} ${pText}`;
-      }
-      return (e as ActiveEffectSnapshot).type.toUpperCase();
-    })
-    .join(', ');
-});
 </script>
 
 <template>
-  <div class="combat-panel">
-    <div class="module-heading">
-      <span class="panel-label">Instrumentación de combate</span>
-      <span class="module-badge">PROTOTIPO</span>
-    </div>
-
-    <!-- Energía real -->
-    <div
-      class="combat-block"
-      data-testid="simulated-energy"
-      :data-energy-tier="energyTier"
-    >
-      <div class="block-header">
-        <span class="block-label">ENERGÍA</span>
-        <span
-          v-if="energyTier === 'ready'"
-          class="status-badge status-badge--ready"
-          data-testid="energy-ready-badge"
-        >READY</span>
-        <span v-else class="simulated-badge">SIMULADO</span>
+  <div class="rf-console-module energy-module" data-testid="simulated-energy" :data-energy-tier="energyTier">
+    <div class="rf-console-face">
+      <div class="energy-card-header">
+        <span class="rf-console-label">ENERGY</span>
+        <span v-if="energyTier === 'ready'" class="ready-badge" data-testid="energy-ready-badge">READY</span>
       </div>
-      <div class="energy-bar" :class="`energy-bar--${energyTier}`">
-        <div
-          v-for="(active, index) in energySegments()"
-          :key="index"
-          class="energy-segment"
-          :class="[{ active }, active ? `segment--${energyTier}` : '']"
-        ></div>
-      </div>
-    </div>
-
-    <div class="combat-divider"></div>
-
-    <!-- Cartucho real -->
-    <div class="combat-block" data-testid="simulated-cartridge">
-      <div class="block-header">
-        <span class="block-label">CARTUCHO</span>
-      </div>
-      <div class="cartridge-slot">
-        <span class="cartridge-text" data-testid="cartridge-text">{{ cartridgeDisplay }}</span>
-      </div>
-    </div>
-
-    <div class="combat-divider"></div>
-
-    <!-- Residuos reales -->
-    <div class="combat-block" data-testid="simulated-residues">
-      <div class="block-header">
-        <span class="block-label">RESIDUOS</span>
-      </div>
-      <div class="residues-indicator">
-        <span class="residues-count" data-testid="residues-count">Residuos: {{ props.pendingGarbage }}</span>
-      </div>
-    </div>
-
-    <div class="combat-divider"></div>
-
-    <!-- Efectos activos -->
-    <div class="combat-block" data-testid="active-effects">
-      <div class="block-header">
-        <span class="block-label">EFECTOS ACTIVOS</span>
-      </div>
-      <div class="effects-indicator">
-        <span class="effects-text" data-testid="active-effects-text">{{ activeEffectsDisplay }}</span>
+      <div class="energy-meter-row">
+        <span class="lightning-symbol">⚡</span>
+        <div class="energy-segments-track" :class="`track--${energyTier}`">
+          <div
+            v-for="(active, index) in energySegments()"
+            :key="index"
+            class="energy-segment-block"
+            :class="[{ active }, active ? `segment--${energyTier}` : '']"
+          ></div>
+        </div>
+        <span class="energy-value-num">{{ energyValue }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.combat-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.energy-module {
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.module-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.15rem;
-}
-
-.panel-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
-}
-
-.module-badge {
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  padding: 1px 6px;
-  border-radius: var(--rf-radius-sm, 3px);
-}
-
-.combat-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--rf-color-metal-600, #3a3b3f), transparent);
-}
-
-.combat-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.block-header {
+.energy-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  margin-bottom: 6px;
 }
 
-.block-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--rf-color-text-muted, rgba(232,232,236,0.6));
-}
-
-.simulated-badge {
+.ready-badge {
   font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--rf-color-text-primary, #e8e8ec);
-  background: var(--rf-color-metal-600, #3a3b3f);
-  padding: 1px 6px;
-  border-radius: var(--rf-radius-sm, 3px);
-}
-
-.status-badge--ready {
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #0b0b0d;
+  font-weight: 800;
+  color: #08090b;
   background: #2ecc71;
   padding: 1px 6px;
-  border-radius: var(--rf-radius-sm, 3px);
+  border-radius: 3px;
 }
 
-.energy-bar {
+.energy-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lightning-symbol {
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+  color: #00d4ff;
+  font-size: 1.35rem;
+  text-shadow: 0 0 4px rgba(0, 212, 255, 0.55);
+}
+
+.energy-segments-track {
+  flex: 1;
   display: flex;
   gap: 2px;
+  background: #050607;
+  padding: 4px;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 4px 8px rgba(0, 0, 0, 0.95),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7);
 }
 
-.energy-segment {
-  width: 100%;
-  height: 8px;
+.energy-segment-block {
+  flex: 1;
+  height: 24px;
+  background: #1a1c20;
   border-radius: 1px;
-  background: var(--rf-color-graphite-900, #17181a);
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  transition: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.energy-segment.active.segment--normal {
-  background: var(--rf-color-cyan, #00d4ff);
-  border-color: var(--rf-color-cyan, #00d4ff);
+.energy-segment-block.active.segment--normal,
+.energy-segment-block.active.segment--intense {
+  background: #00d4ff;
+  box-shadow: 0 0 3px rgba(0, 212, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.energy-segment.active.segment--intense {
-  background: #0077ff;
-  border-color: #0077ff;
+.energy-segment-block.active.segment--amber {
+  background: #f39c12;
+  box-shadow: 0 0 3px rgba(243, 156, 18, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.energy-segment.active.segment--amber {
-  background: var(--rf-color-amber, #f39c12);
-  border-color: var(--rf-color-amber, #f39c12);
-}
-
-.energy-segment.active.segment--ready {
+.energy-segment-block.active.segment--ready {
   background: #2ecc71;
-  border-color: #2ecc71;
+  box-shadow: 0 0 3px rgba(46, 204, 113, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-.cartridge-slot {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.cartridge-text {
-  font-size: 0.8125rem;
-  color: var(--rf-color-amber, #f39c12);
-  font-weight: 600;
-}
-
-.residues-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.residues-count {
-  font-size: 0.8125rem;
-  color: var(--rf-color-red, #e74c3c);
-  font-weight: 600;
-}
-
-.effects-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.effects-text {
-  font-size: 0.8125rem;
-  color: var(--rf-color-cyan, #00d4ff);
-  font-weight: 600;
+.energy-value-num {
+  flex-shrink: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-family: monospace;
+  color: #ffffff;
+  min-width: 40px;
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  margin-right: 5px;
 }
 </style>

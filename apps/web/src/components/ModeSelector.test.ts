@@ -11,8 +11,8 @@ import ModeSelector from './ModeSelector.vue';
 describe('ModeSelector.vue', () => {
   it('renderiza la cabecera con el título Rautfall y el descriptor', () => {
     const wrapper = mount(ModeSelector);
-    expect(wrapper.find('.selector-title').text()).toBe('Rautfall');
-    expect(wrapper.find('.selector-descriptor').text()).toBe('Build. Disrupt. Survive.');
+    expect(wrapper.find('.menu-title').text()).toBe('RAUTFALL');
+    expect(wrapper.find('.menu-descriptor').text()).toBe('BUILD · DISRUPT · SURVIVE');
     wrapper.unmount();
   });
 
@@ -22,10 +22,10 @@ describe('ModeSelector.vue', () => {
     const battleBtn = wrapper.find('[data-testid="start-battle-button"]');
 
     expect(trainingBtn.exists()).toBe(true);
-    expect(trainingBtn.text()).toContain('Modo Entrenamiento');
+    expect(trainingBtn.text()).toContain('ENTRENAMIENTO');
 
     expect(battleBtn.exists()).toBe(true);
-    expect(battleBtn.text()).toContain('Batalla contra la IA');
+    expect(battleBtn.text()).toContain('BATALLA TÁCTICA');
 
     wrapper.unmount();
   });
@@ -52,11 +52,11 @@ describe('ModeSelector.vue', () => {
 
   it('muestra la sección resumida de controles de teclado', () => {
     const wrapper = mount(ModeSelector);
-    const controlsCard = wrapper.find('.controls-card');
-    expect(controlsCard.exists()).toBe(true);
-    expect(controlsCard.text()).toContain('Controles de teclado');
-    expect(controlsCard.text()).toContain('Rotación horaria');
-    expect(controlsCard.text()).toContain('Caída instantánea');
+    const controlsModule = wrapper.find('.controls-module');
+    expect(controlsModule.exists()).toBe(true);
+    expect(controlsModule.text()).toContain('Controles de teclado');
+    expect(controlsModule.text()).toContain('Rotación horaria');
+    expect(controlsModule.text()).toContain('Caída instantánea');
     wrapper.unmount();
   });
 
@@ -74,14 +74,18 @@ describe('ModeSelector.vue', () => {
     wrapper.unmount();
   });
 
-  it('renderiza la sección DEV Demo Launcher en entorno de desarrollo', async () => {
+  // El lanzador DEV ya no se monta inline dentro de ModeSelector.vue: ahora
+  // es un botón discreto que emite `openDevTools`, y la pantalla real
+  // (DevLauncherScreen.vue con DevDemoLauncher.vue dentro) la monta App.vue
+  // por separado. Ver DevLauncherScreen.test.ts para esa pantalla.
+  it('renderiza el acceso a DEV Tools en entorno de desarrollo y emite openDevTools al pulsarlo', async () => {
     const wrapper = mount(ModeSelector);
-    // Como defineAsyncComponent resuelve asíncronamente en jsdom, esperamos tick
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await wrapper.vm.$nextTick();
 
-    const launcher = wrapper.find('[data-testid="dev-demo-launcher"]');
-    expect(launcher.exists()).toBe(true);
+    const devButton = wrapper.find('[data-testid="open-dev-tools-button"]');
+    expect(devButton.exists()).toBe(true);
+
+    await devButton.trigger('click');
+    expect(wrapper.emitted('openDevTools')).toBeTruthy();
 
     wrapper.unmount();
   });

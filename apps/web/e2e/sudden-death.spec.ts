@@ -11,7 +11,7 @@ test.describe('sudden-death E2E', () => {
     });
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
-    await page.goto('/?battle-demo=1&sudden-death-demo=1');
+    await page.goto('/?battle-demo=1&sudden-death-demo=1&debug-panel=1');
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
     await expect(page.getByTestId('battle-status')).toHaveText('running');
 

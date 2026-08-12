@@ -22,6 +22,20 @@ const emit = defineEmits<{
   (e: 'mainMenu'): void;
 }>();
 
+// Formato de miles es-ES (2602 -> "2.602", 15680 -> "15.680"), usado
+// exclusivamente para el paso global de Battle (final-battle-step). El
+// SCORE ya no pasa por aquí: se muestra sin separador para coincidir con
+// el HUD (ScorePanel.vue). Opciones explícitas (no solo el default del
+// constructor) para que la agrupación no dependa de comportamiento
+// implícito. Solo presentación — no toca los datos ni la lógica de dominio.
+const numberFormatter = new Intl.NumberFormat('es-ES', {
+  useGrouping: true,
+  maximumFractionDigits: 0,
+});
+function formatInteger(value: number): string {
+  return numberFormatter.format(value);
+}
+
 const formattedTime = computed(() => {
   const totalSec = Math.floor(props.result.elapsedMs / 1000);
   const min = Math.floor(totalSec / 60);
@@ -31,75 +45,89 @@ const formattedTime = computed(() => {
 
 const isBattle = computed(() => props.result.mode === 'battle');
 
-const titleClass = computed(() => {
-  if (!isBattle.value) return 'results-title--training';
+// Estado semántico único (reemplaza el icono/isotipo placeholder anterior):
+// gobierna color, franja de borde y clase de la placa exterior a la vez.
+const outcomeState = computed(() => {
+  if (!isBattle.value) return 'training';
   const winner = props.result.battleResult?.winner;
-  if (winner === 'playerOne') return 'results-title--victory';
-  if (winner === 'playerTwo') return 'results-title--defeat';
-  return 'results-title--draw';
+  if (winner === 'playerOne') return 'victory';
+  if (winner === 'playerTwo') return 'defeat';
+  return 'draw';
 });
+
+const titleClass = computed(() => `results-title--${outcomeState.value}`);
 </script>
 
 <template>
   <div class="results-backdrop" data-testid="results-modal" role="dialog" aria-modal="true">
-    <div class="results-modal">
-      <div class="results-header">
-        <h2 class="results-title" :class="titleClass" data-testid="results-title">
-          {{ result.title }}
-        </h2>
-        <p v-if="result.subtitle" class="results-subtitle">{{ result.subtitle }}</p>
+    <div class="results-modal" :class="`results-modal--${outcomeState}`">
+      <!-- Placa exterior con doble marco y 4 tornillos (mismo asset que HOLD/consola) -->
+      <div class="results-plate" aria-hidden="true"></div>
+      <div class="results-bolt results-bolt--tl" aria-hidden="true"></div>
+      <div class="results-bolt results-bolt--tr" aria-hidden="true"></div>
+      <div class="results-bolt results-bolt--bl" aria-hidden="true"></div>
+      <div class="results-bolt results-bolt--br" aria-hidden="true"></div>
 
-        <div v-if="saveStatus" class="save-status-tag" data-testid="save-status-tag">
-          <span v-if="saveStatus === 'saving'" class="save-status save-status--saving">⏳ Guardando en ranking...</span>
-          <span v-else-if="saveStatus === 'saved'" class="save-status save-status--saved">✓ Partida registrada</span>
-          <span v-else-if="saveStatus === 'error'" class="save-status save-status--error">⚠️ Modo local (sin servidor)</span>
-        </div>
-      </div>
+      <!-- Cara interior hundida: aquí vive todo el contenido -->
+      <div class="results-face">
+        <div class="results-header" :class="`results-header--${outcomeState}`">
+          <h2 class="results-title" :class="titleClass" data-testid="results-title">
+            {{ result.title }}
+          </h2>
+          <p v-if="result.subtitle" class="results-subtitle">{{ result.subtitle }}</p>
 
-      <div class="results-divider"></div>
-
-      <div class="results-grid">
-        <div class="result-metric">
-          <span class="metric-label">Puntuación final</span>
-          <span class="metric-value" data-testid="final-score">{{ result.score }}</span>
-        </div>
-
-        <div class="result-metric">
-          <span class="metric-label">Nivel alcanzado</span>
-          <span class="metric-value" data-testid="final-level">{{ result.level }}</span>
+          <div v-if="saveStatus" class="save-status-tag" data-testid="save-status-tag">
+            <span v-if="saveStatus === 'saving'" class="save-status save-status--saving">Guardando en ranking…</span>
+            <span v-else-if="saveStatus === 'saved'" class="save-status save-status--saved">Partida registrada</span>
+            <span v-else-if="saveStatus === 'error'" class="save-status save-status--error">Modo local (sin servidor)</span>
+          </div>
         </div>
 
-        <div class="result-metric">
-          <span class="metric-label">Tiempo de partida</span>
-          <span class="metric-value" data-testid="final-time">{{ formattedTime }}</span>
+        <div class="results-divider"></div>
+
+        <div class="results-grid">
+          <div class="result-metric">
+            <span class="metric-label">Puntuación final</span>
+            <span class="metric-value" data-testid="final-score">{{ result.score }}</span>
+          </div>
+
+          <div class="result-metric">
+            <span class="metric-label">Nivel alcanzado</span>
+            <span class="metric-value" data-testid="final-level">{{ result.level }}</span>
+          </div>
+
+          <div class="result-metric">
+            <span class="metric-label">Tiempo de partida</span>
+            <span class="metric-value" data-testid="final-time">{{ formattedTime }}</span>
+          </div>
+
+          <div v-if="isBattle && result.battleResult" class="result-metric">
+            <span class="metric-label">Paso global (Battle)</span>
+            <span class="metric-value" data-testid="final-battle-step">{{ formatInteger(result.battleResult.step) }}</span>
+          </div>
         </div>
 
-        <div v-if="isBattle && result.battleResult" class="result-metric">
-          <span class="metric-label">Paso global (Battle)</span>
-          <span class="metric-value" data-testid="final-battle-step">{{ result.battleResult.step }}</span>
+        <div class="results-divider"></div>
+
+        <div class="results-actions">
+          <button
+            type="button"
+            class="rf-btn-tactical rf-btn-primary action-btn"
+            data-testid="replay-button"
+            @click="emit('replay')"
+          >
+            Volver a jugar
+          </button>
+
+          <button
+            type="button"
+            class="rf-btn-tactical rf-btn-secondary action-btn"
+            data-testid="main-menu-button"
+            @click="emit('mainMenu')"
+          >
+            Menú principal
+          </button>
         </div>
-      </div>
-
-      <div class="results-divider"></div>
-
-      <div class="results-actions">
-        <button
-          type="button"
-          class="action-btn action-btn--primary"
-          data-testid="replay-button"
-          @click="emit('replay')"
-        >
-          Volver a jugar
-        </button>
-
-        <button
-          type="button"
-          class="action-btn action-btn--secondary"
-          data-testid="main-menu-button"
-          @click="emit('mainMenu')"
-        >
-          Menú principal
-        </button>
       </div>
     </div>
   </div>
@@ -118,28 +146,89 @@ const titleClass = computed(() => {
   padding: 1rem;
 }
 
+/* Placa exterior: mismo lenguaje físico que HOLD (module-bezel.svg —
+   doble marco, chaflanes y 4 tornillos ya incluidos en el asset). */
 .results-modal {
+  position: relative;
   width: 100%;
   max-width: 440px;
-  background: var(--rf-color-graphite-800, #1f2023);
-  border: 2px solid var(--rf-color-metal-600, #3a3b3f);
-  border-radius: var(--rf-radius-md, 6px);
-  box-shadow: var(--rf-shadow-panel);
-  padding: 1.5rem;
+  padding: 1.75rem 1.5rem 1.5rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+}
+
+.results-plate {
+  position: absolute;
+  inset: 0;
+  background-image: url('/assets/industrial-kit/module-bezel.svg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  z-index: 0;
+}
+
+.results-bolt {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  background-image: url('/assets/industrial-kit/rivet-bolt.svg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
+  z-index: 4;
+}
+
+.results-bolt--tl { top: 8px; left: 9px; }
+.results-bolt--tr { top: 8px; right: 9px; }
+.results-bolt--bl { bottom: 8px; left: 9px; }
+.results-bolt--br { bottom: 8px; right: 9px; }
+
+/* Cara interior: fondo grafito con variación de material + borde
+   hundido — el mismo lenguaje de "rebaje interior" que la consola. */
+.results-face {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  background: linear-gradient(160deg, #1c1d21 0%, #0e0f11 55%, #121316 100%);
+  border-radius: 4px;
+  padding: 1.25rem 1.1rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.8),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
+/* Cabecera con placa de estado: franja de borde + tinte de fondo por
+   resultado en vez de un icono/isotipo sin función. Sin glow permanente. */
 .results-header {
   text-align: center;
+  padding: 0.85rem 0.75rem 0.7rem;
+  border-radius: 3px;
+  border-left: 3px solid var(--rf-color-metal-600, #3a3b3f);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.results-header--victory {
+  border-left-color: var(--rf-color-cyan, #00d4ff);
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.09), transparent 70%);
+}
+
+.results-header--defeat {
+  border-left-color: var(--rf-color-red, #e74c3c);
+  background: linear-gradient(90deg, rgba(231, 76, 60, 0.09), transparent 70%);
+}
+
+.results-header--draw,
+.results-header--training {
+  border-left-color: var(--rf-color-amber, #f39c12);
+  background: linear-gradient(90deg, rgba(243, 156, 18, 0.09), transparent 70%);
 }
 
 .results-title {
-  font-size: 1.75rem;
+  font-size: 1.6rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
 }
 
 .results-title--victory {
@@ -150,10 +239,7 @@ const titleClass = computed(() => {
   color: var(--rf-color-red, #e74c3c);
 }
 
-.results-title--draw {
-  color: var(--rf-color-amber, #f39c12);
-}
-
+.results-title--draw,
 .results-title--training {
   color: var(--rf-color-amber, #f39c12);
 }
@@ -166,8 +252,10 @@ const titleClass = computed(() => {
 
 .save-status-tag {
   margin-top: 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .save-status--saving {
@@ -190,32 +278,37 @@ const titleClass = computed(() => {
 .results-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 0.65rem;
 }
 
+/* Módulo de métrica inset — placa hundida, no "card SaaS". */
 .result-metric {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  background: var(--rf-color-graphite-900, #17181a);
-  padding: 0.75rem;
-  border-radius: var(--rf-radius-sm, 3px);
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  gap: 0.3rem;
+  background: #0a0b0d;
+  padding: 0.65rem 0.75rem;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5);
 }
 
 .metric-label {
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
 }
 
 .metric-value {
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-family: monospace;
-  font-weight: bold;
+  font-weight: 800;
   color: var(--rf-color-text-primary, #e8e8ec);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
 .results-actions {
@@ -225,34 +318,6 @@ const titleClass = computed(() => {
 
 .action-btn {
   flex: 1;
-  padding: 0.75rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  font-family: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-radius: var(--rf-radius-sm, 3px);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.action-btn--primary {
-  border: 1px solid var(--rf-color-cyan, #00d4ff);
-  background: var(--rf-color-graphite-700, #28292c);
-  color: var(--rf-color-cyan, #00d4ff);
-}
-
-.action-btn--primary:hover {
-  background: var(--rf-color-graphite-800, #1f2023);
-}
-
-.action-btn--secondary {
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  background: var(--rf-color-graphite-700, #28292c);
-  color: var(--rf-color-text-primary, #e8e8ec);
-}
-
-.action-btn--secondary:hover {
-  background: var(--rf-color-graphite-800, #1f2023);
+  justify-content: center;
 }
 </style>

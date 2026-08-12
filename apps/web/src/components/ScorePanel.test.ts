@@ -10,10 +10,10 @@ import { mount } from '@vue/test-utils';
 import ScorePanel from './ScorePanel.vue';
 
 describe('ScorePanel', () => {
-  it('muestra 0 en puntuación y la raya en combo cuando score=0 y combo=0', () => {
+  it('muestra 0 en puntuación y 0 en combo cuando score=0 y combo=0', () => {
     const wrapper = mount(ScorePanel, { props: { score: 0, combo: 0, backToBack: 0, combatEnergy: 0 } });
     expect(wrapper.find('[data-testid="score-value"]').text()).toBe('0');
-    expect(wrapper.find('[data-testid="combo-value"]').text()).toBe('\u2014');
+    expect(wrapper.find('[data-testid="combo-value"]').text()).toBe('0');
   });
 
   it('muestra el valor de puntuación cuando score es distinto de cero', () => {

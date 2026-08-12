@@ -42,6 +42,7 @@ import { mapEngineToOpponentPresentation } from '../opponent-mapper';
 import { getAudioManager } from '../../audio';
 import { loadUserSettings } from '../../settings/settings-storage';
 import { getActionByCode, type ControlAction, type ControlBindings } from '../../settings/control-bindings';
+import { shadeColor } from '../piece-shading';
 
 const FIXED_SEED = 42;
 
@@ -613,6 +614,40 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  /**
+   * Dibuja una celda de tetrominó con volumen: base plana + degradado interno
+   * diagonal sutil + bisel de borde (highlight arriba/izquierda, sombra
+   * abajo/derecha) + contorno oscuro controlado. Solo renderizado visual —
+   * no afecta colisiones, PieceType ni semántica de dominio.
+   */
+  private drawBeveledCell(x: number, y: number, size: number, color: number, alpha = 1): void {
+    const highlight = shadeColor(color, 0.32);
+    const shadow = shadeColor(color, -0.32);
+    const edge = 3;
+
+    // Base plana
+    this.graphics.fillStyle(color, alpha);
+    this.graphics.fillRect(x, y, size, size);
+
+    // Degradado interno diagonal (dos triángulos suaves, sin blur)
+    this.graphics.fillStyle(highlight, alpha * 0.18);
+    this.graphics.fillTriangle(x, y, x + size, y, x, y + size);
+    this.graphics.fillStyle(shadow, alpha * 0.18);
+    this.graphics.fillTriangle(x + size, y, x + size, y + size, x, y + size);
+
+    // Bisel de borde: highlight arriba/izquierda, sombra abajo/derecha
+    this.graphics.fillStyle(highlight, alpha * 0.85);
+    this.graphics.fillRect(x, y, size, edge);
+    this.graphics.fillRect(x, y, edge, size);
+    this.graphics.fillStyle(shadow, alpha * 0.85);
+    this.graphics.fillRect(x, y + size - edge, size, edge);
+    this.graphics.fillRect(x + size - edge, y, edge, size);
+
+    // Contorno exterior oscuro y controlado
+    this.graphics.lineStyle(1, 0x000000, 0.45);
+    this.graphics.strokeRect(x, y, size, size);
+  }
+
   private renderFrame(): void {
       const snap = this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot();
 
@@ -625,14 +660,23 @@ export class GameScene extends Phaser.Scene {
           const canvasX = boardXToCanvas(x);
           const canvasY = boardYToCanvas(y);
           if (cell !== null) {
-            this.graphics.fillStyle(PIECE_COLORS[cell as PieceType | 'garbage'], 1);
-            this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-            this.graphics.lineStyle(1, 0x000000, 0.3);
-            this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+            if (cell === 'garbage') {
+              // Estilo visual exclusivo de celda de basura corroída / residuos
+              this.graphics.fillStyle(0x383a3f, 1);
+              this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+              this.graphics.fillStyle(0x5c2a18, 1);
+              this.graphics.fillRect(canvasX + 2, canvasY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+              this.graphics.fillStyle(0x25262a, 1);
+              this.graphics.fillRect(canvasX + 4, canvasY + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+              this.graphics.lineStyle(1, 0x8b3a1b, 0.8);
+              this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+            } else {
+              this.drawBeveledCell(canvasX, canvasY, CELL_SIZE, PIECE_COLORS[cell as PieceType]);
+            }
           } else {
-            this.graphics.fillStyle(0x1a1a2e, 1);
+            this.graphics.fillStyle(0x141517, 1);
             this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-            this.graphics.lineStyle(1, 0x2a2a3e, 1);
+            this.graphics.lineStyle(1, 0x25262a, 1);
             this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
           }
         }
@@ -659,10 +703,7 @@ export class GameScene extends Phaser.Scene {
           if (!isRowVisible(cell.y)) continue;
           const canvasX = boardXToCanvas(cell.x);
           const canvasY = boardYToCanvas(cell.y);
-          this.graphics.fillStyle(color, 1);
-          this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-          this.graphics.lineStyle(1, 0x000000, 0.3);
-          this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
+          this.drawBeveledCell(canvasX, canvasY, CELL_SIZE, color);
         }
       }
     }
@@ -754,6 +795,7 @@ export class GameScene extends Phaser.Scene {
           step: bSnap.step,
           lastSabotageRouted: this.lastSabotageRouted,
           lastSabotageBlocked: this.lastSabotageBlocked,
+          suddenDeathPhase: bSnap.suddenDeath?.phase ?? null,
           playerTwo: mapEngineToOpponentPresentation(
             this.battleSession.getPerceivedOpponentSnapshot('playerOne'),
             bSnap.playerTwoState,

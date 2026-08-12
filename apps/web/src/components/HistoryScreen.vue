@@ -90,15 +90,15 @@ function getResultClass(record: MatchRecord): string {
 </script>
 
 <template>
-  <div class="history-screen" data-testid="history-screen">
+  <div class="history-screen rf-riveted-panel" data-testid="history-screen">
     <div class="history-header">
-      <div class="header-tag">
-        <h1 class="header-title">HISTORIAL DE PARTIDAS</h1>
+      <div class="title-tag">
+        <h1 class="history-title">HISTORIAL DE PARTIDAS</h1>
       </div>
       <p class="header-subtitle">Jugador local: <strong class="player-tag">{{ playerName }}</strong></p>
     </div>
 
-    <div class="hazard-strip" aria-hidden="true"></div>
+    <div class="rf-hazard-strip hazard-strip" aria-hidden="true"></div>
 
     <div class="history-content">
       <div v-if="status === 'loading'" class="state-panel state-panel--loading" data-testid="history-loading">
@@ -109,7 +109,7 @@ function getResultClass(record: MatchRecord): string {
       <div v-else-if="status === 'error'" class="state-panel state-panel--error" data-testid="history-error">
         <p class="error-msg">⚠️ No se pudo obtener el historial</p>
         <p class="error-sub">{{ errorMessage }}</p>
-        <button type="button" class="retry-btn" data-testid="history-retry-button" @click="loadHistory">
+        <button type="button" class="rf-btn-tactical rf-btn-utility retry-btn" data-testid="history-retry-button" @click="loadHistory">
           REINTENTAR CONEXIÓN
         </button>
       </div>
@@ -119,7 +119,7 @@ function getResultClass(record: MatchRecord): string {
         <p class="empty-sub">Juega una partida en Entrenamiento o Batalla para guardar tu primer registro.</p>
       </div>
 
-      <div v-else-if="status === 'success'" class="table-container" data-testid="history-table">
+      <div v-else-if="status === 'success'" class="table-container rf-panel-inset" data-testid="history-table">
         <table class="history-table">
           <thead>
             <tr>
@@ -152,7 +152,7 @@ function getResultClass(record: MatchRecord): string {
     <div class="history-footer">
       <button
         type="button"
-        class="back-btn"
+        class="rf-btn-tactical rf-btn-secondary back-btn"
         data-testid="history-back-button"
         @click="onBack"
       >
@@ -252,14 +252,8 @@ function getResultClass(record: MatchRecord): string {
 }
 
 .retry-btn {
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  border: 1px solid var(--rf-color-amber, #f39c12);
-  background: var(--rf-color-graphite-700, #28292c);
+  border-color: var(--rf-color-amber, #f39c12);
   color: var(--rf-color-amber, #f39c12);
-  border-radius: var(--rf-radius-sm, 3px);
-  cursor: pointer;
 }
 
 .table-container {
@@ -336,13 +330,6 @@ function getResultClass(record: MatchRecord): string {
 .back-btn {
   padding: 0.75rem 1.5rem;
   font-size: 0.8125rem;
-  font-weight: 700;
-  font-family: inherit;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
-  background: var(--rf-color-graphite-700, #28292c);
-  color: var(--rf-color-text-primary, #e8e8ec);
   border-radius: var(--rf-radius-sm, 3px);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;

@@ -33,7 +33,7 @@ test.describe('Flujo de Audio y Mute', () => {
 
     // 4. Iniciar modo Entrenamiento y verificar la cabecera
     await page.click('[data-testid="start-training-button"]');
-    await expect(page.locator('.app-title')).toHaveText('Rautfall');
+    await expect(page.locator('.app-title')).toHaveText('RAUTFALL');
 
     const headerMuteBtn = page.locator('.app-header [data-testid="audio-mute-button"]');
     await expect(headerMuteBtn).toBeVisible();

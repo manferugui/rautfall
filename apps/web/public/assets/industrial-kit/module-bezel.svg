@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="180" viewBox="0 0 280 180">
+  <defs>
+    <radialGradient id="rf-bolt" cx="0.34" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#6b737b"/>
+      <stop offset="0.42" stop-color="#3d4349"/>
+      <stop offset="1" stop-color="#191c1f"/>
+    </radialGradient>
+    <linearGradient id="rf-steel" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#3a4046"/>
+      <stop offset="0.45" stop-color="#272b30"/>
+      <stop offset="1" stop-color="#1a1d20"/>
+    </linearGradient>
+  </defs>
+  <path fill-rule="evenodd" d="M12 2 H268 L278 12 V168 L268 178 H12 L2 168 V12 Z M26 26 H254 V154 H26 Z" fill="url(#rf-steel)"/>
+  <path d="M12 2 H268 L278 12 V168 L268 178 H12 L2 168 V12 Z" fill="none" stroke="#5b636a" stroke-opacity="0.5"/>
+  <path d="M12 3 H267 L277 13" fill="none" stroke="#858e96" stroke-opacity="0.45" stroke-width="1.5"/>
+  <path d="M3 168 L12 177 H268" fill="none" stroke="#000" stroke-opacity="0.6" stroke-width="1.5"/>
+  <path d="M26 26 H254 V154 H26 Z" fill="none" stroke="#000" stroke-opacity="0.85" stroke-width="3"/>
+  <path d="M27 153 H253 M253 27 V153" fill="none" stroke="#5b636a" stroke-opacity="0.25" stroke-width="1.2"/>
+  <rect x="112" y="6" width="56" height="8" fill="#16191b"/>
+  <rect x="112" y="6" width="56" height="1" fill="#7f888f" opacity="0.3"/>
+  <g>
+    <circle cx="13" cy="13" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="267" cy="13" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="13" cy="167" r="4.4" fill="url(#rf-bolt)"/>
+    <circle cx="267" cy="167" r="4.4" fill="url(#rf-bolt)"/>
+  </g>
+</svg>
