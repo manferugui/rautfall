@@ -119,4 +119,5 @@ export type PhaserGameController = Readonly<{
   reset(): void;
   togglePause(): void;
   destroy(): void;
+  getMatchSeed?: () => number;
 }>;

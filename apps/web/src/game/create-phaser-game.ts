@@ -15,13 +15,15 @@ export type CreatePhaserGameOptions = {
   parent: HTMLElement;
   /** Modo de juego seleccionado para la sesión ('training' | 'battle'). */
   mode?: GameMode;
+  /** Semilla opcional explícita para la partida (si no se indica, GameScene generará una nueva). */
+  seed?: number | undefined;
   /** Callback para notificar cambios de estado a Vue. */
   onStateUpdate: (state: GamePresentationState) => void;
 };
 
 /**
  * Crea una única instancia de Phaser.Game con la configuración del prototipo.
- * Devuelve un controlador con `reset()` y `destroy()`.
+ * Devuelve un controlador con `reset()`, `togglePause()`, `destroy()` y `getMatchSeed()`.
  */
 export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameController {
   const sceneCallbacks: GameSceneCallbacks = {
@@ -50,6 +52,7 @@ export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameCo
   game.scene.add('GameScene', GameScene, true, {
     callbacks: sceneCallbacks,
     mode: options.mode ?? 'training',
+    seed: options.seed,
   });
 
   return {
@@ -67,6 +70,10 @@ export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameCo
     },
     destroy(): void {
       game.destroy(true);
+    },
+    getMatchSeed(): number {
+      const scene = game.scene.getScene('GameScene') as GameScene | null;
+      return scene ? scene.getMatchSeed() : 0;
     },
   };
 }

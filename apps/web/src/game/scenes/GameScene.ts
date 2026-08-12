@@ -43,8 +43,8 @@ import { getAudioManager } from '../../audio';
 import { loadUserSettings } from '../../settings/settings-storage';
 import { getActionByCode, type ControlAction, type ControlBindings } from '../../settings/control-bindings';
 import { shadeColor } from '../piece-shading';
+import { generateMatchSeed } from '../seed';
 
-const FIXED_SEED = 42;
 
 const PIECE_COLORS: Record<PieceType | 'garbage', number> = {
   I: 0x00d4ff,
@@ -124,13 +124,20 @@ export class GameScene extends Phaser.Scene {
   private devMaxActionsInSingleStep = 0;
   private lastBotActionIndex = 0;
 
+  private matchSeed = 42;
+
   constructor() {
     super({ key: 'GameScene' });
   }
 
-  init(data: { callbacks: GameSceneCallbacks; mode?: GameMode }): void {
+  init(data: { callbacks: GameSceneCallbacks; mode?: GameMode; seed?: number | undefined }): void {
     this.callbacks = data.callbacks;
     this.mode = data.mode ?? 'training';
+    this.matchSeed = data.seed ?? generateMatchSeed();
+  }
+
+  getMatchSeed(): number {
+    return this.matchSeed;
   }
 
   create(): void {
@@ -495,7 +502,7 @@ export class GameScene extends Phaser.Scene {
       this.playerTwoBot = null;
       this.engine = createPolarityDemoEngine();
     } else if (this.mode === 'battle') {
-      this.battleSession = createBattleSession({ seed: FIXED_SEED, config: prototypeConfig });
+      this.battleSession = createBattleSession({ seed: this.matchSeed, config: prototypeConfig });
       this.playerTwoBot = createDeterministicBot();
       this.engine = this.battleSession.getEngine('playerOne');
       this.lastSabotageRouted = null;
@@ -503,7 +510,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.battleSession = null;
       this.playerTwoBot = null;
-      this.engine = createGameEngine({ seed: FIXED_SEED, config: prototypeConfig });
+      this.engine = createGameEngine({ seed: this.matchSeed, config: prototypeConfig });
     }
     if (this.playerTwoBot) {
       this.playerTwoBot.reset();

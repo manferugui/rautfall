@@ -18,6 +18,7 @@ import type { GameMode, GamePresentationState, PhaserGameController } from '../g
 const props = defineProps<{
   onStateUpdate: (state: GamePresentationState) => void;
   mode?: GameMode;
+  seed?: number;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +34,7 @@ onMounted(() => {
   controller = createPhaserGame({
     parent: gameContainer.value,
     mode: props.mode ?? 'training',
+    seed: props.seed,
     onStateUpdate: (state: GamePresentationState) => {
       props.onStateUpdate(state);
     },

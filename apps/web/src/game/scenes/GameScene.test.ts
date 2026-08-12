@@ -274,4 +274,54 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       expect.arrayContaining([expect.objectContaining({ type: 'polaridad' })]),
     );
   });
+
+  describe('Semillas de producción y determinismo (matchSeed)', () => {
+    it('respeta una semilla explícita pasada en init', () => {
+      const scene = new GameScene();
+      scene.init({ callbacks: { onStateUpdate: vi.fn() }, mode: 'battle', seed: 12345 });
+      expect(scene.getMatchSeed()).toBe(12345);
+    });
+
+    it('genera una semilla uint32 aleatoria cuando no se pasa seed en init', () => {
+      const scene1 = new GameScene();
+      scene1.init({ callbacks: { onStateUpdate: vi.fn() }, mode: 'training' });
+      const seed1 = scene1.getMatchSeed();
+
+      expect(Number.isInteger(seed1)).toBe(true);
+      expect(seed1).toBeGreaterThanOrEqual(0);
+      expect(seed1).toBeLessThanOrEqual(4_294_967_295);
+    });
+
+    it('reutiliza exactamente la misma semilla al pulsar la tecla R para reiniciar la partida', () => {
+      const scene = new GameScene();
+      scene.init({ callbacks: { onStateUpdate: vi.fn() }, mode: 'battle', seed: 9999 });
+
+      (scene as unknown as { input: { keyboard: { on: unknown; off: unknown } } }).input = {
+        keyboard: { on: vi.fn(), off: vi.fn() },
+      };
+      (scene as unknown as { add: { graphics: () => unknown } }).add = {
+        graphics: () => ({
+          setPosition: vi.fn(),
+          clear: vi.fn(),
+          fillStyle: vi.fn(),
+          fillRect: vi.fn(),
+          fillTriangle: vi.fn(),
+          lineStyle: vi.fn(),
+          strokeRect: vi.fn(),
+        }),
+      };
+
+      scene.create();
+
+      const initialEngineSeed = (scene as unknown as { engine: { getSnapshot: () => { seed: number } } }).engine.getSnapshot().seed;
+      expect(initialEngineSeed).toBe(9999);
+
+      // Simular reset manual
+      scene.resetGame();
+
+      const resettedEngineSeed = (scene as unknown as { engine: { getSnapshot: () => { seed: number } } }).engine.getSnapshot().seed;
+      expect(resettedEngineSeed).toBe(9999);
+      expect(scene.getMatchSeed()).toBe(9999);
+    });
+  });
 });

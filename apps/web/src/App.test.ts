@@ -263,4 +263,23 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
     wrapper.unmount();
     (window as unknown as { location: Location }).location = originalLocation;
   });
+
+  it('pasa una semilla uint32 a createPhaserGame al iniciar partida', async () => {
+    const wrapper = mountApp();
+    await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
+
+    expect(mockCreatePhaserGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'battle',
+        seed: expect.any(Number),
+      }),
+    );
+
+    const passedSeed = mockCreatePhaserGame.mock.calls[0]![0].seed;
+    expect(Number.isInteger(passedSeed)).toBe(true);
+    expect(passedSeed).toBeGreaterThanOrEqual(0);
+    expect(passedSeed).toBeLessThanOrEqual(4_294_967_295);
+
+    wrapper.unmount();
+  });
 });

@@ -26,6 +26,7 @@ import { submitMatch } from './api/client';
 import type { CreateMatchInput } from '@rautfall/contracts';
 
 import { isSfxLabActive } from './game/sfx-lab-demo';
+import { generateMatchSeed } from './game/seed';
 import { clearDevDemoQueryParams } from './dev/dev-demos';
 import { defineAsyncComponent, type Component } from 'vue';
 
@@ -61,6 +62,7 @@ const isDevDemo = hasDevDemoFlag();
 const isDevDebugPanel = ref(import.meta.env.DEV && isDebugPanelActive());
 const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
 const gameMode = ref<GameMode>(isBattleDemoActive() ? 'battle' : 'training');
+const matchSeed = ref<number>(generateMatchSeed());
 const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 
 const audioManager = getAudioManager();
@@ -216,6 +218,7 @@ function selectMode(mode: GameMode): void {
   audioManager.playMusic('gameplay');
   currentClientMatchId = crypto.randomUUID();
   saveStatus.value = 'idle';
+  matchSeed.value = generateMatchSeed();
   gameMode.value = mode;
   gameResult.value = null;
   appScreen.value = 'playing';
@@ -245,6 +248,7 @@ async function doReplay(): Promise<void> {
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
+  matchSeed.value = generateMatchSeed();
   appScreen.value = 'playing';
 
   await nextTick();
@@ -433,6 +437,7 @@ function openDevTools(): void {
                   <GameCanvas
                     v-if="isCanvasMounted"
                     :mode="gameMode"
+                    :seed="matchSeed"
                     :on-state-update="onStateUpdate"
                     @controller-ready="onControllerReady"
                   />
