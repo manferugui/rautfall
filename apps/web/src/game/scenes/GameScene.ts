@@ -661,14 +661,35 @@ export class GameScene extends Phaser.Scene {
           const canvasY = boardYToCanvas(y);
           if (cell !== null) {
             if (cell === 'garbage') {
-              // Estilo visual exclusivo de celda de basura corroída / residuos
-              this.graphics.fillStyle(0x383a3f, 1);
+              // Estilo visual exclusivo de celda de basura: bloque sólido de
+              // acero contaminado (no un hueco con borde óxido). Misma
+              // construcción de bisel de borde que drawBeveledCell
+              // (highlight sup./izq., sombra inf./der., contorno oscuro),
+              // pero con relleno grafito visible como base, apagada y con
+              // manchas de corrosión contenidas en vez de un relleno oscuro
+              // grande que vaciaba el centro.
+              const garbageEdge = 3;
+              this.graphics.fillStyle(0x4a4c52, 1);
               this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
-              this.graphics.fillStyle(0x5c2a18, 1);
-              this.graphics.fillRect(canvasX + 2, canvasY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
-              this.graphics.fillStyle(0x25262a, 1);
-              this.graphics.fillRect(canvasX + 4, canvasY + 4, CELL_SIZE - 8, CELL_SIZE - 8);
-              this.graphics.lineStyle(1, 0x8b3a1b, 0.8);
+
+              // Manchas de corrosión contenidas (parches apagados, no un
+              // relleno grande) — dan textura de "contaminado" sin abrir
+              // un centro oscuro.
+              this.graphics.fillStyle(0x5c4a34, 0.3);
+              this.graphics.fillRect(canvasX + CELL_SIZE * 0.15, canvasY + CELL_SIZE * 0.45, CELL_SIZE * 0.22, CELL_SIZE * 0.18);
+              this.graphics.fillStyle(0x33353a, 0.4);
+              this.graphics.fillRect(canvasX + CELL_SIZE * 0.55, canvasY + CELL_SIZE * 0.2, CELL_SIZE * 0.2, CELL_SIZE * 0.16);
+
+              // Bisel de borde apagado y sucio (mismo edge que drawBeveledCell)
+              this.graphics.fillStyle(0x64666c, 0.55);
+              this.graphics.fillRect(canvasX, canvasY, CELL_SIZE, garbageEdge);
+              this.graphics.fillRect(canvasX, canvasY, garbageEdge, CELL_SIZE);
+              this.graphics.fillStyle(0x362a20, 0.7);
+              this.graphics.fillRect(canvasX, canvasY + CELL_SIZE - garbageEdge, CELL_SIZE, garbageEdge);
+              this.graphics.fillRect(canvasX + CELL_SIZE - garbageEdge, canvasY, garbageEdge, CELL_SIZE);
+
+              // Contorno corroído oscuro
+              this.graphics.lineStyle(1, 0x241a12, 0.75);
               this.graphics.strokeRect(canvasX, canvasY, CELL_SIZE, CELL_SIZE);
             } else {
               this.drawBeveledCell(canvasX, canvasY, CELL_SIZE, PIECE_COLORS[cell as PieceType]);
