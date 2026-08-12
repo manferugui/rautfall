@@ -68,7 +68,6 @@ type ConsumedFlags = {
 
 export type GameSceneCallbacks = {
   onStateUpdate: (state: GamePresentationState) => void;
-  onPauseRequested?: () => void;
 };
 
 export class GameScene extends Phaser.Scene {
@@ -157,10 +156,10 @@ export class GameScene extends Phaser.Scene {
     const onKeyDown = (event: KeyboardEvent): void => {
       void getAudioManager().unlock();
 
-      // Tecla Escape fija: solicitar pausa
+      // Tecla Escape fija: alternar pausa/reanudación
       if (event.code === 'Escape') {
         if (!event.repeat) {
-          this.callbacks.onPauseRequested?.();
+          this.togglePause();
         }
         return;
       }

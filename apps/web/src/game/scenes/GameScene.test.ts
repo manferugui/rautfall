@@ -11,7 +11,17 @@ vi.mock('phaser', () => {
         off: vi.fn(),
       },
     };
-    add = { graphics: () => ({ setPosition: vi.fn() }) };
+    add = {
+      graphics: () => ({
+        setPosition: vi.fn(),
+        clear: vi.fn(),
+        fillStyle: vi.fn(),
+        fillRect: vi.fn(),
+        fillTriangle: vi.fn(),
+        lineStyle: vi.fn(),
+        strokeRect: vi.fn(),
+      }),
+    };
   }
 
   return {
@@ -60,12 +70,22 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       off: vi.fn(),
     };
 
-    const onPauseRequested = vi.fn();
+    const onStateUpdate = vi.fn();
     const scene = new GameScene();
-    scene.init({ callbacks: { onStateUpdate: vi.fn(), onPauseRequested }, mode: 'training' });
+    scene.init({ callbacks: { onStateUpdate }, mode: 'training' });
 
     (scene as unknown as { input: { keyboard: typeof mockKeyboard } }).input = { keyboard: mockKeyboard };
-    (scene as unknown as { add: { graphics: () => { setPosition: () => void } } }).add = { graphics: () => ({ setPosition: vi.fn() }) };
+    (scene as unknown as { add: { graphics: () => unknown } }).add = {
+      graphics: () => ({
+        setPosition: vi.fn(),
+        clear: vi.fn(),
+        fillStyle: vi.fn(),
+        fillRect: vi.fn(),
+        fillTriangle: vi.fn(),
+        lineStyle: vi.fn(),
+        strokeRect: vi.fn(),
+      }),
+    };
 
     scene.create();
 
@@ -81,7 +101,7 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
 
     const readKeys = (scene as unknown as { readKeys: () => ReturnType<typeof scene['readKeys']> }).readKeys.bind(scene);
 
-    return { scene, onPauseRequested, dispatchKeyDown, dispatchKeyUp, readKeys };
+    return { scene, onStateUpdate, dispatchKeyDown, dispatchKeyUp, readKeys };
   }
 
   it('no crea ansiosamente el AudioContext durante la instanciación de la escena', () => {
@@ -209,11 +229,24 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
     expect(keys.justPressedUp).toBe(false);
   });
 
-  it('Escape actúa como hotkey fija de sistema solicitando pausa y no es remapeable', () => {
-    const { dispatchKeyDown, onPauseRequested } = setupSceneWithListeners();
+  it('Escape actúa como hotkey fija de sistema alternando pausa/reanudación sin responder a auto-repeat', () => {
+    const { scene, onStateUpdate, dispatchKeyDown } = setupSceneWithListeners();
 
-    dispatchKeyDown('Escape');
-    expect(onPauseRequested).toHaveBeenCalledTimes(1);
+    expect((scene as unknown as { isPaused: boolean }).isPaused).toBe(false);
+
+    // Primer Escape (!repeat): alterna de running a paused
+    dispatchKeyDown('Escape', false);
+    expect((scene as unknown as { isPaused: boolean }).isPaused).toBe(true);
+    expect(onStateUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'paused' }));
+
+    // Evento con repeat === true (auto-repeat del navegador): debe ignorarse y mantener paused
+    dispatchKeyDown('Escape', true);
+    expect((scene as unknown as { isPaused: boolean }).isPaused).toBe(true);
+
+    // Segundo Escape (!repeat): alterna de paused a running
+    dispatchKeyDown('Escape', false);
+    expect((scene as unknown as { isPaused: boolean }).isPaused).toBe(false);
+    expect(onStateUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'running' }));
   });
 
   it('KeyR actúa como hotkey fija reseteando la partida y reiniciando la música de gameplay', () => {
