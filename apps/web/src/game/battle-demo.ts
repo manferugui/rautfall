@@ -10,6 +10,14 @@ import {
   type BattleSession,
   type BattleSessionOptions,
 } from '@rautfall/battle-engine';
+import type { SabotageType } from '@rautfall/game-engine';
+
+export const BATTLE_DEMO_INITIAL_SABOTAGES: readonly SabotageType[] = Object.freeze([
+  'residuos',
+  'sobrecarga',
+  'polaridad',
+  'interferencia',
+]);
 
 /**
  * Determina si el modo de demostración de desarrollo de Batalla Local está activo.
@@ -74,8 +82,9 @@ export function isInterferenceDemoActive(searchOverride?: string): boolean {
  */
 export function createBattleDemoSession(
   options?: Partial<BattleSessionOptions>,
+  searchOverride?: string,
 ): BattleSession {
-  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const search = searchOverride ?? (typeof window !== 'undefined' && window.location.search ? window.location.search : '?battle-demo=1');
   const params = new URLSearchParams(search);
   const botSabotageParam = params.get('bot-sabotage');
 
@@ -103,6 +112,11 @@ export function createBattleDemoSession(
         ...playerOneInitialState,
       };
     }
+  } else if (import.meta.env.DEV && isBattleDemoActive(search)) {
+    playerOneInitialState = {
+      storedSabotages: [...BATTLE_DEMO_INITIAL_SABOTAGES],
+      ...playerOneInitialState,
+    };
   }
 
   const isSuddenDeathDemo = import.meta.env.DEV && isSuddenDeathDemoActive(search);
@@ -129,9 +143,10 @@ Semilla compartida: 42
 Comprobaciones:
   1. Pulsar Flecha Izquierda / Derecha / Z / Space → P1 avanza y realiza acciones.
   2. Observar P2 → el bot heurístico evalúa tableros y coloca piezas de forma autónoma.
-  3. Acumular energía y pulsar A → P1 lanza sabotaje que el orquestador enruta realmente a P2.
-  4. Comprobar panel técnico DEV de P2 → se muestra status, energía, nivel, sabotajes recibidos y efectos en P2.
-  5. Pulsar Esc → la aplicación web deja de llamar a battleSession.step() y congela ambos motores y el bot.
-  6. Pulsar R → reinicio coordinado de la sesión de batalla y el bot.
+  3. Pulsar A → P1 dispara sabotaje cargado (RESIDUOS, SOBRECARGA, POLARIDAD, INTERFERENCIA) mediante el flujo real.
+  4. Pulsar 0 → Recargar inventario DEV inicial de sabotajes en P1.
+  5. Comprobar panel técnico DEV de P2 → status, energía, nivel, sabotajes recibidos y efectos en P2.
+  6. Pulsar Esc → pausar/reanudar sesión.
+  7. Pulsar R → reinicio coordinado de la sesión de batalla.
 =====================================================================
 `;

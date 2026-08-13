@@ -1,5 +1,5 @@
 import type { ActiveEffectSnapshot, PieceType, SabotageType } from '@rautfall/game-engine';
-import type { BattleStatus, BattleWinner, BattleWarningSnapshot, BattleImmunitySnapshot } from '@rautfall/battle-engine';
+import type { BattleStatus, BattleWinner, BattleWarningSnapshot, BattleImmunitySnapshot, BattleParticipantStateSnapshot } from '@rautfall/battle-engine';
 import type { SessionStatus } from './session-status';
 
 export type CellPresentation = Readonly<{
@@ -51,13 +51,23 @@ export type BotDevDiagnostic = Readonly<{
   maxActionsInSingleStep?: number;
 }>;
 
+export type SabotageBlockedDetails = Readonly<{
+  target: 'playerOne' | 'playerTwo';
+  source: 'playerOne' | 'playerTwo';
+  sabotage: SabotageType;
+  reason: 'immunity' | 'alreadyActive' | 'warningPending';
+  id: number;
+}>;
+
 export type BattlePresentationState = Readonly<{
   status: BattleStatus;
   winner: BattleWinner;
   step: number;
   lastSabotageRouted: string | null;
   lastSabotageBlocked?: string | null;
+  lastSabotageBlockedDetails?: SabotageBlockedDetails | null;
   suddenDeathPhase?: string | null;
+  playerOneState?: BattleParticipantStateSnapshot;
   playerTwo: OpponentPresentationState;
   botDevDiagnostic?: BotDevDiagnostic | undefined;
 }>;
@@ -91,6 +101,13 @@ export type GameResultSummary = Readonly<{
   }> | undefined;
 }>;
 
+export type SabotageLaunchedDetails = Readonly<{
+  source: 'playerOne' | 'playerTwo';
+  target: 'playerOne' | 'playerTwo';
+  sabotage: SabotageType;
+  id: number;
+}>;
+
 /**
  * Resumen mínimo que Phaser comunica a Vue.
  */
@@ -112,6 +129,7 @@ export type GamePresentationState = Readonly<{
   baseGravityCellsPerSecond: number;
   activeGravityCellsPerSecond: number;
   battleState?: BattlePresentationState;
+  lastSabotageLaunchedDetails?: SabotageLaunchedDetails | null;
 }>;
 
 /**

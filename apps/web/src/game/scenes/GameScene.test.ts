@@ -41,6 +41,7 @@ import { getAudioManager } from '../../audio';
 import { GameScene } from './GameScene';
 import { saveUserSettings } from '../../settings/settings-storage';
 import { DEFAULT_CONTROL_BINDINGS } from '../../settings/control-bindings';
+import type { BattleSession } from '@rautfall/battle-engine';
 
 describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/ARR y hotkeys fijas', () => {
   beforeEach(() => {
@@ -322,6 +323,255 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       const resettedEngineSeed = (scene as unknown as { engine: { getSnapshot: () => { seed: number } } }).engine.getSnapshot().seed;
       expect(resettedEngineSeed).toBe(9999);
       expect(scene.getMatchSeed()).toBe(9999);
+    });
+  });
+
+  describe('Controles DEV para warning-demo (Digit1/2/3, Numpad1/2/3)', () => {
+    it('Digit1 y Numpad1 disparan warning de sobrecarga en playerOne cuando warning-demo está activo', () => {
+      window.history.pushState({}, '', '?warning-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+      const battleSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+      expect(battleSession).toBeDefined();
+
+      dispatchKeyDown('Digit1', false);
+      scene.update(0, 16);
+
+      const snap = battleSession.getSnapshot();
+      expect(snap.playerOneState.warnings.some((w) => w.sabotage === 'sobrecarga')).toBe(true);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('Digit2 y Numpad2 disparan warning de polaridad en playerOne cuando warning-demo está activo', () => {
+      window.history.pushState({}, '', '?warning-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+      const battleSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+
+      dispatchKeyDown('Numpad2', false);
+      scene.update(0, 16);
+
+      const snap = battleSession.getSnapshot();
+      expect(snap.playerOneState.warnings.some((w) => w.sabotage === 'polaridad')).toBe(true);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('Digit3 y Numpad3 disparan warning de interferencia en playerOne cuando warning-demo está activo', () => {
+      window.history.pushState({}, '', '?warning-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+      const battleSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+
+      dispatchKeyDown('Digit3', false);
+      scene.update(0, 16);
+
+      const snap = battleSession.getSnapshot();
+      expect(snap.playerOneState.warnings.some((w) => w.sabotage === 'interferencia')).toBe(true);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('event.repeat === true ignora la pulsación y no genera warning adicional', () => {
+      window.history.pushState({}, '', '?warning-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+      const battleSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+
+      dispatchKeyDown('Digit1', true);
+      scene.update(0, 16);
+
+      const snap = battleSession.getSnapshot();
+      expect(snap.playerOneState.warnings).toHaveLength(0);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('fuera de warning-demo las teclas Digit1/2/3 no ejecutan lógica DEV', () => {
+      window.history.pushState({}, '', '?battle-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+      const battleSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+
+      dispatchKeyDown('Digit1', false);
+      scene.update(0, 16);
+
+      const snap = battleSession.getSnapshot();
+      expect(snap.playerOneState.warnings).toHaveLength(0);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('tecla 0 (Digit0/Numpad0) resetea la demo y permite volver a disparar el mismo sabotaje inmediatamente', () => {
+      window.history.pushState({}, '', '?warning-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+
+      // 1. Disparar sobrecarga con tecla 1
+      dispatchKeyDown('Digit1', false);
+      scene.update(0, 16);
+
+      let bSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+      expect(bSession.getSnapshot().playerOneState.warnings).toHaveLength(1);
+
+      // 2. Pulsar tecla 0 para resetear la demo
+      dispatchKeyDown('Digit0', false);
+
+      bSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+      const resetSnap = bSession.getSnapshot();
+      expect(resetSnap.playerOneState.warnings).toHaveLength(0);
+      expect(resetSnap.playerOneState.immunities).toHaveLength(0);
+      expect(resetSnap.playerOneState.activeEffects).toHaveLength(0);
+      expect(resetSnap.playerOne.seed).toBe(42);
+
+      // 3. Disparar inmediatamente de nuevo sobrecarga con tecla 1
+      dispatchKeyDown('Digit1', false);
+      scene.update(0, 16);
+
+      const snapAfterReTrigger = bSession.getSnapshot();
+      expect(snapAfterReTrigger.playerOneState.warnings).toHaveLength(1);
+      expect(snapAfterReTrigger.playerOneState.warnings[0]!.sabotage).toBe('sobrecarga');
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('event.repeat === true en tecla 0 se ignora y fuera de warning-demo no hace nada', () => {
+      window.history.pushState({}, '', '?warning-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+
+      // Disparar warning
+      dispatchKeyDown('Digit1', false);
+      scene.update(0, 16);
+
+      const bSession = (scene as unknown as { battleSession: BattleSession | null }).battleSession!;
+      expect(bSession.getSnapshot().playerOneState.warnings).toHaveLength(1);
+
+      // Evento repeat en 0 -> ignora y conserva warning
+      dispatchKeyDown('Digit0', true);
+      expect(bSession.getSnapshot().playerOneState.warnings).toHaveLength(1);
+
+      // Fuera de warning-demo
+      window.history.pushState({}, '', '?battle-demo=1');
+      dispatchKeyDown('Digit0', false);
+
+      window.history.pushState({}, '', '/');
+    });
+  });
+
+  describe('FX de impacto mecánico de residuos (garbageApplied)', () => {
+    it('garbageApplied dispara el estado/FX de impacto visual', () => {
+      window.history.pushState({}, '', '?garbage-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+
+      // Estado inicial neutro
+      const initialState = scene.getGarbageImpactFXState();
+      expect(initialState.active).toBe(false);
+      expect(initialState.remainingMs).toBe(0);
+      expect(initialState.yOffset).toBe(0);
+
+      // Hard drop en garbage-demo aplica 2 filas de basura y emite garbageApplied
+      dispatchKeyDown('Space', false);
+      scene.update(0, 16);
+
+      const impactState = scene.getGarbageImpactFXState();
+      expect(impactState.active).toBe(true);
+      expect(impactState.remainingMs).toBe(160);
+      expect(impactState.linesCount).toBe(2);
+
+      // Avanzar un frame (10ms) dentro de la oscilación para verificar el desplazamiento vertical hacia arriba
+      scene.update(10, 10);
+      expect(scene.getGarbageImpactFXState().yOffset).toBeLessThan(0);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('eventos ajenos (ej. caídas, fijaciones simples sin basura) no disparan el FX de impacto', () => {
+      window.history.pushState({}, '', '/');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+
+      // Hard drop en training mode sin basura pendiente
+      dispatchKeyDown('Space', false);
+      scene.update(0, 16);
+
+      const impactState = scene.getGarbageImpactFXState();
+      expect(impactState.active).toBe(false);
+      expect(impactState.remainingMs).toBe(0);
+      expect(impactState.yOffset).toBe(0);
+    });
+
+    it('el FX de impacto vuelve automáticamente a estado neutro tras transcurrir la duración (160ms)', () => {
+      window.history.pushState({}, '', '?garbage-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+
+      dispatchKeyDown('Space', false);
+      scene.update(0, 16);
+      expect(scene.getGarbageImpactFXState().active).toBe(true);
+
+      // Avanzar el tiempo más allá de la duración (160ms)
+      scene.update(165, 165);
+
+      const finishedState = scene.getGarbageImpactFXState();
+      expect(finishedState.active).toBe(false);
+      expect(finishedState.remainingMs).toBe(0);
+      expect(finishedState.yOffset).toBe(0);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('eventos garbageApplied consecutivos vuelven a disparar el FX reiniciando el temporizador', () => {
+      window.history.pushState({}, '', '?garbage-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+
+      // 1ª aplicación de basura
+      dispatchKeyDown('Space', false);
+      scene.update(0, 16);
+      expect(scene.getGarbageImpactFXState().remainingMs).toBe(160);
+
+      // Consumir 120ms
+      scene.update(120, 120);
+      expect(scene.getGarbageImpactFXState().remainingMs).toBe(40);
+
+      // Cargar 2 filas con A y volver a fijar con Space
+      dispatchKeyDown('KeyA', false);
+      scene.update(136, 16);
+      dispatchKeyDown('Space', false);
+      scene.update(152, 16);
+
+      // Debe reiniciarse a 160ms
+      const retriggeredState = scene.getGarbageImpactFXState();
+      expect(retriggeredState.active).toBe(true);
+      expect(retriggeredState.remainingMs).toBe(160);
+
+      window.history.pushState({}, '', '/');
+    });
+
+    it('el FX de impacto no altera el estado lógico del motor ni las coordenadas lógicas', () => {
+      window.history.pushState({}, '', '?garbage-demo=1');
+
+      const { scene, dispatchKeyDown } = setupSceneWithListeners();
+      const engine = (scene as unknown as { engine: import('@rautfall/game-engine').GameEngine }).engine;
+
+      const snapshotBefore = engine.getSnapshot();
+      expect(snapshotBefore.pendingGarbage).toBe(2);
+      dispatchKeyDown('Space', false);
+      scene.update(0, 16);
+      const snapshotAfter = engine.getSnapshot();
+
+      // El FX visual no modifica el tablero lógico salvo por las 2 filas insertadas determinísticamente por el motor
+      expect(snapshotAfter.board[22]!.filter(c => c === 'garbage')).toHaveLength(9);
+      expect(snapshotAfter.board[23]!.filter(c => c === 'garbage')).toHaveLength(9);
+      expect(snapshotAfter.activePiece).not.toBeNull();
+      // Las coordenadas lógicas del activePiece son números enteros en la rejilla
+      expect(Number.isInteger(snapshotAfter.activePiece!.x)).toBe(true);
+      expect(Number.isInteger(snapshotAfter.activePiece!.y)).toBe(true);
+
+      window.history.pushState({}, '', '/');
     });
   });
 });

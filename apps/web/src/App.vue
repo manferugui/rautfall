@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import GameCanvas from './components/GameCanvas.vue';
 import NextPiecesPreview from './components/NextPiecesPreview.vue';
 import ScorePanel from './components/ScorePanel.vue';
@@ -20,11 +20,13 @@ import { isSabotageDemoActive } from './game/sabotage-demo';
 import { isOverloadDemoActive } from './game/overload-demo';
 import { isGarbageDemoActive } from './game/garbage-demo';
 import { isPolarityDemoActive } from './game/polarity-demo';
+import { isWarningDemoActive } from './game/warning-demo';
 import { getLevelDemoTarget } from './game/level-demo';
 import { getAudioManager } from './audio';
 import { getOrCreatePlayerId, getPlayerTag, setPlayerTag, hasPlayerTag } from './api/identity';
 import { submitMatch } from './api/client';
 import type { CreateMatchInput } from '@rautfall/contracts';
+import type { ActiveEffectSnapshot, SabotageType } from '@rautfall/game-engine';
 
 import { isSfxLabActive } from './game/sfx-lab-demo';
 import { generateMatchSeed } from './game/seed';
@@ -43,6 +45,7 @@ const DevLauncherScreenComponent: Component | null = import.meta.env.DEV
   : null;
 
 const isSfxLab = isSfxLabActive();
+const isWarningDemo = isWarningDemoActive();
 
 function hasDevDemoFlag(): boolean {
   return (
@@ -52,6 +55,7 @@ function hasDevDemoFlag(): boolean {
     isOverloadDemoActive() ||
     isGarbageDemoActive() ||
     isPolarityDemoActive() ||
+    isWarningDemoActive() ||
     getLevelDemoTarget() !== null
   );
 }
@@ -62,7 +66,7 @@ const isDevDemo = hasDevDemoFlag();
 // Se seedea una vez al cargar y se resetea de forma determinista en goToMenu() al limpiar la URL.
 const isDevDebugPanel = ref(import.meta.env.DEV && isDebugPanelActive());
 const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
-const gameMode = ref<GameMode>(isBattleDemoActive() ? 'battle' : 'training');
+const gameMode = ref<GameMode>(isBattleDemoActive() || isWarningDemo ? 'battle' : 'training');
 const matchSeed = ref<number>(generateMatchSeed());
 const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 
@@ -102,6 +106,174 @@ const isSuddenDeathActive = computed(() => {
   const phase = gameState.value.battleState?.suddenDeathPhase;
   return phase === 'warning' || phase === 'phase1' || phase === 'phase2' || phase === 'phase3';
 });
+
+const localWarnings = computed(() => gameState.value.battleState?.playerOneState?.warnings ?? []);
+
+const sobrecargaActiveEffect = computed(() => {
+  return gameState.value.activeEffects.find((e) => e.type === 'sobrecarga') as
+    | Extract<ActiveEffectSnapshot, { type: 'sobrecarga' }>
+    | undefined;
+});
+
+const hasSobrecargaActive = computed(() => !!sobrecargaActiveEffect.value);
+
+const sobrecargaCountdownText = computed(() => {
+  if (!sobrecargaActiveEffect.value) return '';
+  return `${(sobrecargaActiveEffect.value.remainingMs / 1000).toFixed(1)}s`;
+});
+
+const polaridadActiveEffect = computed(() => {
+  return gameState.value.activeEffects.find((e) => e.type === 'polaridad') as
+    | Extract<ActiveEffectSnapshot, { type: 'polaridad' }>
+    | undefined;
+});
+
+const hasPolaridadActive = computed(() => !!polaridadActiveEffect.value);
+
+const polaridadCountdownText = computed(() => {
+  if (!polaridadActiveEffect.value) return '';
+  const count = polaridadActiveEffect.value.remainingPieces;
+  const label = count === 1 ? 'PIEZA' : 'PIEZAS';
+  return `${count} ${label}`;
+});
+
+const isPolaridadPulseActive = ref(false);
+let polaridadPulseTimeout: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => polaridadActiveEffect.value?.remainingPieces,
+  (newVal, oldVal) => {
+    if (newVal !== undefined && oldVal !== undefined && newVal < oldVal) {
+      isPolaridadPulseActive.value = true;
+      if (polaridadPulseTimeout !== null) {
+        clearTimeout(polaridadPulseTimeout);
+      }
+      polaridadPulseTimeout = setTimeout(() => {
+        isPolaridadPulseActive.value = false;
+        polaridadPulseTimeout = null;
+      }, 100);
+    }
+  },
+);
+
+const interferenciaActiveEffect = computed(() => {
+  const p1 = gameState.value.battleState?.playerOneState;
+  if (p1?.isInterfered && p1.interferenciaRemainingMs > 0) {
+    return { type: 'interferencia' as const, remainingMs: p1.interferenciaRemainingMs };
+  }
+  return undefined;
+});
+
+const hasInterferenciaActive = computed(() => !!interferenciaActiveEffect.value);
+
+const interferenciaCountdownText = computed(() => {
+  if (!interferenciaActiveEffect.value) return '';
+  return `${(interferenciaActiveEffect.value.remainingMs / 1000).toFixed(1)}s`;
+});
+
+const hasSobrecargaWarning = computed(
+  () => !hasSobrecargaActive.value && localWarnings.value.some((w) => w.sabotage === 'sobrecarga'),
+);
+const hasPolaridadWarning = computed(
+  () => !hasPolaridadActive.value && localWarnings.value.some((w) => w.sabotage === 'polaridad'),
+);
+const hasInterferenciaWarning = computed(
+  () => !hasInterferenciaActive.value && localWarnings.value.some((w) => w.sabotage === 'interferencia'),
+);
+
+const isSabotageBlockedActive = ref(false);
+const blockedReasonSubtitle = ref('');
+let sabotageBlockedTimeout: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => gameState.value.battleState?.lastSabotageBlockedDetails,
+  (details) => {
+    if (details && details.target === 'playerOne') {
+      isSabotageBlockedActive.value = true;
+      if (details.reason === 'immunity') {
+        blockedReasonSubtitle.value = 'INMUNIDAD';
+      } else if (details.reason === 'alreadyActive') {
+        blockedReasonSubtitle.value = 'EFECTO ACTIVO';
+      } else if (details.reason === 'warningPending') {
+        blockedReasonSubtitle.value = 'AVISO PENDIENTE';
+      } else {
+        blockedReasonSubtitle.value = '';
+      }
+
+      if (sabotageBlockedTimeout !== null) {
+        clearTimeout(sabotageBlockedTimeout);
+      }
+      sabotageBlockedTimeout = setTimeout(() => {
+        isSabotageBlockedActive.value = false;
+        sabotageBlockedTimeout = null;
+      }, 350);
+    }
+  },
+);
+
+const localImmunities = computed(() => gameState.value.battleState?.playerOneState?.immunities ?? []);
+
+const activeImmunity = computed(() => localImmunities.value[0]);
+
+const hasActiveImmunity = computed(() => !!activeImmunity.value);
+
+const immunityText = computed(() => {
+  if (!activeImmunity.value) return '';
+  const sabotageName = activeImmunity.value.sabotage.toUpperCase();
+  const seconds = (activeImmunity.value.remainingMs / 1000).toFixed(1);
+  return `INMUNIDAD ${sabotageName} · ${seconds}s`;
+});
+
+const isLaunchPulseActive = ref(false);
+const isLaunchConfirmationActive = ref(false);
+const isTransmissionSentActive = ref(false);
+const launchConfirmationText = ref('');
+
+let launchPulseTimeout: ReturnType<typeof setTimeout> | null = null;
+let launchConfirmationTimeout: ReturnType<typeof setTimeout> | null = null;
+let transmissionSentTimeout: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => gameState.value.lastSabotageLaunchedDetails,
+  (details) => {
+    if (details && details.source === 'playerOne') {
+      const sabotage = details.sabotage;
+
+      // 1. Compresión/pulso del slot (120 ms)
+      isLaunchPulseActive.value = true;
+      if (launchPulseTimeout !== null) clearTimeout(launchPulseTimeout);
+      launchPulseTimeout = setTimeout(() => {
+        isLaunchPulseActive.value = false;
+        launchPulseTimeout = null;
+      }, 120);
+
+      // 2. Confirmación de envío (400 ms)
+      const textMap: Record<SabotageType, string> = {
+        residuos: 'RESIDUOS ENVIADO',
+        sobrecarga: 'SOBRECARGA ENVIADA',
+        polaridad: 'POLARIDAD ENVIADA',
+        interferencia: 'INTERFERENCIA ENVIADA',
+      };
+      launchConfirmationText.value = textMap[sabotage] || 'SABOTAJE ENVIADO';
+      isLaunchConfirmationActive.value = true;
+      if (launchConfirmationTimeout !== null) clearTimeout(launchConfirmationTimeout);
+      launchConfirmationTimeout = setTimeout(() => {
+        isLaunchConfirmationActive.value = false;
+        launchConfirmationTimeout = null;
+      }, 400);
+
+      // 3. Micro-pulso del marco de OpponentMonitor (150 ms)
+      if (details.target === 'playerTwo') {
+        isTransmissionSentActive.value = true;
+        if (transmissionSentTimeout !== null) clearTimeout(transmissionSentTimeout);
+        transmissionSentTimeout = setTimeout(() => {
+          isTransmissionSentActive.value = false;
+          transmissionSentTimeout = null;
+        }, 150);
+      }
+    }
+  },
+);
 
 const gameResult = ref<GameResultSummary | null>(null);
 const error = ref<string | null>(null);
@@ -496,6 +668,11 @@ function openDevTools(): void {
           </div>
         </header>
 
+        <div v-if="isWarningDemo" class="dev-warning-demo-info" data-testid="warning-demo-info">
+          <span class="warning-demo-tag">WARNING FX DEMO</span>
+          <span class="warning-demo-controls">1 SOBRECARGA · 2 POLARIDAD · 3 INTERFERENCIA · 0 RESET</span>
+        </div>
+
         <div v-if="error" class="error">
           <strong>Error:</strong> {{ error }}
         </div>
@@ -528,7 +705,132 @@ function openDevTools(): void {
 
             <!-- Tablero Canvas Principal -->
             <div class="integrated-board-column" data-testid="own-board-column">
-              <div class="board-bezel" :class="`board-bezel--${gameState.status}`">
+              <div
+                class="board-bezel"
+                :class="[
+                  `board-bezel--${gameState.status}`,
+                  {
+                    'board-bezel--warning-sobrecarga': hasSobrecargaWarning,
+                    'board-bezel--warning-polaridad': hasPolaridadWarning,
+                    'board-bezel--warning-interferencia': hasInterferenciaWarning,
+                    'board-bezel--active-sobrecarga': hasSobrecargaActive,
+                    'board-bezel--active-polaridad': hasPolaridadActive,
+                    'board-bezel--active-interferencia': hasInterferenciaActive,
+                    'board-bezel--sabotage-blocked': isSabotageBlockedActive,
+                    'board-bezel--immunity-active': hasActiveImmunity,
+                  },
+                ]"
+                :data-warning-sobrecarga="hasSobrecargaWarning"
+                :data-warning-polaridad="hasPolaridadWarning"
+                :data-warning-interferencia="hasInterferenciaWarning"
+                :data-active-sobrecarga="hasSobrecargaActive"
+                :data-active-polaridad="hasPolaridadActive"
+                :data-active-interferencia="hasInterferenciaActive"
+                :data-sabotage-blocked="isSabotageBlockedActive"
+                :data-immunity-active="hasActiveImmunity"
+                data-testid="board-bezel"
+              >
+                <!-- Microplaca transient de SABOTAJE BLOQUEADO (350 ms) -->
+                <div
+                  v-if="isSabotageBlockedActive"
+                  class="board-bezel-blocked-plate"
+                  data-testid="sabotage-blocked-indicator"
+                  aria-hidden="true"
+                >
+                  <span class="blocked-plate-title">SABOTAJE BLOQUEADO</span>
+                  <span v-if="blockedReasonSubtitle" class="blocked-plate-subtitle">{{ blockedReasonSubtitle }}</span>
+                </div>
+
+                <!-- Microplaca de INMUNIDAD ACTIVA -->
+                <div
+                  v-if="hasActiveImmunity && !hasSobrecargaActive && !hasPolaridadActive && !hasInterferenciaActive"
+                  class="board-bezel-immunity-plate"
+                  data-testid="immunity-active-indicator"
+                  aria-hidden="true"
+                >
+                  <span class="immunity-plate-dot">●</span>
+                  <span class="immunity-plate-text">{{ immunityText }}</span>
+                </div>
+
+                <!-- Microplaca unificada de pre-aviso (warning 750 ms) de sabotaje -->
+                <div
+                  v-if="hasSobrecargaWarning || hasPolaridadWarning || hasInterferenciaWarning"
+                  class="board-bezel-warning-plate"
+                  :class="{
+                    'board-bezel-warning-plate--sobrecarga': hasSobrecargaWarning,
+                    'board-bezel-warning-plate--polaridad': hasPolaridadWarning,
+                    'board-bezel-warning-plate--interferencia': hasInterferenciaWarning,
+                  }"
+                  :data-testid="hasPolaridadWarning ? 'polarity-warning-indicator' : 'sabotage-warning-plate'"
+                  aria-hidden="true"
+                >
+                  <template v-if="hasSobrecargaWarning">
+                    <span class="warning-plate-text">SOBRECARGA</span>
+                  </template>
+
+                  <template v-else-if="hasPolaridadWarning">
+                    <span class="warning-plate-arrow warning-plate-arrow--left">►</span>
+                    <span class="warning-plate-text">INVERSIÓN HZ</span>
+                    <span class="warning-plate-arrow warning-plate-arrow--right">◄</span>
+                  </template>
+
+                  <template v-else-if="hasInterferenciaWarning">
+                    <span class="warning-plate-text">INTERFERENCIA</span>
+                  </template>
+                </div>
+
+                <!-- Microplaca de estado ACTIVO de sabotaje (Sobrecarga) -->
+                <div
+                  v-if="hasSobrecargaActive"
+                  class="board-bezel-active-plate board-bezel-active-plate--sobrecarga"
+                  data-testid="sobrecarga-active-indicator"
+                  aria-hidden="true"
+                >
+                  <span class="active-plate-text">SOBRECARGA {{ sobrecargaCountdownText }}</span>
+                </div>
+
+                <!-- Microplaca de estado ACTIVO de sabotaje (Polaridad) -->
+                <div
+                  v-if="hasPolaridadActive"
+                  class="board-bezel-active-plate board-bezel-active-plate--polaridad"
+                  data-testid="polarity-active-indicator"
+                  aria-hidden="true"
+                >
+                  <span class="active-plate-arrow active-plate-arrow--left">►</span>
+                  <span class="active-plate-text">POLARIDAD · {{ polaridadCountdownText }}</span>
+                  <span class="active-plate-arrow active-plate-arrow--right">◄</span>
+                </div>
+
+                <!-- Microplaca de estado ACTIVO de sabotaje (Interferencia) -->
+                <div
+                  v-if="hasInterferenciaActive"
+                  class="board-bezel-active-plate board-bezel-active-plate--interferencia"
+                  data-testid="interferencia-active-indicator"
+                  aria-hidden="true"
+                >
+                  <span class="active-plate-text">INTERFERENCIA · {{ interferenciaCountdownText }}</span>
+                </div>
+
+                <!-- Indicadores/Brackets laterales de inversión de Polaridad -->
+                <div
+                  v-if="hasPolaridadActive"
+                  class="board-bezel-polarity-bracket board-bezel-polarity-bracket--left"
+                  :class="{ 'polarity-bracket--pulse': isPolaridadPulseActive }"
+                  data-testid="polarity-left-bracket"
+                  aria-hidden="true"
+                >
+                  <span class="bracket-symbol">►</span>
+                </div>
+                <div
+                  v-if="hasPolaridadActive"
+                  class="board-bezel-polarity-bracket board-bezel-polarity-bracket--right"
+                  :class="{ 'polarity-bracket--pulse': isPolaridadPulseActive }"
+                  data-testid="polarity-right-bracket"
+                  aria-hidden="true"
+                >
+                  <span class="bracket-symbol">◄</span>
+                </div>
+
                 <div class="canvas-wrapper">
                   <GameCanvas
                     v-if="isCanvasMounted"
@@ -582,6 +884,9 @@ function openDevTools(): void {
                 :stored-sabotages="gameState.storedSabotages"
                 :pending-garbage="gameState.pendingGarbage"
                 :active-effects="gameState.activeEffects"
+                :is-launch-pulse-active="isLaunchPulseActive"
+                :is-launch-confirmation-active="isLaunchConfirmationActive"
+                :launch-confirmation-text="launchConfirmationText"
               />
             </div>
             <div class="instrumentation-actions">
@@ -613,6 +918,7 @@ function openDevTools(): void {
               :battle-status="gameState.battleState?.status ?? null"
               :winner="gameState.battleState?.winner ?? null"
               :is-paused="gameState.status === 'paused'"
+              :is-transmission-sent-active="isTransmissionSentActive"
             />
           </div>
           <div v-else class="sr-only" data-testid="opponent-column">
@@ -1760,5 +2066,28 @@ button:disabled {
     min-width: auto;
     width: auto;
   }
+}
+
+.dev-warning-demo-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: rgba(18, 19, 22, 0.85);
+  border: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: var(--rf-font-mono, monospace);
+  color: var(--rf-color-cyan, #00d4ff);
+  margin-bottom: 0.5rem;
+}
+
+.warning-demo-tag {
+  font-weight: bold;
+  letter-spacing: 0.08em;
+}
+
+.warning-demo-controls {
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
 }
 </style>

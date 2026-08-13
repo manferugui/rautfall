@@ -15,11 +15,17 @@ const props = withDefaults(
     storedSabotages?: readonly SabotageType[];
     pendingGarbage?: number;
     activeEffects?: readonly ActiveEffectSnapshot[];
+    isLaunchPulseActive?: boolean;
+    isLaunchConfirmationActive?: boolean;
+    launchConfirmationText?: string;
   }>(),
   {
     storedSabotages: () => [],
     pendingGarbage: 0,
     activeEffects: () => [],
+    isLaunchPulseActive: false,
+    isLaunchConfirmationActive: false,
+    launchConfirmationText: '',
   },
 );
 
@@ -56,7 +62,11 @@ const activeEffectsDisplay = computed(() => {
 
       <div class="slots-vertical-list">
         <!-- Slot 1: Cartucho (Sabotajes) -->
-        <div class="slot-tile" data-testid="simulated-cartridge">
+        <div
+          class="slot-tile"
+          :class="{ 'slot-tile--discharge': isLaunchPulseActive }"
+          data-testid="simulated-cartridge"
+        >
           <div class="slot-badge-box slot-badge-box--amber">
             <div class="slot-badge-icon slot-badge-icon--cartridge" aria-hidden="true"></div>
           </div>
@@ -64,6 +74,16 @@ const activeEffectsDisplay = computed(() => {
             <span class="slot-name-label">CARTUCHO</span>
             <span class="slot-value-text" data-testid="cartridge-text">{{ cartridgeDisplay }}</span>
           </div>
+        </div>
+
+        <!-- Confirmación de envío de sabotaje (400–700 ms) -->
+        <div
+          v-if="isLaunchConfirmationActive"
+          class="attack-sent-confirmation"
+          data-testid="attack-sent-confirmation"
+          aria-hidden="true"
+        >
+          <span class="sent-confirmation-text">{{ launchConfirmationText }}</span>
         </div>
 
         <!-- Slot 2: Residuos (Garbage) -->

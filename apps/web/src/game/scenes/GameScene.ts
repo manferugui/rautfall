@@ -17,7 +17,7 @@
 import Phaser from 'phaser';
 import { createGameEngine, type GameEngine, type PieceType } from '@rautfall/game-engine';
 import { prototypeConfig } from '@rautfall/game-config';
-import type { GameMode, GamePresentationState, BotDevDiagnostic } from '../types';
+import type { GameMode, GamePresentationState, BotDevDiagnostic, SabotageBlockedDetails, SabotageLaunchedDetails } from '../types';
 import { computeSteps } from '../time-adapter';
 import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
@@ -28,12 +28,15 @@ import { isOverloadDemoActive, createOverloadDemoEngine } from '../overload-demo
 import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
 import { isPolarityDemoActive, createPolarityDemoEngine } from '../polarity-demo';
 import { isBattleDemoActive, createBattleDemoSession } from '../battle-demo';
+import { isWarningDemoActive, createWarningDemoSession, prepareWarningDemoSabotage } from '../warning-demo';
 import { createBattleSession, createDeterministicBot, type BattleSession, type DeterministicBot } from '@rautfall/battle-engine';
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
   CELL_SIZE,
   HIDDEN_ROWS,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
   boardXToCanvas,
   boardYToCanvas,
   isRowVisible,
@@ -77,6 +80,11 @@ export class GameScene extends Phaser.Scene {
   private playerTwoBot: DeterministicBot | null = null;
   private lastSabotageRouted: string | null = null;
   private lastSabotageBlocked: string | null = null;
+  private lastSabotageBlockedDetails: SabotageBlockedDetails | null = null;
+  private sabotageBlockedCounter = 0;
+  private lastSabotageLaunchedDetails: SabotageLaunchedDetails | null = null;
+  private sabotageLaunchedCounter = 0;
+  private pendingDevSabotage: 'sobrecarga' | 'polaridad' | 'interferencia' | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
   private lastState: GamePresentationState | null = null;
@@ -126,8 +134,55 @@ export class GameScene extends Phaser.Scene {
 
   private matchSeed = 42;
 
+  /** Estado del FX de impacto mecánico de residuos (garbageApplied) */
+  private garbageImpactRemainingMs = 0;
+  private garbageImpactTotalMs = 160;
+  private garbageImpactLinesCount = 0;
+
   constructor() {
     super({ key: 'GameScene' });
+  }
+
+  /**
+   * Dispara el FX de impacto de residuos en el tablero.
+   */
+  private triggerGarbageImpact(linesCount: number): void {
+    this.garbageImpactLinesCount = linesCount;
+    this.garbageImpactTotalMs = 160;
+    this.garbageImpactRemainingMs = 160;
+  }
+
+  /**
+   * Devuelve el estado de presentación del FX de impacto de residuos.
+   * Método de inspección para pruebas y telemetría visual.
+   */
+  public getGarbageImpactFXState(): { active: boolean; remainingMs: number; linesCount: number; yOffset: number } {
+    const active = this.garbageImpactRemainingMs > 0;
+    const totalMs = this.garbageImpactTotalMs || 160;
+    const progress = active ? Math.min(1, Math.max(0, 1 - this.garbageImpactRemainingMs / totalMs)) : 1;
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let maxShake = 5.0;
+    if (this.garbageImpactLinesCount <= 1) {
+      maxShake = 2.0;
+    } else if (this.garbageImpactLinesCount <= 3) {
+      maxShake = 3.5;
+    }
+
+    // Curva seca: impulso inicial fuerte hacia arriba (-Y), rebote corto y asentamiento rápido
+    const yOffset = active && !prefersReducedMotion
+      ? -maxShake * Math.sin(Math.sqrt(progress) * 2.2 * Math.PI) * Math.pow(1 - progress, 2.2)
+      : 0;
+
+    return {
+      active,
+      remainingMs: this.garbageImpactRemainingMs,
+      linesCount: this.garbageImpactLinesCount,
+      yOffset,
+    };
   }
 
   init(data: { callbacks: GameSceneCallbacks; mode?: GameMode; seed?: number | undefined }): void {
@@ -178,6 +233,22 @@ export class GameScene extends Phaser.Scene {
           this.resetEngine();
         }
         return;
+      }
+
+      if ((isBattleDemoActive() || isWarningDemoActive()) && !event.repeat) {
+        if (event.code === 'Digit0' || event.code === 'Numpad0') {
+          this.resetEngine();
+          return;
+        }
+        if (isWarningDemoActive()) {
+          if (event.code === 'Digit1' || event.code === 'Numpad1') {
+            this.pendingDevSabotage = 'sobrecarga';
+          } else if (event.code === 'Digit2' || event.code === 'Numpad2') {
+            this.pendingDevSabotage = 'polaridad';
+          } else if (event.code === 'Digit3' || event.code === 'Numpad3') {
+            this.pendingDevSabotage = 'interferencia';
+          }
+        }
       }
 
       const action = getActionByCode(this.controlBindings, event.code);
@@ -237,6 +308,7 @@ export class GameScene extends Phaser.Scene {
     this.physicallyHeldCodes.clear();
     this.pendingPressedActions.clear();
     this.pendingHorizontal = null;
+    this.pendingDevSabotage = null;
 
     logDebug({ source: 'lifecycle', event: 'shutdown' });
 
@@ -251,6 +323,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    // Actualizar temporizador de FX de residuos
+    if (this.garbageImpactRemainingMs > 0) {
+      this.garbageImpactRemainingMs = Math.max(0, this.garbageImpactRemainingMs - delta);
+    }
+
     // Reiniciar banderas de consumo al empezar el frame
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
 
@@ -317,9 +394,17 @@ export class GameScene extends Phaser.Scene {
         if (this.battleSession) {
           const bSnap = this.battleSession.getSnapshot();
           if (bSnap.status === 'running') {
-            const p2Input = this.playerTwoBot
+            let p2Input = this.playerTwoBot
               ? this.playerTwoBot.nextStep(this.battleSession.getEngine('playerTwo'), bSnap.status, bSnap.playerOne)
               : this.emptyStepInput();
+
+            if (isWarningDemoActive() && this.pendingDevSabotage !== null) {
+              const sabotageToTrigger = this.pendingDevSabotage;
+              this.pendingDevSabotage = null;
+              prepareWarningDemoSabotage(this.battleSession, sabotageToTrigger);
+              p2Input = { ...this.emptyStepInput(), triggerSabotage: true };
+            }
+
             this.battleSession.step({
               playerOne: input,
               playerTwo: p2Input,
@@ -395,16 +480,41 @@ export class GameScene extends Phaser.Scene {
         getAudioManager().handleBattleEvent(event);
         if (event.type === 'sabotageRouted') {
           this.lastSabotageRouted = `${event.sabotage} (${event.source} -> ${event.target})`;
+          this.lastSabotageLaunchedDetails = Object.freeze({
+            source: event.source,
+            target: event.target,
+            sabotage: event.sabotage,
+            id: ++this.sabotageLaunchedCounter,
+          });
         } else if (event.type === 'sabotageBlocked') {
           this.lastSabotageBlocked = `${event.sabotage} -> ${event.target} (${event.reason})`;
+          this.lastSabotageBlockedDetails = Object.freeze({
+            target: event.target,
+            source: event.source,
+            sabotage: event.sabotage,
+            reason: event.reason,
+            id: ++this.sabotageBlockedCounter,
+          });
+        } else if (event.type === 'participantEvent' && event.participant === 'playerOne' && event.event.type === 'garbageApplied') {
+          this.triggerGarbageImpact(event.event.linesCount);
         }
       }
     } else {
       const frameEvents = this.engine.drainEvents();
       for (const event of frameEvents) {
         getAudioManager().handleEngineEvent(event);
-        if (event.type === 'sabotageTriggered' && (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive() || isPolarityDemoActive())) {
-          this.engine.receiveSabotage(event.sabotage);
+        if (event.type === 'sabotageTriggered') {
+          this.lastSabotageLaunchedDetails = Object.freeze({
+            source: 'playerOne',
+            target: 'playerTwo',
+            sabotage: event.sabotage,
+            id: ++this.sabotageLaunchedCounter,
+          });
+          if (isSabotageDemoActive() || isOverloadDemoActive() || isGarbageDemoActive() || isPolarityDemoActive()) {
+            this.engine.receiveSabotage(event.sabotage);
+          }
+        } else if (event.type === 'garbageApplied') {
+          this.triggerGarbageImpact(event.linesCount);
         }
       }
       const frameEventTypes = frameEvents.map(e => e.type);
@@ -472,7 +582,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     const levelDemoTarget = getLevelDemoTarget();
-    if (isBattleDemoActive()) {
+    if (isWarningDemoActive()) {
+      this.battleSession = createWarningDemoSession();
+      this.playerTwoBot = null;
+      this.engine = this.battleSession.getEngine('playerOne');
+      this.lastSabotageRouted = null;
+      this.lastSabotageBlocked = null;
+    } else if (isBattleDemoActive()) {
       this.battleSession = createBattleDemoSession();
       this.playerTwoBot = createDeterministicBot();
       this.engine = this.battleSession.getEngine('playerOne');
@@ -515,11 +631,18 @@ export class GameScene extends Phaser.Scene {
     if (this.playerTwoBot) {
       this.playerTwoBot.reset();
     }
+    this.garbageImpactRemainingMs = 0;
+    this.garbageImpactLinesCount = 0;
+    if (this.graphics) {
+      this.graphics.setPosition(0, 0);
+    }
+
     this.engine.drainEvents();
     this.accumulator = 0;
     this.consumedThisFrame = { horizontal: false, clockwise: false, counterclockwise: false, hardDrop: false, hold: false, triggerSabotage: false };
     this.pendingHorizontal = null;
     this.pendingPressedActions.clear();
+    this.pendingDevSabotage = null;
     this.isPaused = false;
     this.releaseGuard = armReleaseGuard({
       left: this.physicallyHeldCodes.has(this.controlBindings.moveLeft),
@@ -657,6 +780,13 @@ export class GameScene extends Phaser.Scene {
   private renderFrame(): void {
       const snap = this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot();
 
+      const fxState = this.getGarbageImpactFXState();
+      if (fxState.active) {
+        this.graphics.setPosition(0, fxState.yOffset);
+      } else {
+        this.graphics.setPosition(0, 0);
+      }
+
       this.graphics.clear();
 
       // Dibujar tablero fijo (filas visibles 4-23)
@@ -733,6 +863,30 @@ export class GameScene extends Phaser.Scene {
           this.drawBeveledCell(canvasX, canvasY, CELL_SIZE, color);
         }
       }
+
+      // Banda/flash de impacto en el borde inferior interior del tablero
+      if (this.garbageImpactRemainingMs > 0) {
+        const totalMs = this.garbageImpactTotalMs || 160;
+        const progress = Math.min(1, Math.max(0, 1 - this.garbageImpactRemainingMs / totalMs));
+        let flashAlpha = 1.0;
+        if (this.garbageImpactLinesCount <= 1) {
+          flashAlpha = 0.6;
+        } else if (this.garbageImpactLinesCount <= 3) {
+          flashAlpha = 0.8;
+        }
+        // Caída rápida de intensidad para sensación de impacto seco
+        const currentAlpha = flashAlpha * Math.pow(1 - progress, 2.5);
+        if (currentAlpha > 0) {
+          const stripY = CANVAS_HEIGHT - 9;
+          // Grafito / óxido / ámbar apagado sin glow ni neón
+          this.graphics.fillStyle(0xa06030, currentAlpha);
+          this.graphics.fillRect(0, stripY, CANVAS_WIDTH, 9);
+          this.graphics.fillStyle(0x503820, currentAlpha * 0.7);
+          this.graphics.fillRect(0, stripY, CANVAS_WIDTH, 3);
+          this.graphics.fillStyle(0xd08040, currentAlpha * 0.5);
+          this.graphics.fillRect(0, stripY + 6, CANVAS_WIDTH, 3);
+        }
+      }
     }
 
   private notifyState(): void {
@@ -754,6 +908,7 @@ export class GameScene extends Phaser.Scene {
       level: snap.level,
       baseGravityCellsPerSecond: snap.baseGravityCellsPerSecond,
       activeGravityCellsPerSecond: snap.activeGravityCellsPerSecond,
+      lastSabotageLaunchedDetails: this.lastSabotageLaunchedDetails,
     };
 
     if (this.battleSession) {
@@ -823,7 +978,9 @@ export class GameScene extends Phaser.Scene {
           step: bSnap.step,
           lastSabotageRouted: this.lastSabotageRouted,
           lastSabotageBlocked: this.lastSabotageBlocked,
+          lastSabotageBlockedDetails: this.lastSabotageBlockedDetails,
           suddenDeathPhase: bSnap.suddenDeath?.phase ?? null,
+          playerOneState: bSnap.playerOneState,
           playerTwo: mapEngineToOpponentPresentation(
             this.battleSession.getPerceivedOpponentSnapshot('playerOne'),
             bSnap.playerTwoState,
@@ -865,6 +1022,7 @@ export class GameScene extends Phaser.Scene {
         this.lastState.battleState.winner === newState.battleState.winner &&
         this.lastState.battleState.step === newState.battleState.step &&
         this.lastState.battleState.lastSabotageRouted === newState.battleState.lastSabotageRouted &&
+        this.lastState.battleState.playerOneState === newState.battleState.playerOneState &&
         this.lastState.battleState.playerTwo === newState.battleState.playerTwo)
     ) {
       return;

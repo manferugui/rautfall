@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { DEV_DEMOS, buildDemoTargetUrl, clearDevDemoQueryParams } from './dev-demos';
 
 describe('dev-demos (Registro Centralizado de Demos DEV)', () => {
-  it('contiene 14 escenarios canónicos registrados', () => {
-    expect(DEV_DEMOS.length).toBe(14);
+  it('contiene 15 escenarios canónicos registrados', () => {
+    expect(DEV_DEMOS.length).toBe(15);
   });
 
   it('garantiza que todos los identificadores (ID) son únicos', () => {

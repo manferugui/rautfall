@@ -107,6 +107,13 @@ export const DEV_DEMOS: readonly DevDemoDefinition[] = [
     query: { 'level-demo': '10' },
   },
   {
+    id: 'warning-fx-1p',
+    label: 'Warning FX Demo 1P',
+    description: 'Banco de pruebas reproducible para warnings de sabotaje (Sobrecarga, Polaridad, Interferencia)',
+    category: 'mechanics',
+    query: { 'warning-demo': '1' },
+  },
+  {
     id: 'audio-lab',
     label: 'Audio Lab (SFX & Music)',
     description: 'Audición/exportación de SFX sintéticos y reproductor de música BGM',
@@ -140,6 +147,7 @@ export const DEV_QUERY_PARAMS: readonly string[] = [
   'garbage-demo',
   'overload-demo',
   'polarity-demo',
+  'warning-demo',
   'tspin-demo',
   'level-demo',
   'sfx-lab',

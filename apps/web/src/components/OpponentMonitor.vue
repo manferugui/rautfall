@@ -32,6 +32,7 @@ const props = withDefaults(
     winner?: BattleWinner | null;
     isPaused?: boolean;
     mode?: GameMode;
+    isTransmissionSentActive?: boolean;
   }>(),
   {
     playerTwo: null,
@@ -39,6 +40,7 @@ const props = withDefaults(
     winner: null,
     isPaused: false,
     mode: 'battle',
+    isTransmissionSentActive: false,
   },
 );
 
@@ -87,7 +89,11 @@ const CELL_SIZE = 20;
     </div>
 
     <!-- Viewport hundido del tablero rival -->
-    <div class="opponent-board-frame">
+    <div
+      class="opponent-board-frame"
+      :class="{ 'opponent-board-frame--transmission-sent': isTransmissionSentActive }"
+      :data-transmission-sent="isTransmissionSentActive"
+    >
       <div
         class="opponent-board"
         data-testid="opponent-board"
