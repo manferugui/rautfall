@@ -23,7 +23,7 @@
     "vue-tsc": "^3.3.7"
   },
   "scripts": {
-    "dev": "pnpm --filter @rautfall/web dev",
+    "dev": "pnpm --parallel --filter @rautfall/web --filter @rautfall/api dev",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
