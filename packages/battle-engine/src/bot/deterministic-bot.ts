@@ -6,7 +6,6 @@ import {
   type StepInput,
 } from '@rautfall/game-engine';
 import type { BattleStatus } from '../index';
-import { DEFAULT_BOT_HEURISTIC_WEIGHTS } from './board-evaluator';
 import {
   computeBoardFingerprint,
   searchPlacements,
@@ -21,6 +20,7 @@ import {
   type BotExecutionPhase,
   type BotPlan,
   type BotPlanDiagnostic,
+  type PlacementCandidate,
   type SabotageDecision,
 } from './types';
 
@@ -85,21 +85,72 @@ export function isActivePieceFullyVisible(engine: GameEngine): boolean {
   return active.cells.every((cell) => cell.y >= 4);
 }
 
+import { BOT_PROFILES } from './profiles';
+import {
+  type SearchResult,
+} from './placement-search';
+
+function createDefaultPrng(seed = 12345): () => number {
+  let s = seed >>> 0;
+  return () => {
+    let t = (s += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function selectCandidate(
+  searchResult: SearchResult,
+  config: BotConfig,
+  prng: () => number,
+): PlacementCandidate | null {
+  const { bestCandidate, nonTerminalCandidates, allCandidates } = searchResult;
+  if (!bestCandidate) return null;
+
+  // Regla de supervivencia: operar únicamente sobre candidatos no terminales si existe al menos uno
+  const validCandidates = nonTerminalCandidates.length > 0 ? nonTerminalCandidates : allCandidates;
+  if (validCandidates.length <= 1 || config.optimalityTolerance <= 0 || config.suboptimalChoiceProbability <= 0) {
+    return bestCandidate;
+  }
+
+  const bestScore = bestCandidate.heuristicScore;
+  const eligibleSuboptimalCandidates = validCandidates.filter(
+    (c) => c !== bestCandidate && bestScore - c.heuristicScore <= config.optimalityTolerance,
+  );
+
+  if (eligibleSuboptimalCandidates.length > 0 && prng() < config.suboptimalChoiceProbability) {
+    const index = Math.floor(prng() * eligibleSuboptimalCandidates.length);
+    return eligibleSuboptimalCandidates[index]!;
+  }
+
+  return bestCandidate;
+}
+
 export function normalizeBotConfig(config?: Partial<BotConfig>): BotConfig {
+  const defaultConfig = BOT_PROFILES.battleOperator;
   const reactionDelaySteps = Math.max(
     0,
-    Math.floor(config?.reactionDelaySteps ?? BOT_REACTION_DELAY_STEPS),
+    Math.floor(config?.reactionDelaySteps ?? defaultConfig.reactionDelaySteps),
   );
   const actionIntervalSteps = Math.max(
     0,
-    Math.floor(config?.actionIntervalSteps ?? BOT_ACTION_INTERVAL_STEPS),
+    Math.floor(config?.actionIntervalSteps ?? defaultConfig.actionIntervalSteps),
   );
   const hardDropDelaySteps = Math.max(
     0,
-    Math.floor(config?.hardDropDelaySteps ?? BOT_HARD_DROP_DELAY_STEPS),
+    Math.floor(config?.hardDropDelaySteps ?? defaultConfig.hardDropDelaySteps),
   );
-  const maxSearchNodes = Math.max(1, Math.floor(config?.maxSearchNodes ?? 500));
-  const heuristicWeights = config?.heuristicWeights ?? DEFAULT_BOT_HEURISTIC_WEIGHTS;
+  const maxSearchNodes = Math.max(1, Math.floor(config?.maxSearchNodes ?? defaultConfig.maxSearchNodes));
+  const optimalityTolerance = Math.max(
+    0,
+    config?.optimalityTolerance ?? defaultConfig.optimalityTolerance,
+  );
+  const suboptimalChoiceProbability = Math.min(
+    1,
+    Math.max(0, config?.suboptimalChoiceProbability ?? defaultConfig.suboptimalChoiceProbability),
+  );
+  const heuristicWeights = config?.heuristicWeights ?? defaultConfig.heuristicWeights;
   const sabotage = normalizeBotSabotageConfig(config?.sabotage);
 
   return Object.freeze({
@@ -107,6 +158,8 @@ export function normalizeBotConfig(config?: Partial<BotConfig>): BotConfig {
     actionIntervalSteps,
     hardDropDelaySteps,
     maxSearchNodes,
+    optimalityTolerance,
+    suboptimalChoiceProbability,
     heuristicWeights,
     sabotage,
   });
@@ -139,8 +192,12 @@ export interface DeterministicBot {
   getDiagnostic(): DeterministicBotDiagnostic;
 }
 
-export function createDeterministicBot(config?: Partial<BotConfig>): DeterministicBot {
+export function createDeterministicBot(
+  config?: Partial<BotConfig>,
+  prng?: () => number,
+): DeterministicBot {
   const fullConfig = normalizeBotConfig(config);
+  const botPrng = prng ?? createDefaultPrng();
 
   let currentPlan: BotPlan | null = null;
   let actionIndex = 0;
@@ -196,25 +253,27 @@ export function createDeterministicBot(config?: Partial<BotConfig>): Determinist
     if (!snap.activePiece) return;
 
     const searchRes = searchPlacements(engine, fullConfig);
-    if (searchRes.bestCandidate) {
+    const chosenCandidate = selectCandidate(searchRes, fullConfig, botPrng);
+
+    if (chosenCandidate) {
       currentPlan = Object.freeze({
         pieceType: snap.activePiece.type,
-        actions: searchRes.bestCandidate.actions,
-        expectedBoardFingerprint: searchRes.bestCandidate.boardFingerprint,
+        actions: chosenCandidate.actions,
+        expectedBoardFingerprint: chosenCandidate.boardFingerprint,
         diagnostic: Object.freeze({
           candidateCount: searchRes.searchMetrics.candidatesFound,
           nonTerminalCandidateCount: searchRes.searchMetrics.nonTerminalCandidateCount,
           exploredNodes: searchRes.searchMetrics.nodesExplored,
           deduplicatedNodes: searchRes.searchMetrics.nodesDeduplicated,
           reachedNodeLimit: searchRes.searchMetrics.reachedNodeLimit,
-          selectedHeuristicScore: searchRes.bestCandidate.heuristicScore,
-          selectedLinesCleared: searchRes.bestCandidate.linesCleared,
-          selectedHoles: searchRes.bestCandidate.resultingHoles,
-          selectedNewHoles: searchRes.bestCandidate.newHoles,
-          selectedMaxHeight: searchRes.bestCandidate.maxHeight,
-          selectedTopOutRisk: searchRes.bestCandidate.topOutRisk,
-          selectedHiddenRowOccupancy: searchRes.bestCandidate.hiddenRowOccupancy,
-          selectedActionCount: searchRes.bestCandidate.actions.length,
+          selectedHeuristicScore: chosenCandidate.heuristicScore,
+          selectedLinesCleared: chosenCandidate.linesCleared,
+          selectedHoles: chosenCandidate.resultingHoles,
+          selectedNewHoles: chosenCandidate.newHoles,
+          selectedMaxHeight: chosenCandidate.maxHeight,
+          selectedTopOutRisk: chosenCandidate.topOutRisk,
+          selectedHiddenRowOccupancy: chosenCandidate.hiddenRowOccupancy,
+          selectedActionCount: chosenCandidate.actions.length,
         }),
       });
     }

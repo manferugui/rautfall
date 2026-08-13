@@ -11,6 +11,7 @@
  * - Exponer reset para que App.vue pueda invocarlo.
  */
 
+import type { BotProfileId } from '@rautfall/battle-engine';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { createPhaserGame } from '../game/create-phaser-game';
 import type { GameMode, GamePresentationState, PhaserGameController } from '../game/types';
@@ -18,6 +19,7 @@ import type { GameMode, GamePresentationState, PhaserGameController } from '../g
 const props = defineProps<{
   onStateUpdate: (state: GamePresentationState) => void;
   mode?: GameMode;
+  botProfile?: BotProfileId;
   seed?: number;
 }>();
 
@@ -34,6 +36,7 @@ onMounted(() => {
   controller = createPhaserGame({
     parent: gameContainer.value,
     mode: props.mode ?? 'training',
+    botProfile: props.botProfile,
     seed: props.seed,
     onStateUpdate: (state: GamePresentationState) => {
       props.onStateUpdate(state);

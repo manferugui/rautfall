@@ -87,11 +87,15 @@ export const DEFAULT_BOT_SABOTAGE_CONFIG: BotSabotageConfig = Object.freeze({
   maximumEquivalentPendingGarbage: 2,
 });
 
+export type BotProfileId = 'battleCadet' | 'battleOperator' | 'battleElite';
+
 export type BotConfig = Readonly<{
   reactionDelaySteps: number;
   actionIntervalSteps: number;
   hardDropDelaySteps: number;
   maxSearchNodes: number;
+  optimalityTolerance: number;
+  suboptimalChoiceProbability: number;
   heuristicWeights: BotHeuristicWeights;
   sabotage: BotSabotageConfig;
 }>;

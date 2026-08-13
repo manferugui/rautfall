@@ -8,7 +8,11 @@ import {
   createDeterministicBot,
   isActivePieceFullyVisible,
   normalizeBotConfig,
+  selectCandidate,
 } from './deterministic-bot';
+import type { SearchResult } from './placement-search';
+import { BOT_PROFILES } from './profiles';
+import type { PlacementCandidate } from './types';
 
 function makeValidOptions(seed = 42) {
   return { seed, config: prototypeConfig };
@@ -403,6 +407,108 @@ describe('deterministic-bot', () => {
       const inpt3 = bot.nextStep(e1, 'running', oppSnap);
       expect(inpt3).toBeDefined();
       expect(bot.getDiagnostic().frontStoredSabotage).toBe('sobrecarga');
+    });
+  });
+
+  describe('diferenciación determinista de perfiles (CADET / OPERATOR / ELITE)', () => {
+    it('invariante "never suicidal": CADET nunca elige una muerte inmediata evitable cuando existen alternativas no terminales', () => {
+      const cadetConfig = BOT_PROFILES.battleCadet;
+
+      const candidatesMap = {
+        best: { heuristicScore: 100, isGameOver: false, actions: ['hardDrop'] } as unknown as PlacementCandidate & { isGameOver: boolean },
+        suboptimal: { heuristicScore: 40, isGameOver: false, actions: ['left', 'hardDrop'] } as unknown as PlacementCandidate & { isGameOver: boolean },
+        suicidal1: { heuristicScore: 90, isGameOver: true, actions: ['right', 'hardDrop'] } as unknown as PlacementCandidate & { isGameOver: boolean },
+        suicidal2: { heuristicScore: 200, isGameOver: true, actions: ['rotateClockwise', 'hardDrop'] } as unknown as PlacementCandidate & { isGameOver: boolean },
+      };
+
+      const mockSearchResult = {
+        bestCandidate: candidatesMap.best,
+        allCandidates: [candidatesMap.suicidal2, candidatesMap.best, candidatesMap.suicidal1, candidatesMap.suboptimal],
+        nonTerminalCandidates: [candidatesMap.best, candidatesMap.suboptimal],
+        searchMetrics: { nodesExplored: 10, nodesDeduplicated: 0, candidatesFound: 4, nonTerminalCandidateCount: 2, reachedNodeLimit: false },
+      };
+
+      // Probar múltiples semillas deterministas
+      for (let s = 1; s <= 50; s++) {
+        let seedVal = s * 100;
+        const prng = () => {
+          seedVal = (seedVal * 9301 + 49297) % 233280;
+          return seedVal / 233280;
+        };
+
+        const chosen = selectCandidate(mockSearchResult as unknown as SearchResult, cadetConfig, prng);
+        expect(chosen).not.toBeNull();
+        expect(chosen!.isGameOver).toBe(false);
+      }
+    });
+
+    it('inclusión de conjuntos elegibles: eligible(CADET) ⊇ eligible(OPERATOR) ⊇ eligible(ELITE)', () => {
+      const candidates = [
+        { heuristicScore: 100, isGameOver: false },
+        { heuristicScore: 90, isGameOver: false },
+        { heuristicScore: 70, isGameOver: false },
+        { heuristicScore: 30, isGameOver: false },
+        { heuristicScore: 10, isGameOver: false },
+      ];
+
+      const searchResult = {
+        bestCandidate: candidates[0]!,
+        allCandidates: candidates,
+        nonTerminalCandidates: candidates,
+        searchMetrics: { nodesExplored: 10, nodesDeduplicated: 0, candidatesFound: 5, nonTerminalCandidateCount: 5, reachedNodeLimit: false },
+      };
+
+      const bestScore = searchResult.bestCandidate.heuristicScore;
+
+      const getEligible = (profileId: 'battleCadet' | 'battleOperator' | 'battleElite') => {
+        const conf = BOT_PROFILES[profileId];
+        return searchResult.allCandidates.filter((c) => bestScore - c.heuristicScore <= conf.optimalityTolerance);
+      };
+
+      const cadetEligible = getEligible('battleCadet');
+      const operatorEligible = getEligible('battleOperator');
+      const eliteEligible = getEligible('battleElite');
+
+      expect(cadetEligible.length).toBeGreaterThanOrEqual(operatorEligible.length);
+      expect(operatorEligible.length).toBeGreaterThanOrEqual(eliteEligible.length);
+
+      expect(cadetEligible).toEqual(expect.arrayContaining(operatorEligible));
+      expect(operatorEligible).toEqual(expect.arrayContaining(eliteEligible));
+    });
+
+    it('diferenciación determinista con semilla y reprodubilidad exacta', () => {
+      const cadetBot1 = createDeterministicBot(BOT_PROFILES.battleCadet, () => 0.01);
+      const cadetBot2 = createDeterministicBot(BOT_PROFILES.battleCadet, () => 0.01);
+      const eliteBot = createDeterministicBot(BOT_PROFILES.battleElite, () => 0.01);
+
+      const engine1 = createGameEngine(makeValidOptions(555));
+      const engine2 = createGameEngine(makeValidOptions(555));
+      const engine3 = createGameEngine(makeValidOptions(555));
+
+      while (!isActivePieceFullyVisible(engine1)) {
+        engine1.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+        engine2.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+        engine3.step({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: true, hardDrop: false });
+      }
+
+      for (let i = 0; i < BOT_REACTION_DELAY_STEPS; i++) {
+        engine1.step(cadetBot1.nextStep(engine1));
+        engine2.step(cadetBot2.nextStep(engine2));
+        engine3.step(eliteBot.nextStep(engine3));
+      }
+
+      const diagCadet1 = cadetBot1.getDiagnostic();
+      const diagCadet2 = cadetBot2.getDiagnostic();
+      const diagElite = eliteBot.getDiagnostic();
+
+      // Reproducibilidad exacta: mismo estado + semilla + perfil produce exactamente la misma decisión
+      expect(diagCadet1.planDiagnostic?.selectedActionCount).toBe(diagCadet2.planDiagnostic?.selectedActionCount);
+      expect(diagCadet1.planDiagnostic?.selectedHeuristicScore).toBe(diagCadet2.planDiagnostic?.selectedHeuristicScore);
+
+      // ELITE restinge la selección a candidatos de mayor o igual puntuación heurística respecto a la tolerancia permissiva de CADET
+      if (diagElite.planDiagnostic && diagCadet1.planDiagnostic) {
+        expect(diagElite.planDiagnostic.selectedHeuristicScore).toBeGreaterThanOrEqual(diagCadet1.planDiagnostic.selectedHeuristicScore);
+      }
     });
   });
 });

@@ -40,13 +40,50 @@ describe('ModeSelector.vue', () => {
     wrapper.unmount();
   });
 
-  it('emite el evento selectMode con "battle" al pulsar el botón de Batalla', async () => {
+  it('emite el evento selectMode con "battle" y el perfil por defecto ("battleOperator") al pulsar el botón de Batalla', async () => {
     const wrapper = mount(ModeSelector);
     await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
 
     const emitted = wrapper.emitted('selectMode');
     expect(emitted).toBeTruthy();
-    expect(emitted![0]).toEqual(['battle']);
+    expect(emitted![0]).toEqual(['battle', 'battleOperator']);
+    wrapper.unmount();
+  });
+
+  it('mantiene OPERATOR por defecto y ubica el selector BOT PROFILE fuera de la superficie interactiva de Batalla', async () => {
+    const wrapper = mount(ModeSelector);
+    const battleBtn = wrapper.find('[data-testid="start-battle-button"]');
+    const profileSelector = wrapper.find('[data-testid="bot-profile-selector"]');
+
+    expect(battleBtn.exists()).toBe(true);
+    expect(profileSelector.exists()).toBe(true);
+
+    // Regresión: el selector no debe estar dentro del elemento del botón de Batalla
+    expect(battleBtn.element.contains(profileSelector.element)).toBe(false);
+
+    const cadetBtn = wrapper.find('[data-testid="bot-profile-cadet"]');
+    const operatorBtn = wrapper.find('[data-testid="bot-profile-operator"]');
+    const eliteBtn = wrapper.find('[data-testid="bot-profile-elite"]');
+
+    // OPERATOR seleccionado por defecto
+    expect(operatorBtn.classes()).toContain('bot-profile-btn--selected');
+
+    // Pulsar sobre CADET altera el perfil seleccionado sin emitir selectMode
+    await cadetBtn.trigger('click');
+    expect(cadetBtn.classes()).toContain('bot-profile-btn--selected');
+    expect(operatorBtn.classes()).not.toContain('bot-profile-btn--selected');
+    expect(wrapper.emitted('selectMode')).toBeFalsy();
+
+    // Al pulsar el botón de Batalla se emite el perfil actualmente elegido (battleCadet)
+    await battleBtn.trigger('click');
+    const emitted = wrapper.emitted('selectMode');
+    expect(emitted).toBeTruthy();
+    expect(emitted![0]).toEqual(['battle', 'battleCadet']);
+
+    // Cambiar a ELITE
+    await eliteBtn.trigger('click');
+    expect(eliteBtn.classes()).toContain('bot-profile-btn--selected');
+
     wrapper.unmount();
   });
 

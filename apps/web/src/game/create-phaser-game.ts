@@ -5,6 +5,7 @@
  * tipado pequeño (PhaserGameController) con reset(), togglePause() y destroy().
  */
 
+import type { BotProfileId } from '@rautfall/battle-engine';
 import Phaser from 'phaser';
 import { GameScene, type GameSceneCallbacks } from './scenes/GameScene';
 import type { GameMode, GamePresentationState, PhaserGameController } from './types';
@@ -15,6 +16,8 @@ export type CreatePhaserGameOptions = {
   parent: HTMLElement;
   /** Modo de juego seleccionado para la sesión ('training' | 'battle'). */
   mode?: GameMode;
+  /** Perfil de dificultad del bot rival en modo batalla. */
+  botProfile?: BotProfileId | undefined;
   /** Semilla opcional explícita para la partida (si no se indica, GameScene generará una nueva). */
   seed?: number | undefined;
   /** Callback para notificar cambios de estado a Vue. */
@@ -53,6 +56,7 @@ export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameCo
     callbacks: sceneCallbacks,
     mode: options.mode ?? 'training',
     seed: options.seed,
+    botProfile: options.botProfile,
   });
 
   return {

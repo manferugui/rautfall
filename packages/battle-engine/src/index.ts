@@ -43,6 +43,12 @@ export {
   normalizeBotSabotageConfig,
 } from './bot/sabotage-policy';
 export {
+  DEFAULT_BOT_PROFILE_ID,
+  BOT_PROFILES,
+  normalizeBotProfileId,
+  getBotProfileConfig,
+} from './bot/profiles';
+export {
   DEFAULT_BOT_SABOTAGE_CONFIG,
   type BotAction,
   type BotConfig,
@@ -50,6 +56,7 @@ export {
   type BotHeuristicWeights,
   type BotPlan,
   type BotPlanDiagnostic,
+  type BotProfileId,
   type BotSabotageConfig,
   type PlacementCandidate,
   type SabotageDecision,

@@ -493,14 +493,12 @@ Esta decisión permite ajustar el equilibrio, ejecutar simulaciones comparables 
 
 ### Perfiles
 
-La configuración podrá definir perfiles como:
+La configuración define los perfiles de juego y dificultad del rival:
 
-- `training`: sin bot, sabotajes ni muerte súbita.
-- `battleEasy`: bot con mayor tolerancia de optimalidad, mayor selección subóptima y reacción más lenta.
-- `battleNormal`: perfil equilibrado de referencia.
-- `battleHard`: decisiones próximas al óptimo y reacción más rápida.
-
-Los nombres y valores definitivos se decidirán durante el balance. El MVP puede exponer una sola dificultad aunque la arquitectura admita varias.
+- `training`: entrenamiento individual sin bot, sabotajes ni muerte súbita.
+- `battleCadet`: modo Batalla con rival heurístico en perfil CADET (`battleCadet`, tolerancia de 80.0 puntos, reacción de 300 ms).
+- `battleOperator`: modo Batalla con rival heurístico en perfil OPERATOR (`battleOperator`, tolerancia de 25.0 puntos, reacción de 200 ms, perfil por defecto).
+- `battleElite`: modo Batalla con rival heurístico en perfil ELITE (`battleElite`, tolerancia de 5.0 puntos, reacción de 100 ms).
 
 ### Elementos no configurables
 

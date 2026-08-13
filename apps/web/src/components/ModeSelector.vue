@@ -33,13 +33,15 @@ import { getAudioManager } from '../audio';
 import { useSettings } from '../settings/settings-store';
 import { formatKeyDisplay } from '../settings/control-bindings';
 
+import type { BotProfileId } from '@rautfall/battle-engine';
+
 // Constante de compilación: en producción es `false` y Vue nunca monta el
 // nodo del acceso DEV (no existe en el DOM). Mismo patrón que el resto de
 // guardas DEV de la app (SfxLabComponent, DevLauncherScreenComponent...).
 const isDevBuild = import.meta.env.DEV;
 
 const emit = defineEmits<{
-  (e: 'selectMode', mode: GameMode): void;
+  (e: 'selectMode', mode: GameMode, botProfile?: BotProfileId): void;
   (e: 'openSettings'): void;
   (e: 'openHistory'): void;
   (e: 'openRanking'): void;
@@ -49,6 +51,7 @@ const emit = defineEmits<{
 const audioManager = getAudioManager();
 const isMuted = ref(audioManager.isMuted());
 const { bindings } = useSettings();
+const selectedBotProfile = ref<BotProfileId>('battleOperator');
 
 onMounted(() => {
   if (audioManager.isUnlocked()) {
@@ -62,10 +65,20 @@ function toggleAudioMute(): void {
   isMuted.value = audioManager.toggleMute();
 }
 
+function setBotProfile(profile: BotProfileId): void {
+  void audioManager.unlock().catch(() => {});
+  audioManager.playSfx('uiClick');
+  selectedBotProfile.value = profile;
+}
+
 function onSelectMode(mode: GameMode): void {
   void audioManager.unlock().catch(() => {});
   audioManager.playSfx('uiClick');
-  emit('selectMode', mode);
+  if (mode === 'battle') {
+    emit('selectMode', mode, selectedBotProfile.value);
+  } else {
+    emit('selectMode', mode);
+  }
 }
 
 function onOpenSettings(): void {
@@ -186,20 +199,61 @@ function onOpenDevTools(): void {
             </div>
           </button>
 
-          <button
-            type="button"
-            class="mode-module mode-module--battle"
-            data-testid="start-battle-button"
-            @click="onSelectMode('battle')"
-          >
-            <div class="mode-module-plate" aria-hidden="true"></div>
-            <div class="mode-module-bezel" aria-hidden="true"></div>
-            <div class="mode-module-face">
-              <span class="mode-module-title">BATALLA TÁCTICA</span>
-              <span class="mode-module-desc">Combate 2P determinista contra rival automatizado</span>
-              <span class="mode-module-tag">2P · VS BOT</span>
+          <div class="battle-module-group">
+            <div class="bot-profile-selector" data-testid="bot-profile-selector">
+              <span class="bot-profile-label">BOT PROFILE</span>
+              <div class="bot-profile-buttons" role="radiogroup" aria-label="Dificultad del rival">
+                <button
+                  type="button"
+                  class="bot-profile-btn"
+                  :class="{ 'bot-profile-btn--selected': selectedBotProfile === 'battleCadet', 'bot-profile-btn--active': selectedBotProfile === 'battleCadet' }"
+                  role="radio"
+                  :aria-checked="selectedBotProfile === 'battleCadet'"
+                  data-testid="bot-profile-cadet"
+                  @click="setBotProfile('battleCadet')"
+                >
+                  CADET
+                </button>
+                <button
+                  type="button"
+                  class="bot-profile-btn"
+                  :class="{ 'bot-profile-btn--selected': selectedBotProfile === 'battleOperator', 'bot-profile-btn--active': selectedBotProfile === 'battleOperator' }"
+                  role="radio"
+                  :aria-checked="selectedBotProfile === 'battleOperator'"
+                  data-testid="bot-profile-operator"
+                  @click="setBotProfile('battleOperator')"
+                >
+                  OPERATOR
+                </button>
+                <button
+                  type="button"
+                  class="bot-profile-btn"
+                  :class="{ 'bot-profile-btn--selected': selectedBotProfile === 'battleElite', 'bot-profile-btn--active': selectedBotProfile === 'battleElite' }"
+                  role="radio"
+                  :aria-checked="selectedBotProfile === 'battleElite'"
+                  data-testid="bot-profile-elite"
+                  @click="setBotProfile('battleElite')"
+                >
+                  ELITE
+                </button>
+              </div>
             </div>
-          </button>
+
+            <button
+              type="button"
+              class="mode-module mode-module--battle"
+              data-testid="start-battle-button"
+              @click="onSelectMode('battle')"
+            >
+              <div class="mode-module-plate" aria-hidden="true"></div>
+              <div class="mode-module-bezel" aria-hidden="true"></div>
+              <div class="mode-module-face">
+                <span class="mode-module-title">BATALLA TÁCTICA</span>
+                <span class="mode-module-desc">Combate 2P determinista contra rival automatizado</span>
+                <span class="mode-module-tag">2P · VS BOT</span>
+              </div>
+            </button>
+          </div>
         </div>
 
         <!-- Controles de teclado: módulo técnico secundario, mismo lenguaje de consola -->
@@ -526,7 +580,15 @@ function onOpenDevTools(): void {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.85rem;
+  align-items: end;
+}
 
+.battle-module-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .mode-module {
@@ -540,6 +602,7 @@ function onOpenDevTools(): void {
   font-family: inherit;
   color: inherit;
   height: 190px;
+  width: 100%;
   max-width: 100%;
 
   &:hover:not(:disabled) {
@@ -818,6 +881,90 @@ function onOpenDevTools(): void {
   border-radius: 2px;
   color: #0b0b0d;
   background: var(--rf-color-amber, #f39c12);
+}
+
+.bot-profile-selector {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  background: linear-gradient(135deg, rgba(24, 26, 30, 0.92) 0%, rgba(12, 13, 15, 0.97) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  border-left: 3px solid var(--rf-color-cyan, #00d4ff);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.75),
+    0 3px 10px rgba(0, 0, 0, 0.45);
+}
+
+.bot-profile-label {
+  font-family: monospace;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--rf-color-cyan, #00d4ff);
+  text-transform: uppercase;
+}
+
+.bot-profile-buttons {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.bot-profile-btn {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  font-family: 'Oswald', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.65));
+  background: rgba(18, 19, 22, 0.92);
+  border: 1px solid rgba(80, 84, 92, 0.6);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  text-align: center;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .bot-profile-btn:hover:not(.bot-profile-btn--selected):not(.bot-profile-btn--active) {
+    color: #ffffff;
+    border-color: rgba(160, 165, 175, 0.8);
+    background: rgba(34, 37, 42, 0.95);
+  }
+
+  .bot-profile-btn--selected:hover,
+  .bot-profile-btn--active:hover {
+    background: #1ae0ff;
+    border-color: #33e5ff;
+    color: #000000;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.45);
+  }
+}
+
+.bot-profile-btn--selected,
+.bot-profile-btn--active {
+  color: #000000;
+  font-weight: 800;
+  background: var(--rf-color-cyan, #00d4ff);
+  border-color: #00e1ff;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.35);
+}
+
+.bot-profile-btn:focus-visible {
+  outline: 2px solid var(--rf-color-cyan, #00d4ff);
+  outline-offset: 2px;
+}
+
+.bot-profile-btn:focus:not(:focus-visible) {
+  outline: none;
 }
 
 @media (max-width: 640px) {

@@ -833,3 +833,26 @@ Ver [Informe de implementación](implementation/0033-popup-industrial-activacion
 - Suite de pruebas unitarias (`PauseShutter.test.ts`, `App.test.ts`, `audio-manager.test.ts`) y E2E Playwright (`essential-flow.spec.ts`) en verde.
 
 Ver [Informe de implementación](implementation/0034-cortinilla-industrial-compuerta-pausa.md).
+
+## Task [0035 — Perfiles de dificultad del bot (CADET / OPERATOR / ELITE)](tasks/0035-perfiles-dificultad-bot.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-13 |
+| **Resultado** | Tres perfiles seleccionables de dificultad (`CADET`, `OPERATOR`, `ELITE`) integrados en el bot heurístico único de Rautfall (`DeterministicBot`). Parámetros modulables centralizados en `@rautfall/battle-engine` (`reactionDelaySteps`, `actionIntervalSteps`, `hardDropDelaySteps`, `optimalityTolerance`, `suboptimalChoiceProbability`, `sabotageEnergyThreshold`, `sabotageIntervalSteps`, `sabotageCooldownSteps`). Invariante estricto "Nunca Suicida", política de selección estocástica determinista con PRNG interno, inclusión probada de conjuntos de elegibilidad ($\text{ELITE} \subseteq \text{OPERATOR} \subseteq \text{CADET}$), normalización de alias heredados (`bot-deterministic-v1` $\to$ `battleOperator`), selector UI con botones `[ CADET ] [ OPERATOR ] [ ELITE ]` en el módulo de Batalla de `ModeSelector.vue` e integración completa en Phaser y `App.vue`. 725 tests Vitest en verde, lint, typecheck, build y test:e2e limpios. |
+
+### Resumen
+
+- Un único bot heurístico (`DeterministicBot`) modulado mediante tres perfiles de configuración centralizados (`CADET`, `OPERATOR`, `ELITE`) en `@rautfall/battle-engine`.
+- Reglas físicas (SRS, DAS, ARR, gravedad y lock delay) 100% idénticas e independientes del perfil del bot.
+- Invariante "Nunca Suicida" (Non-Suicidal Invariant): la selección subóptima opera exclusivamente sobre colocaciones no terminales cuando exista al menos una disponible.
+- Selección estocástica determinista modulada por `optimalityTolerance` ($80.0 > 25.0 > 5.0$) y `suboptimalChoiceProbability` ($0.40 > 0.15 > 0.02$).
+- Inclusión comprobada de conjuntos de candidatos elegibles para una misma instantánea de búsqueda.
+- Normalización pura `normalizeBotProfileId` que mapea `undefined` y el alias legacy `'bot-deterministic-v1'` a `'battleOperator'`.
+- Interfaz gráfica en `ModeSelector.vue` con selector de perfil `BOT PROFILE` dentro del módulo de Batalla.
+- Propagación de `botProfile` a través de Phaser (`GameScene.ts`, `create-phaser-game.ts`), `GameCanvas.vue` y `App.vue` para persistir y registrar `opponentProfile` en la API POST de partidas.
+- Validación completa: 725 tests Vitest pasados, lint sin advertencias ni errores, typecheck limpio, build exitoso y test E2E pasando.
+
+Ver [Informe de implementación](implementation/0035-perfiles-dificultad-bot.md).
+

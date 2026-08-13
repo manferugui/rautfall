@@ -29,7 +29,22 @@ import { isGarbageDemoActive, createGarbageDemoEngine } from '../garbage-demo';
 import { isPolarityDemoActive, createPolarityDemoEngine } from '../polarity-demo';
 import { isBattleDemoActive, createBattleDemoSession } from '../battle-demo';
 import { isWarningDemoActive, createWarningDemoSession, prepareWarningDemoSabotage } from '../warning-demo';
-import { createBattleSession, createDeterministicBot, type BattleSession, type DeterministicBot } from '@rautfall/battle-engine';
+import {
+  createBattleSession,
+  createDeterministicBot,
+  getBotProfileConfig,
+  normalizeBotProfileId,
+  type BattleSession,
+  type BotProfileId,
+  type DeterministicBot,
+} from '@rautfall/battle-engine';
+
+export type GameSceneData = {
+  callbacks: GameSceneCallbacks;
+  mode?: GameMode;
+  seed?: number | undefined;
+  botProfile?: BotProfileId | undefined;
+};
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
 import {
@@ -75,6 +90,7 @@ export type GameSceneCallbacks = {
 
 export class GameScene extends Phaser.Scene {
   private mode: GameMode = 'training';
+  private botProfile?: BotProfileId | undefined;
   private engine!: GameEngine;
   private battleSession: BattleSession | null = null;
   private playerTwoBot: DeterministicBot | null = null;
@@ -185,10 +201,11 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  init(data: { callbacks: GameSceneCallbacks; mode?: GameMode; seed?: number | undefined }): void {
+  init(data: GameSceneData): void {
     this.callbacks = data.callbacks;
     this.mode = data.mode ?? 'training';
     this.matchSeed = data.seed ?? generateMatchSeed();
+    this.botProfile = data.botProfile;
   }
 
   getMatchSeed(): number {
@@ -590,7 +607,8 @@ export class GameScene extends Phaser.Scene {
       this.lastSabotageBlocked = null;
     } else if (isBattleDemoActive()) {
       this.battleSession = createBattleDemoSession();
-      this.playerTwoBot = createDeterministicBot();
+      const botConfig = getBotProfileConfig(normalizeBotProfileId(this.botProfile));
+      this.playerTwoBot = createDeterministicBot(botConfig);
       this.engine = this.battleSession.getEngine('playerOne');
       this.lastSabotageRouted = null;
     } else if (levelDemoTarget !== null) {
@@ -619,7 +637,8 @@ export class GameScene extends Phaser.Scene {
       this.engine = createPolarityDemoEngine();
     } else if (this.mode === 'battle') {
       this.battleSession = createBattleSession({ seed: this.matchSeed, config: prototypeConfig });
-      this.playerTwoBot = createDeterministicBot();
+      const botConfig = getBotProfileConfig(normalizeBotProfileId(this.botProfile));
+      this.playerTwoBot = createDeterministicBot(botConfig);
       this.engine = this.battleSession.getEngine('playerOne');
       this.lastSabotageRouted = null;
       this.lastSabotageBlocked = null;

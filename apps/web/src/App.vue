@@ -29,6 +29,7 @@ import { getOrCreatePlayerId, getPlayerTag, setPlayerTag, hasPlayerTag } from '.
 import { submitMatch } from './api/client';
 import type { CreateMatchInput } from '@rautfall/contracts';
 import type { ActiveEffectSnapshot, SabotageType } from '@rautfall/game-engine';
+import type { BotProfileId } from '@rautfall/battle-engine';
 
 import { isSfxLabActive } from './game/sfx-lab-demo';
 import { generateMatchSeed } from './game/seed';
@@ -69,6 +70,7 @@ const isDevDemo = hasDevDemoFlag();
 const isDevDebugPanel = ref(import.meta.env.DEV && isDebugPanelActive());
 const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
 const gameMode = ref<GameMode>(isBattleDemoActive() || isWarningDemo ? 'battle' : 'training');
+const selectedBotProfile = ref<BotProfileId>('battleOperator');
 const matchSeed = ref<number>(generateMatchSeed());
 const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 
@@ -417,7 +419,7 @@ async function confirmAndSaveMatchResult(rawTag: string): Promise<void> {
       level: matchData.level,
       mode: 'battle',
       result: matchData.result as 'victory' | 'defeat' | 'draw',
-      opponentProfile: matchData.opponentProfile || 'bot-deterministic-v1',
+      opponentProfile: matchData.opponentProfile || selectedBotProfile.value,
     };
   }
 
@@ -479,7 +481,7 @@ function onStateUpdate(state: GamePresentationState): void {
       level: state.level,
       mode: gameMode.value,
       result: matchResultType,
-      opponentProfile: gameMode.value === 'battle' ? 'bot-deterministic-v1' : null,
+      opponentProfile: gameMode.value === 'battle' ? selectedBotProfile.value : null,
     };
 
     gameResult.value = {
@@ -531,7 +533,10 @@ function openTagModalFromSettings(): void {
   isTagModalOpen.value = true;
 }
 
-function selectMode(mode: GameMode): void {
+function selectMode(mode: GameMode, botProfile?: BotProfileId): void {
+  if (botProfile) {
+    selectedBotProfile.value = botProfile;
+  }
   void audioManager.unlock();
   audioManager.playSfx('uiClick');
   audioManager.playMusic('gameplay');
@@ -899,6 +904,7 @@ function openDevTools(): void {
                   <GameCanvas
                     v-if="isCanvasMounted"
                     :mode="gameMode"
+                    :bot-profile="selectedBotProfile"
                     :seed="matchSeed"
                     :on-state-update="onStateUpdate"
                     @controller-ready="onControllerReady"
