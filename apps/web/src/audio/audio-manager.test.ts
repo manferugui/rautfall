@@ -143,6 +143,36 @@ describe('AudioManager', () => {
     expect(mockAudioContext.state).toBe('running');
   });
 
+  describe('contrato isUnlocked()', () => {
+    it('devuelve false inicialmente', () => {
+      const manager = AudioManager.getInstance();
+      expect(manager.isUnlocked()).toBe(false);
+    });
+
+    it('devuelve true tras completar correctamente unlock()', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+      expect(manager.isUnlocked()).toBe(true);
+    });
+
+    it('mantiene isUnlocked() en false si unlock() falla', async () => {
+      const manager = AudioManager.getInstance();
+      mockAudioContext.resume.mockRejectedValueOnce(new Error('Autoplay blocked'));
+
+      await expect(manager.unlock()).rejects.toThrow('Autoplay blocked');
+      expect(manager.isUnlocked()).toBe(false);
+    });
+
+    it('mantiene isUnlocked() en true si tras el desbloqueo el contexto pasa a estado suspended', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+      expect(manager.isUnlocked()).toBe(true);
+
+      mockAudioContext.state = 'suspended';
+      expect(manager.isUnlocked()).toBe(true);
+    });
+  });
+
   it('persiste el estado de silencio (mute) en localStorage', async () => {
     const manager = AudioManager.getInstance();
     expect(manager.isMuted()).toBe(false);

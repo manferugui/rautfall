@@ -788,3 +788,24 @@ Ver [Informe de implementación](implementation/0031-pulido-visual-fx-identidad-
 
 Ver [Informe de implementación](implementation/0032-operator-tag-firma-postpartida.md).
 
+## Task [0033 — Popup Industrial de Activación de Audio](tasks/0033-popup-industrial-activacion-audio.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-13 |
+| **Resultado** | Implementación del popup industrial modal de activación de audio (`AudioActivationModal.vue`), garantizando el flujo de cero autoplay al cargar la aplicación y resolviendo la confusión sobre la disponibilidad del sistema de sonido. Contrato público enriquecido con `AudioService.isUnlocked()`, separación estricta entre `unlocked`, `AudioContext.state` y `mute`. Soporte completo para accesibilidad de diálogo, focus trap, atajo Escape, protección de eventos de teclado respecto al gameplay, manejo asíncrono de inicialización, reconciliación de BGM y reintento antierrores. |
+
+### Resumen
+
+- Política de cero autoplay al cargar Rautfall: no se reproduce ningún sonido, no arranca ninguna BGM de forma ansiosa y no se instancian contextos Web Audio sin autorización explícita del usuario.
+- Componente `AudioActivationModal.vue` con estética **Industrial Dramatic** (placas grafito/metal oscuro, remaches en esquinas, badge `STANDBY` en ámbar).
+- Contrato público `AudioService.isUnlocked()` con variable booleana de instancia interna `unlocked`, preservando `true` aunque `AudioContext.state` pase a `suspended`.
+- Manejador asíncrono `INICIALIZAR AUDIO`: ejecuta `unlock()`, desactiva el silencio mediante la API oficial (`setMuted(false)`) cumpliendo la intención explícita del usuario de escuchar sonido, muestra deshabilitación con spinner durante la operación, reproduce feedback de `uiClick`, reconcilia la pista BGM de la pantalla activa y cierra el modal.
+- Manejador `SEGUIR EN SILENCIO`: cierra el modal en memoria SPA sin llamar a `unlock()` ni BGM/SFX, manteniendo la posibilidad de activar audio posteriormente en Settings.
+- Manejo de fallos en `unlock()`: mantiene el popup abierto, no reproduce SFX/BGM, muestra la indicación discreta `AUDIO INIT FAILED // RETRY` y permite reintentos.
+- Accesibilidad: `role="dialog"`, `aria-modal="true"`, foco inicial en el botón principal, focus trap `Tab`/`Shift+Tab`, atajo `Escape`, restauración de foco y aislamiento estricto mediante `stopPropagation()`.
+- Cobertura completa de pruebas unitarias (`audio-manager.test.ts`, `AudioActivationModal.test.ts`, `App.test.ts`) y Playwright E2E (`audio-activation-modal.spec.ts` + helpers).
+
+Ver [Informe de implementación](implementation/0033-popup-industrial-activacion-audio.md).
+

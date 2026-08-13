@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 test('flujo completo de navegación, selección de modos, resultados y menú', async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -13,6 +14,7 @@ test('flujo completo de navegación, selección de modos, resultados y menú', a
 
   await test.step('carga de la raíz sin flags muestra el Menú Principal', async () => {
     await page.goto('/');
+    await initializeAudioIfPrompted(page);
     await expect(page.getByTestId('mode-selector')).toBeVisible();
     await expect(page.getByTestId('start-training-button')).toBeVisible();
     await expect(page.getByTestId('start-battle-button')).toBeVisible();

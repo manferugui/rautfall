@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 test('flujo esencial de principio a fin', async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -13,6 +14,7 @@ test('flujo esencial de principio a fin', async ({ page }) => {
 
   await test.step('carga de la aplicación y navegación al Modo Entrenamiento', async () => {
     await page.goto('/');
+    await initializeAudioIfPrompted(page);
     await expect(page.getByTestId('mode-selector')).toBeVisible();
     await page.getByTestId('start-training-button').click();
     const canvas = page.locator('[data-testid="game-canvas"] canvas');

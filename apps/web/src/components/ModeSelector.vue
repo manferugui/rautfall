@@ -51,23 +51,25 @@ const isMuted = ref(audioManager.isMuted());
 const { bindings } = useSettings();
 
 onMounted(() => {
-  audioManager.playMusic('menu');
+  if (audioManager.isUnlocked()) {
+    audioManager.playMusic('menu');
+  }
 });
 
 function toggleAudioMute(): void {
-  void audioManager.unlock();
+  void audioManager.unlock().catch(() => {});
   audioManager.playSfx('uiClick');
   isMuted.value = audioManager.toggleMute();
 }
 
 function onSelectMode(mode: GameMode): void {
-  void audioManager.unlock();
+  void audioManager.unlock().catch(() => {});
   audioManager.playSfx('uiClick');
   emit('selectMode', mode);
 }
 
 function onOpenSettings(): void {
-  void audioManager.unlock();
+  void audioManager.unlock().catch(() => {});
   audioManager.playSfx('uiClick');
   emit('openSettings');
 }

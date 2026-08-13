@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 type BotDevState = Readonly<{
   battleStep: number;
@@ -79,6 +80,7 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
 
   await test.step('Escenario 1 — Visibilidad completa y retardo de reacción de 20 pasos', async () => {
     await page.goto('/?battle-demo=1&debug-panel=1');
+    await initializeAudioIfPrompted(page);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
 
     // El header del monitor rival ya no tiene badge "Lvl N" (rediseño

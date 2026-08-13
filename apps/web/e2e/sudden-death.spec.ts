@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 test.describe('sudden-death E2E', () => {
   test('modo battle-demo=1&sudden-death-demo=1: inicia cerca del aviso y transiciona por las fases de Muerte Súbita', async ({ page }) => {
@@ -12,6 +13,7 @@ test.describe('sudden-death E2E', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.goto('/?battle-demo=1&sudden-death-demo=1&debug-panel=1');
+    await initializeAudioIfPrompted(page);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
     await expect(page.getByTestId('battle-status')).toHaveText('running');
 

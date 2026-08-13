@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 test('flujo de remapeo de controles, persistencia local y uso mantenido (DAS/ARR) en partida', async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -13,6 +14,7 @@ test('flujo de remapeo de controles, persistencia local y uso mantenido (DAS/ARR
 
   await test.step('abrir pantalla de configuración desde el menú principal', async () => {
     await page.goto('/');
+    await initializeAudioIfPrompted(page);
     await expect(page.getByTestId('mode-selector')).toBeVisible();
     await page.getByTestId('open-settings-button').click();
     await expect(page.getByTestId('settings-screen')).toBeVisible();
@@ -58,6 +60,7 @@ test('flujo de remapeo de controles, persistencia local y uso mantenido (DAS/ARR
     await page.getByTestId('exit-to-menu-button').click();
     await expect(page.getByTestId('mode-selector')).toBeVisible();
     await page.reload();
+    await initializeAudioIfPrompted(page);
     await expect(page.getByTestId('mode-selector')).toBeVisible();
     await page.getByTestId('open-settings-button').click();
     await expect(page.getByTestId('control-row-moveLeft')).toContainText('J');

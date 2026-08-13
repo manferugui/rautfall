@@ -46,6 +46,8 @@ export interface AudioPreferences {
 export interface AudioService {
   /** Desbloquea e inicializa el AudioContext tras una interacción del usuario. */
   unlock(): Promise<void>;
+  /** Indica si el sistema de audio está desbloqueado y activo (AudioContext en ejecución). */
+  isUnlocked(): boolean;
   /** Indica si el audio global está silenciado. */
   isMuted(): boolean;
   /** Alterna el silencio global y devuelve el nuevo estado de mute. */

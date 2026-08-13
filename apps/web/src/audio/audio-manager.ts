@@ -44,6 +44,7 @@ export class AudioManager implements AudioService {
   private musicGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
 
+  private unlocked = false;
   private muted = false;
   private sfxBusVolume = 1.0;
   private musicBusVolume = 1.0;
@@ -155,20 +156,28 @@ export class AudioManager implements AudioService {
     if (!this.ctx) {
       this.initAudioContext();
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      try {
-        await this.ctx.resume();
-      } catch {
-        // Ignorar si el navegador bloquea la reanudación
-      }
+    if (!this.ctx) {
+      return;
+    }
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
+    if (this.ctx.state === 'running') {
+      this.unlocked = true;
+    } else {
+      throw new Error(`AudioContext en estado no activo: ${this.ctx.state}`);
     }
 
-    if (this.ctx && this.ctx.state === 'running' && this.currentMusicTrack && !this.currentMusicSource) {
+    if (this.currentMusicTrack && !this.currentMusicSource) {
       this.playMusic(this.currentMusicTrack);
     }
 
     // Precargar asíncronamente activos de audio registrados sin bloquear la reanudación del contexto
     void this.preloadAssets();
+  }
+
+  public isUnlocked(): boolean {
+    return this.unlocked;
   }
 
   public isMuted(): boolean {
@@ -801,6 +810,7 @@ export class AudioManager implements AudioService {
     this.masterGain = null;
     this.musicGain = null;
     this.sfxGain = null;
+    this.unlocked = false;
     this.lastSfxTimeMap.clear();
     this.sfxAudioBufferMap.clear();
     this.musicAudioBufferMap.clear();

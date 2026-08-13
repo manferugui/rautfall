@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 test('flujo postpartida unificado de firma de iniciales arcade del Operator Tag y transición automática a Ranking', async ({ page }) => {
   const consoleErrors: string[] = [];
@@ -66,6 +67,7 @@ test('flujo postpartida unificado de firma de iniciales arcade del Operator Tag 
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
     await page.goto('/');
+    await initializeAudioIfPrompted(page);
     await expect(page.getByTestId('mode-selector')).toBeVisible();
     await page.getByTestId('start-training-button').click();
     await expect(page.getByTestId('own-board-column')).toBeVisible();

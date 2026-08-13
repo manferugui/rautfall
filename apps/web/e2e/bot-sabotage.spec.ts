@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
 test.describe('bot-sabotage E2E', () => {
   test('modo battle-demo=1&bot-sabotage=1: bot conserva sabotaje cuando el rival esta por debajo del umbral', async ({ page }) => {
@@ -12,6 +13,7 @@ test.describe('bot-sabotage E2E', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.goto('/?battle-demo=1&bot-sabotage=1&debug-panel=1');
+    await initializeAudioIfPrompted(page);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
     await expect(page.getByTestId('battle-status')).toHaveText('running');
 
@@ -41,6 +43,7 @@ test.describe('bot-sabotage E2E', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.goto('/?battle-demo=1&bot-sabotage=high&debug-panel=1');
+    await initializeAudioIfPrompted(page);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
     await expect(page.getByTestId('battle-status')).toHaveText('running');
 
@@ -70,6 +73,7 @@ test.describe('bot-sabotage E2E', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.goto('/?battle-demo=1&bot-sabotage=high&debug-panel=1');
+    await initializeAudioIfPrompted(page);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
 
     // Pausar
@@ -102,6 +106,7 @@ test.describe('bot-sabotage E2E', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.goto('/?battle-demo=1&interference-demo=1&debug-panel=1');
+    await initializeAudioIfPrompted(page);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
     await expect(page.getByTestId('session-status')).toHaveText('running');
     await expect(page.getByTestId('session-step')).not.toHaveText('0');

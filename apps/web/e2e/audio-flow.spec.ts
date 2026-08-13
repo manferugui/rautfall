@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { initializeAudioIfPrompted, continueSilentlyIfPrompted } from './audio-helpers';
 
 test.describe('Flujo de Audio y Mute', () => {
   test('navega por la aplicación sin errores de consola ni de AudioContext y conmuta el botón de Mute', async ({ page }) => {
@@ -15,8 +16,9 @@ test.describe('Flujo de Audio y Mute', () => {
       pageErrors.push(err);
     });
 
-    // 1. Cargar Menú Principal
+    // 1. Cargar Menú Principal e inicializar audio mediante el modal
     await page.goto('/');
+    await initializeAudioIfPrompted(page);
 
     const muteBtn = page.locator('[data-testid="audio-mute-button"]');
     await expect(muteBtn).toBeVisible();
@@ -26,8 +28,9 @@ test.describe('Flujo de Audio y Mute', () => {
     await muteBtn.click();
     await expect(muteBtn).toHaveAttribute('data-audio-muted', 'true');
 
-    // 3. Recargar la página y verificar que el silencio persiste en localStorage
+    // 3. Recargar la página y verificar que la preferencia de silencio persiste al continuar en silencio
     await page.reload();
+    await continueSilentlyIfPrompted(page);
     const muteBtnAfterReload = page.locator('[data-testid="audio-mute-button"]');
     await expect(muteBtnAfterReload).toHaveAttribute('data-audio-muted', 'true');
 

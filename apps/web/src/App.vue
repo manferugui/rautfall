@@ -13,6 +13,7 @@ import HistoryScreen from './components/HistoryScreen.vue';
 import RankingScreen from './components/RankingScreen.vue';
 import ResultsModal from './components/ResultsModal.vue';
 import OperatorTagModal from './components/OperatorTagModal.vue';
+import AudioActivationModal from './components/AudioActivationModal.vue';
 import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive, isDebugPanelActive } from './game/battle-demo';
 import { isTSpinDemoActive } from './game/tspin-demo';
@@ -72,13 +73,62 @@ const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 
 const audioManager = getAudioManager();
 const isAudioMuted = ref(audioManager.isMuted());
+const isAudioUnlocked = ref(audioManager.isUnlocked());
+const hasAudioPromptBeenDismissed = ref(false);
+const isAudioInitializing = ref(false);
+const audioInitError = ref(false);
 
-if (isDevDemo && !isSfxLab) {
-  audioManager.playMusic('gameplay');
+const isAudioModalOpen = computed(
+  () => !isAudioUnlocked.value && !hasAudioPromptBeenDismissed.value
+);
+
+function reconcileScreenAudio(): void {
+  if (!audioManager.isUnlocked()) return;
+  if (appScreen.value === 'menu') {
+    audioManager.playMusic('menu');
+  } else if (appScreen.value === 'playing') {
+    if (isSuddenDeathActive.value) {
+      audioManager.playMusic('suddenDeath');
+    } else {
+      audioManager.playMusic('gameplay');
+    }
+  }
+}
+
+if (audioManager.isUnlocked()) {
+  reconcileScreenAudio();
+}
+
+async function handleInitializeAudio(): Promise<void> {
+  if (isAudioInitializing.value) return;
+  isAudioInitializing.value = true;
+  audioInitError.value = false;
+
+  try {
+    await audioManager.unlock();
+    isAudioUnlocked.value = audioManager.isUnlocked();
+    audioManager.setMuted(false);
+    isAudioMuted.value = audioManager.isMuted();
+    audioManager.playSfx('uiClick');
+    reconcileScreenAudio();
+  } catch {
+    audioInitError.value = true;
+  } finally {
+    isAudioInitializing.value = false;
+  }
+}
+
+function handleKeepSilentAudio(): void {
+  hasAudioPromptBeenDismissed.value = true;
 }
 
 function toggleAudioMute(): void {
-  void audioManager.unlock();
+  void audioManager.unlock().then(() => {
+    isAudioUnlocked.value = audioManager.isUnlocked();
+    reconcileScreenAudio();
+  }).catch(() => {
+    // Ignorar si falla el unlock diferido
+  });
   audioManager.playSfx('uiClick');
   isAudioMuted.value = audioManager.toggleMute();
 }
@@ -1080,6 +1130,15 @@ function openDevTools(): void {
         :initial-tag="currentOperatorTag || ''"
         @confirm="handleTagConfirmed"
         @cancel="handleTagCancelled"
+      />
+
+      <!-- Popup Industrial de Activación de Audio -->
+      <AudioActivationModal
+        v-if="isAudioModalOpen"
+        :is-initializing="isAudioInitializing"
+        :error="audioInitError"
+        @initialize="handleInitializeAudio"
+        @keep-silent="handleKeepSilentAudio"
       />
     </template>
   </div>

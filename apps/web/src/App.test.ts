@@ -8,6 +8,7 @@ import { mount } from '@vue/test-utils';
 import App from './App.vue';
 import type { GamePresentationState } from './game/types';
 import * as clientModule from './api/client';
+import { AudioManager } from './audio/audio-manager';
 
 const mockController = vi.hoisted(() => ({
   reset: vi.fn(),
@@ -21,10 +22,101 @@ vi.mock('./game/create-phaser-game', () => ({
   createPhaserGame: mockCreatePhaserGame,
 }));
 
+type MockGainNode = {
+  gain: {
+    value: number;
+    setValueAtTime: ReturnType<typeof vi.fn>;
+    exponentialRampToValueAtTime: ReturnType<typeof vi.fn>;
+    linearRampToValueAtTime: ReturnType<typeof vi.fn>;
+    cancelScheduledValues: ReturnType<typeof vi.fn>;
+  };
+  connect: ReturnType<typeof vi.fn>;
+};
+
+type MockAudioContext = {
+  state: string;
+  currentTime: number;
+  destination: Record<string, unknown>;
+  createGain: ReturnType<typeof vi.fn>;
+  createOscillator: ReturnType<typeof vi.fn>;
+  createBiquadFilter: ReturnType<typeof vi.fn>;
+  createBuffer: ReturnType<typeof vi.fn>;
+  createBufferSource: ReturnType<typeof vi.fn>;
+  resume: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+};
+
 describe('App.vue — flujo web de modos, resultados, firma arcade unificada e idempotencia', () => {
+  let mockAudioContext: MockAudioContext;
+  let mockGainNode: MockGainNode;
+
   beforeEach(() => {
     localStorage.clear();
+    AudioManager.resetInstance();
     vi.clearAllMocks();
+
+    mockGainNode = {
+      gain: {
+        value: 1,
+        setValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn(),
+        linearRampToValueAtTime: vi.fn(),
+        cancelScheduledValues: vi.fn(),
+      },
+      connect: vi.fn(),
+    };
+
+    mockAudioContext = {
+      state: 'suspended',
+      currentTime: 0,
+      destination: {},
+      createGain: vi.fn(() => mockGainNode),
+      createOscillator: vi.fn(() => ({
+        type: 'sine',
+        frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      })),
+      createBiquadFilter: vi.fn(() => ({
+        type: 'lowpass',
+        frequency: { setValueAtTime: vi.fn() },
+        Q: { setValueAtTime: vi.fn() },
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      })),
+      createBuffer: vi.fn(() => ({
+        numberOfChannels: 1,
+        length: 48000,
+        sampleRate: 48000,
+        getChannelData: () => new Float32Array(48000),
+      })),
+      createBufferSource: vi.fn(() => ({
+        buffer: null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        onended: null,
+      })),
+      resume: vi.fn().mockImplementation(async () => {
+        mockAudioContext.state = 'running';
+      }),
+      close: vi.fn().mockImplementation(async () => {
+        mockAudioContext.state = 'closed';
+      }),
+    };
+
+    const MockAudioCtx = vi.fn().mockImplementation(function (this: unknown) {
+      return mockAudioContext;
+    });
+    vi.stubGlobal('AudioContext', MockAudioCtx);
+    vi.stubGlobal('webkitAudioContext', MockAudioCtx);
+    if (typeof window !== 'undefined') {
+      Object.defineProperty(window, 'AudioContext', { value: MockAudioCtx, writable: true, configurable: true });
+      Object.defineProperty(window, 'webkitAudioContext', { value: MockAudioCtx, writable: true, configurable: true });
+    }
   });
 
   function mountApp(): ReturnType<typeof mount> {
@@ -201,5 +293,198 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
     expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
 
     wrapper.unmount();
+  });
+
+  describe('Flujo de Activación de Audio e Integración del Modal Industrial en App.vue', () => {
+    it('1. el modal aparece al arrancar si audioManager.isUnlocked() es false', () => {
+      const manager = AudioManager.getInstance();
+      expect(manager.isUnlocked()).toBe(false);
+
+      const wrapper = mountApp();
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="keep-silent-button"]').exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('2. el modal no aparece si el audio ya está desbloqueado', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+      expect(manager.isUnlocked()).toBe(true);
+
+      const wrapper = mountApp();
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('3, 4 y 5. INICIALIZAR AUDIO llama a unlock(), mantiene el modal durante la promesa y lo cierra al terminar', async () => {
+      const manager = AudioManager.getInstance();
+      let resolveUnlock!: () => void;
+      const unlockPromise = new Promise<void>((resolve) => {
+        resolveUnlock = resolve;
+      });
+      const unlockSpy = vi.spyOn(manager, 'unlock').mockImplementation(async () => {
+        await unlockPromise;
+        (manager as unknown as { unlocked: boolean }).unlocked = true;
+      });
+
+      const wrapper = mountApp();
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
+
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      expect(unlockSpy).toHaveBeenCalledTimes(1);
+
+      // Mientras unlock() está pendiente, el modal permanece abierto
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
+
+      resolveUnlock();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      // Al resolverse correctamente, el modal se cierra
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('6. tras un unlock() correcto invoca la reconciliación de BGM de la pantalla actual', async () => {
+      const manager = AudioManager.getInstance();
+      const playMusicSpy = vi.spyOn(manager, 'playMusic');
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      expect(playMusicSpy).toHaveBeenCalledWith('menu');
+      wrapper.unmount();
+    });
+
+    it('7 y 8. SEGUIR EN SILENCIO cierra el modal sin llamar a unlock() ni BGM y no reaparece durante la navegación', async () => {
+      const manager = AudioManager.getInstance();
+      const unlockSpy = vi.spyOn(manager, 'unlock');
+      const playMusicSpy = vi.spyOn(manager, 'playMusic');
+
+      const wrapper = mountApp();
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
+
+      await wrapper.find('[data-testid="keep-silent-button"]').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      expect(unlockSpy).not.toHaveBeenCalled();
+      expect(playMusicSpy).not.toHaveBeenCalled();
+      expect(manager.isUnlocked()).toBe(false);
+
+      // Navegar libremente no reabre el modal
+      await wrapper.find('[data-testid="open-settings-button"]').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('9. si unlock() rechaza, el modal permanece abierto, muestra error, no BGM ni click, y permite reintentar', async () => {
+      const manager = AudioManager.getInstance();
+      const unlockSpy = vi.spyOn(manager, 'unlock').mockRejectedValueOnce(new Error('Audio unlock rejected'));
+      const playSfxSpy = vi.spyOn(manager, 'playSfx');
+      const playMusicSpy = vi.spyOn(manager, 'playMusic');
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      expect(unlockSpy).toHaveBeenCalledTimes(1);
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="audio-error-indicator"]').exists()).toBe(true);
+      expect(playSfxSpy).not.toHaveBeenCalled();
+      expect(playMusicSpy).not.toHaveBeenCalled();
+
+      // Permitir reintento tras fallo
+      unlockSpy.mockImplementationOnce(async () => {
+        (manager as unknown as { unlocked: boolean }).unlocked = true;
+      });
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('10. INICIALIZAR AUDIO desbloquea el sistema, desactiva mute mediante API oficial y reproduce uiClick tras éxito', async () => {
+      const manager = AudioManager.getInstance();
+      manager.setMuted(true);
+      expect(manager.isMuted()).toBe(true);
+      expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
+
+      const setMutedSpy = vi.spyOn(manager, 'setMuted');
+      const playSfxSpy = vi.spyOn(manager, 'playSfx');
+      const playMusicSpy = vi.spyOn(manager, 'playMusic');
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      expect(manager.isUnlocked()).toBe(true);
+      expect(setMutedSpy).toHaveBeenCalledWith(false);
+      expect(manager.isMuted()).toBe(false);
+      expect(localStorage.getItem('rautfall_audio_muted')).toBe('false');
+      expect(playSfxSpy).toHaveBeenCalledWith('uiClick');
+      expect(playMusicSpy).toHaveBeenCalledWith('menu');
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('11. si unlock() falla, el estado de mute y la preferencia persistida permanecen inalterados', async () => {
+      const manager = AudioManager.getInstance();
+      manager.setMuted(true);
+      vi.spyOn(manager, 'unlock').mockRejectedValueOnce(new Error('Unlock failed'));
+      const setMutedSpy = vi.spyOn(manager, 'setMuted');
+      const playSfxSpy = vi.spyOn(manager, 'playSfx');
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      expect(manager.isMuted()).toBe(true);
+      expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
+      expect(setMutedSpy).not.toHaveBeenCalled();
+      expect(playSfxSpy).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('12. si el estado inicial ya es muted = false, INICIALIZAR AUDIO mantiene el audio no silenciado sin errores', async () => {
+      const manager = AudioManager.getInstance();
+      manager.setMuted(false);
+      expect(manager.isMuted()).toBe(false);
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+
+      expect(manager.isUnlocked()).toBe(true);
+      expect(manager.isMuted()).toBe(false);
+      expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('13. SEGUIR EN SILENCIO no modifica la preferencia de mute persistida ni invoca unlock()', async () => {
+      const manager = AudioManager.getInstance();
+      manager.setMuted(true);
+      const unlockSpy = vi.spyOn(manager, 'unlock');
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="keep-silent-button"]').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(unlockSpy).not.toHaveBeenCalled();
+      expect(manager.isMuted()).toBe(true);
+      expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
+      wrapper.unmount();
+    });
   });
 });
