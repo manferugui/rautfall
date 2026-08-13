@@ -1724,6 +1724,7 @@ body {
 
 .canvas-wrapper {
   position: relative;
+  display: flex;
   background: #08090b;
   border: 3px solid #1a1b1f;
   border-radius: 3px;

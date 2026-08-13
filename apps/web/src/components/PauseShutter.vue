@@ -90,10 +90,13 @@ const isGameOver = computed(() => props.status === 'gameOver');
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  opacity: 0;
+  transition: opacity 200ms ease;
 }
 
 .rf-pause-shutter--sealed {
   pointer-events: auto;
+  opacity: 1;
 }
 
 /* Guías mecánicas laterales encastradas */
