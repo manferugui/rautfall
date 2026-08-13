@@ -38,9 +38,13 @@ export function buildApp(options: AppOptions = {}): {
     logger: env.NODE_ENV === 'test' ? false : { level: 'info' },
   });
 
-  // Configuración explícita de CORS según env (no origin: '*')
+  // Configuración explícita de CORS según env (soporta orígenes separados por coma)
+  const allowedOrigins = env.CORS_ORIGIN.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   void fastify.register(fastifyCors, {
-    origin: [env.CORS_ORIGIN],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'OPTIONS'],
   });
 

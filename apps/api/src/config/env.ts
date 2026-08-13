@@ -13,7 +13,7 @@ const EnvSchema = Type.Object({
   PORT: Type.Number({ default: 3000 }),
   HOST: Type.String({ default: '0.0.0.0' }),
   DATABASE_URL: Type.String({ default: 'postgres://rautfall:rautfall@localhost:5432/rautfall' }),
-  CORS_ORIGIN: Type.String({ default: 'http://localhost:5173' }),
+  CORS_ORIGIN: Type.String({ default: 'http://localhost:5173,http://127.0.0.1:5173' }),
 });
 
 export type ApiEnv = Static<typeof EnvSchema>;
@@ -25,7 +25,7 @@ export function getAppEnv(customEnv?: Record<string, string | undefined>): ApiEn
     PORT: rawEnv['PORT'] ? Number(rawEnv['PORT']) : 3000,
     HOST: rawEnv['HOST'] || '0.0.0.0',
     DATABASE_URL: rawEnv['DATABASE_URL'] || 'postgres://rautfall:rautfall@localhost:5432/rautfall',
-    CORS_ORIGIN: rawEnv['CORS_ORIGIN'] || 'http://localhost:5173',
+    CORS_ORIGIN: rawEnv['CORS_ORIGIN'] || 'http://localhost:5173,http://127.0.0.1:5173',
   };
 
   if (!Value.Check(EnvSchema, envObj)) {

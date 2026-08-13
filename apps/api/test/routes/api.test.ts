@@ -29,7 +29,7 @@ describe('Rutas HTTP API (Fastify Inject + PostgreSQL Testcontainers)', () => {
         PORT: 3000,
         HOST: '127.0.0.1',
         DATABASE_URL: container.getConnectionUri(),
-        CORS_ORIGIN: 'http://localhost:5173',
+        CORS_ORIGIN: 'http://localhost:5173,http://127.0.0.1:5173',
       },
       db,
     });
@@ -284,4 +284,62 @@ describe('Rutas HTTP API (Fastify Inject + PostgreSQL Testcontainers)', () => {
       expect(ranking[0]?.mode).toBe('battle');
     });
   });
+
+  describe('Configuración CORS', () => {
+    it('permite peticiones desde http://localhost:5173 e incluye el encabezado Access-Control-Allow-Origin', async () => {
+      const res = await fastify.inject({
+        method: 'GET',
+        url: '/api/health',
+        headers: {
+          origin: 'http://localhost:5173',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    });
+
+    it('permite peticiones desde http://127.0.0.1:5173 e incluye el encabezado Access-Control-Allow-Origin', async () => {
+      const res = await fastify.inject({
+        method: 'GET',
+        url: '/api/health',
+        headers: {
+          origin: 'http://127.0.0.1:5173',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173');
+    });
+
+    it('responde correctamente a peticiones preflight OPTIONS para orígenes autorizados', async () => {
+      const res = await fastify.inject({
+        method: 'OPTIONS',
+        url: '/api/matches',
+        headers: {
+          origin: 'http://127.0.0.1:5173',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'content-type',
+        },
+      });
+
+      expect(res.statusCode).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5173');
+      expect(res.headers['access-control-allow-methods']).toContain('POST');
+    });
+
+    it('no devuelve Access-Control-Allow-Origin para orígenes no permitidos', async () => {
+      const res = await fastify.inject({
+        method: 'GET',
+        url: '/api/health',
+        headers: {
+          origin: 'http://unauthorized-domain.com',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    });
+  });
 });
+
