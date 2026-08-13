@@ -2,6 +2,8 @@ import type { ActiveEffectSnapshot, PieceType, SabotageType } from '@rautfall/ga
 import type { BattleStatus, BattleWinner, BattleWarningSnapshot, BattleImmunitySnapshot, BattleParticipantStateSnapshot } from '@rautfall/battle-engine';
 import type { SessionStatus } from './session-status';
 
+export type { SessionStatus };
+
 export type CellPresentation = Readonly<{
   x: number;
   y: number;

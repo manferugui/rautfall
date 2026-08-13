@@ -486,5 +486,54 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
       wrapper.unmount();
     });
+
+    it('14. orquesta la compuerta de pausa y el transporte de música (pauseMusic y resumeMusic) al alternar el estado de pausa', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      const playSfxSpy = vi.spyOn(manager, 'playSfx');
+      const pauseMusicSpy = vi.spyOn(manager, 'pauseMusic');
+      const resumeMusicSpy = vi.spyOn(manager, 'resumeMusic');
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+
+      const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
+
+      const baseState: GamePresentationState = {
+        status: 'running',
+        step: 10,
+        elapsedMs: 1000,
+        nextPieces: ['O', 'T', 'I'],
+        heldPiece: null,
+        score: 100,
+        clearedLines: 0,
+        combo: 0,
+        backToBack: 0,
+        combatEnergy: 0,
+        storedSabotages: [],
+        pendingGarbage: 0,
+        activeEffects: [],
+        level: 1,
+        baseGravityCellsPerSecond: 1,
+        activeGravityCellsPerSecond: 1,
+      };
+
+      // 1. Transición running -> paused
+      stateUpdateCallback({ ...baseState, status: 'paused' });
+      await wrapper.vm.$nextTick();
+
+      expect(playSfxSpy).toHaveBeenCalledWith('pauseShutterClose');
+      expect(pauseMusicSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Transición paused -> running
+      stateUpdateCallback({ ...baseState, status: 'running' });
+      await wrapper.vm.$nextTick();
+
+      expect(playSfxSpy).toHaveBeenCalledWith('pauseShutterOpen');
+      expect(resumeMusicSpy).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+    });
   });
 });

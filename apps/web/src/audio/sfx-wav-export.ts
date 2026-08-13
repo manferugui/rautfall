@@ -171,6 +171,8 @@ export const PRODUCTION_SFX_ASSET_FILES = [
   'sudden-death-started.wav',
   'game-over.wav',
   'victory-fallback.wav',
+  'pause-shutter-close.wav',
+  'pause-shutter-open.wav',
 ] as const;
 
 /**

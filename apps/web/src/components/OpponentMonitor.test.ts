@@ -120,13 +120,15 @@ describe('OpponentMonitor.vue', () => {
       wrapper.unmount();
     });
 
-    it('muestra el velo de PAUSA cuando isPaused es true', () => {
+    it('muestra el estado técnico de señal suspendida FEED HOLD cuando isPaused es true', () => {
       const wrapper = mount(OpponentMonitor, {
         props: { playerTwo: mockOpponentState, isPaused: true },
       });
       const pauseOverlay = wrapper.find('[data-testid="opponent-pause-overlay"]');
       expect(pauseOverlay.exists()).toBe(true);
-      expect(pauseOverlay.text()).toBe('PAUSA');
+      expect(pauseOverlay.text()).toContain('FEED HOLD');
+      expect(pauseOverlay.text()).toContain('TACTICAL LINK SUSPENDED');
+      expect(pauseOverlay.text()).not.toContain('PAUSA');
       wrapper.unmount();
     });
 
@@ -181,6 +183,18 @@ describe('OpponentMonitor.vue', () => {
       const overlay = wrapper.find('[data-testid="interferencia-overlay"]');
       expect(overlay.exists()).toBe(true);
       expect(overlay.text()).toBe('SEÑAL INTERFERIDA');
+      wrapper.unmount();
+    });
+
+    it('protege el comportamiento observable: no renderiza compuerta de pausa ni lamas animadas al pausar', () => {
+      const wrapper = mount(OpponentMonitor, {
+        props: { playerTwo: mockOpponentState, isPaused: true },
+      });
+      expect(wrapper.find('[data-testid="pause-shutter"]').exists()).toBe(false);
+      expect(wrapper.find('.rf-pause-shutter').exists()).toBe(false);
+      expect(wrapper.find('.shutter-slat').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="opponent-pause-overlay"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="opponent-board"]').exists()).toBe(true);
       wrapper.unmount();
     });
   });

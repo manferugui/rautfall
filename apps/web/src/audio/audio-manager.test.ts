@@ -747,4 +747,169 @@ describe('AudioManager', () => {
     expect(() => manager.restartMusic('gameplay')).not.toThrow();
     expect(manager.isMuted()).toBe(true);
   });
+
+  describe('Transporte de música BGM (pausa, reanudación, offsets)', () => {
+    it('pausa la música, conserva el offset acumulado y reanuda desde ese mismo punto', async () => {
+      const manager = AudioManager.getInstance();
+      const mockBuffer = {
+        duration: 60,
+        length: 2880000,
+        sampleRate: 48000,
+        numberOfChannels: 2,
+      } as unknown as AudioBuffer;
+
+      manager.registerMusicBuffer('gameplay', mockBuffer);
+      await manager.unlock();
+      manager.playMusic('gameplay');
+
+      expect(manager.isMusicPaused()).toBe(false);
+      expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+
+      // Avanzar el tiempo del contexto 15 segundos
+      mockAudioContext.currentTime = 15;
+      manager.pauseMusic();
+
+      expect(manager.isMusicPaused()).toBe(true);
+
+      // Avanzar el tiempo del contexto otros 10 segundos estando pausado
+      mockAudioContext.currentTime = 25;
+
+      // Reanudar la música
+      const mockSources: Array<{ start: ReturnType<typeof vi.fn> }> = [];
+      mockAudioContext.createBufferSource.mockImplementation(() => {
+        const src = {
+          buffer: null,
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+        };
+        mockSources.push(src);
+        return src as unknown as AudioBufferSourceNode;
+      });
+
+      manager.resumeMusic();
+
+      expect(manager.isMusicPaused()).toBe(false);
+      expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+      const lastSource = mockSources[mockSources.length - 1];
+      expect(lastSource?.start).toHaveBeenCalledWith(25, 15);
+    });
+
+    it('aplica módulo sobre buffer.duration para evitar offsets fuera de rango tras varias vueltas', async () => {
+      const manager = AudioManager.getInstance();
+      const mockBuffer = {
+        duration: 20,
+        length: 960000,
+        sampleRate: 48000,
+        numberOfChannels: 2,
+      } as unknown as AudioBuffer;
+
+      manager.registerMusicBuffer('gameplay', mockBuffer);
+      await manager.unlock();
+      manager.playMusic('gameplay');
+
+      // Avanzar 55 segundos en una pista de 20s (2 vueltas + 15s)
+      mockAudioContext.currentTime = 55;
+      manager.pauseMusic();
+
+      const mockSources: Array<{ start: ReturnType<typeof vi.fn> }> = [];
+      mockAudioContext.createBufferSource.mockImplementation(() => {
+        const src = {
+          buffer: null,
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+        };
+        mockSources.push(src);
+        return src as unknown as AudioBufferSourceNode;
+      });
+
+      mockAudioContext.currentTime = 60;
+      manager.resumeMusic();
+
+      const lastSource = mockSources[mockSources.length - 1];
+      expect(lastSource?.start).toHaveBeenCalledWith(60, 15);
+    });
+
+    it('stopMusic() limpia el offset y desactiva el estado de pausa', async () => {
+      const manager = AudioManager.getInstance();
+      const mockBuffer = {
+        duration: 30,
+        length: 1440000,
+        sampleRate: 48000,
+        numberOfChannels: 2,
+      } as unknown as AudioBuffer;
+
+      manager.registerMusicBuffer('gameplay', mockBuffer);
+      await manager.unlock();
+      manager.playMusic('gameplay');
+
+      mockAudioContext.currentTime = 10;
+      manager.pauseMusic();
+      expect(manager.isMusicPaused()).toBe(true);
+
+      manager.stopMusic();
+      expect(manager.isMusicPaused()).toBe(false);
+      expect(manager.getCurrentMusicTrack()).toBeNull();
+    });
+
+    it('las llamadas duplicadas a pauseMusic() o resumeMusic() son seguras e idempotentes', async () => {
+      const manager = AudioManager.getInstance();
+      expect(() => manager.pauseMusic()).not.toThrow();
+      expect(() => manager.resumeMusic()).not.toThrow();
+      expect(manager.isMusicPaused()).toBe(false);
+    });
+
+    it('una reanudación rápida (< 150 ms) crea la nueva fuente sin que el callback diferido de la anterior la detenga', async () => {
+      vi.useFakeTimers();
+      const manager = AudioManager.getInstance();
+      const mockBuffer = {
+        duration: 60,
+        length: 2880000,
+        sampleRate: 48000,
+        numberOfChannels: 2,
+      } as unknown as AudioBuffer;
+
+      manager.registerMusicBuffer('gameplay', mockBuffer);
+      await manager.unlock();
+
+      const mockSources: Array<{ stop: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
+      mockAudioContext.createBufferSource.mockImplementation(() => {
+        const src = {
+          buffer: null,
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+        };
+        mockSources.push(src);
+        return src as unknown as AudioBufferSourceNode;
+      });
+
+      manager.playMusic('gameplay');
+      const sourceA = mockSources[0]!;
+
+      // 1. Pausa a los t = 10s (inicia fade-out de 150 ms)
+      mockAudioContext.currentTime = 10;
+      manager.pauseMusic({ fadeOutDurationMs: 150 });
+
+      // 2. Reanudación rápida a los t = 10.08s (80 ms después)
+      mockAudioContext.currentTime = 10.08;
+      manager.resumeMusic({ fadeInDurationMs: 250 });
+      const sourceB = mockSources[1]!;
+
+      // 3. Expirar el temporizador diferido de la pausa (200 ms tras la pausa)
+      vi.advanceTimersByTime(200);
+
+      // La fuente A fue detenida por su callback, pero la fuente B jamás es detenida por el callback de A
+      expect(sourceA.stop).toHaveBeenCalled();
+      expect(sourceB.stop).not.toHaveBeenCalled();
+      expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+      expect(manager.isMusicPaused()).toBe(false);
+
+      vi.useRealTimers();
+    });
+  });
 });

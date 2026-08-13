@@ -26,7 +26,9 @@ export type AudioSfxType =
   | 'gameOver'
   | 'victory'
   | 'victoryFallback'
-  | 'uiClick';
+  | 'uiClick'
+  | 'pauseShutterClose'
+  | 'pauseShutterOpen';
 
 /**
  * Pistas de música ambiental previstas para el sistema.
@@ -61,7 +63,13 @@ export interface AudioService {
   /** Procesa un evento de motor de batalla e invoca el SFX correspondiente. */
   handleBattleEvent(event: BattleEvent): void;
   /** Prepara/reproduce una pista de música ambiental (preparado para activos futuros). */
-  playMusic(track: MusicTrack): void;
+  playMusic(track: MusicTrack, options?: { fadeOutDurationMs?: number }): void;
+  /** Pausa la música de fondo conservando la posición temporal exacta (offset) mediante fade-out. */
+  pauseMusic(options?: { fadeOutDurationMs?: number }): void;
+  /** Reanuda la música de fondo desde el offset guardado con fade-in. */
+  resumeMusic(options?: { fadeInDurationMs?: number }): void;
+  /** Indica si la música de fondo se encuentra en estado pausado. */
+  isMusicPaused(): boolean;
   /** Reinicia la reproducción musical seleccionando la pista indicada desde el segundo 0. */
   restartMusic(track: MusicTrack): void;
   /** Detiene la música ambiental actual. */

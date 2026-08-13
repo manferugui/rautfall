@@ -233,6 +233,30 @@ export const SFX_METADATA_MAP: Record<AudioSfxType, SfxMetadata> = {
     intention: 'Fallback real de victoria: fanfarria corta de éxito cuando la música de resultados no está disponible',
     filename: 'victory-fallback.wav',
   },
+  pauseShutterClose: {
+    type: 'pauseShutterClose',
+    label: 'Cierre Compuerta Pausa',
+    priority: 'high',
+    presetGain: 1.0,
+    waveShape: 'muestra procesada WAV / Hydraulic hatch closure',
+    frequencyRange: '48 kHz mono / 60 Hz–3.5 kHz',
+    durationMs: 500,
+    envelope: 'Fade-in 1 ms, masa hidráulica 420 ms, golpe final 80 ms (500 ms total)',
+    intention: 'Cierre de compuerta industrial de pausa: sellado mecánico con masa hidráulica e impacto sordo',
+    filename: 'pause-shutter-close.wav',
+  },
+  pauseShutterOpen: {
+    type: 'pauseShutterOpen',
+    label: 'Apertura Compuerta Pausa',
+    priority: 'high',
+    presetGain: 1.0,
+    waveShape: 'muestra procesada WAV / Hydraulic hatch release',
+    frequencyRange: '48 kHz mono / 100 Hz–4 kHz',
+    durationMs: 240,
+    envelope: 'Descompresión 60 ms, deslizamiento rápido 180 ms (240 ms total)',
+    intention: 'Apertura rápida de compuerta industrial de pausa: descompresión hidráulica y repliegue',
+    filename: 'pause-shutter-open.wav',
+  },
 };
 
 export const SFX_ORDER: readonly AudioSfxType[] = [

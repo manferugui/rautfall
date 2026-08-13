@@ -809,3 +809,27 @@ Ver [Informe de implementación](implementation/0032-operator-tag-firma-postpart
 
 Ver [Informe de implementación](implementation/0033-popup-industrial-activacion-audio.md).
 
+## Task [0034 — Cortinilla / Compuerta Industrial Animada de Pausa](tasks/0034-cortinilla-industrial-compuerta-pausa.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-13 |
+| **Resultado** | Compuerta/blast shutter industrial animada de pausa (`PauseShutter.vue`) que sella físicamente la ventana principal de juego al pulsar `Esc` o el control de pausa de UI. Construida íntegramente con Vue 3 y CSS procedural en estética Industrial Dramatic (grafito, metal oscuro, juntas, remaches, señalética ámbar), con cierre progresivo en 500 ms, apertura rápida optimizada en ~240 ms y compatibilidad con `prefers-reduced-motion`. Integrada con `AudioManager` mediante los activos WAV derivados de producción `pause-shutter-close.wav` y `pause-shutter-open.wav`, manteniendo el motor y Phaser 100% ajenos a la presentación. |
+
+### Resumen
+
+- Componente presentacional `PauseShutter.vue` que encastra la compuerta dentro del marco (`board-bezel`) del tablero principal.
+- Geometría procedural basada en 5 lamas metálicas horizontales, costillas estructurales, remaches y guías laterales.
+- Placa central de señalética integrada con jerarquía técnica: `SYSTEM HOLD`, `PAUSED`, `ESC — RESUME`.
+- Cierre en 500 ms con efecto de masa hidráulica; apertura rápida en ~240 ms para evitar que el tablero quede parcialmente cubierto cuando el estado es `running`.
+- Soporte para `@media (prefers-reduced-motion: reduce)` con transición instantánea.
+- Precedencia determinista: `gameOver` inhabilita la compuerta para no cubrir la pantalla de resultados.
+- Activos WAV derivados de producción en `public/audio/sfx/` (`pause-shutter-close.wav` y `pause-shutter-open.wav`).
+- Microajuste de transporte BGM en `AudioManager`: `pauseMusic()` suspende la BGM con fade-out de ~150 ms conservando el offset temporal acumulado (`offset % duration`), y `resumeMusic()` la reanuda con fade-in de ~250 ms desde ese punto exacto.
+- `AudioContext` se mantiene activo durante la pausa permitiendo la reproducción normal de SFX (`pauseShutterClose`, `pauseShutterOpen`, clics).
+- Orquestación limpia de audio y música desde `App.vue` al detectar cambios de estado de sesión.
+- Sustitución completa del contrato E2E legacy `pause-overlay` por `pause-shutter`.
+- Suite de pruebas unitarias (`PauseShutter.test.ts`, `App.test.ts`, `audio-manager.test.ts`) y E2E Playwright (`essential-flow.spec.ts`) en verde.
+
+Ver [Informe de implementación](implementation/0034-cortinilla-industrial-compuerta-pausa.md).

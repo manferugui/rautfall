@@ -14,6 +14,7 @@ import RankingScreen from './components/RankingScreen.vue';
 import ResultsModal from './components/ResultsModal.vue';
 import OperatorTagModal from './components/OperatorTagModal.vue';
 import AudioActivationModal from './components/AudioActivationModal.vue';
+import PauseShutter from './components/PauseShutter.vue';
 import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive, isDebugPanelActive } from './game/battle-demo';
 import { isTSpinDemoActive } from './game/tspin-demo';
@@ -202,6 +203,19 @@ watch(
         isPolaridadPulseActive.value = false;
         polaridadPulseTimeout = null;
       }, 100);
+    }
+  },
+);
+
+watch(
+  () => gameState.value.status,
+  (newStatus, oldStatus) => {
+    if (oldStatus === 'running' && newStatus === 'paused') {
+      audioManager.playSfx('pauseShutterClose');
+      audioManager.pauseMusic();
+    } else if (oldStatus === 'paused' && newStatus === 'running') {
+      audioManager.playSfx('pauseShutterOpen');
+      audioManager.resumeMusic();
     }
   },
 );
@@ -889,15 +903,7 @@ function openDevTools(): void {
                     :on-state-update="onStateUpdate"
                     @controller-ready="onControllerReady"
                   />
-                  <div
-                    v-if="gameState.status === 'paused'"
-                    class="pause-overlay"
-                    role="status"
-                    aria-live="polite"
-                    data-testid="pause-overlay"
-                  >
-                    PAUSA
-                  </div>
+                  <PauseShutter :status="gameState.status" />
                 </div>
                 <div class="board-exhaust-vent" aria-hidden="true">
                   <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>

@@ -36,14 +36,16 @@ test('flujo esencial de principio a fin', async ({ page }) => {
   await test.step('pausa mediante el botón real', async () => {
     await page.getByTestId('pause-toggle').click();
     await expect(page.getByTestId('session-status')).toHaveText('paused');
-    await expect(page.getByTestId('pause-overlay')).toBeVisible();
-    await expect(page.getByTestId('pause-overlay')).toHaveText('PAUSA');
+    const shutter = page.getByTestId('pause-shutter');
+    await expect(shutter).toBeVisible();
+    await expect(shutter).toHaveClass(/rf-pause-shutter--sealed/);
+    await expect(shutter).toContainText('PAUSED');
   });
 
   await test.step('reanudación mediante el mismo botón', async () => {
     await page.getByTestId('pause-toggle').click();
     await expect(page.getByTestId('session-status')).toHaveText('running');
-    await expect(page.getByTestId('pause-overlay')).not.toBeVisible();
+    await expect(page.getByTestId('pause-shutter')).not.toHaveClass(/rf-pause-shutter--sealed/);
   });
 
   await test.step('reinicio mediante el botón real, verificado de forma robusta', async () => {
@@ -55,7 +57,7 @@ test('flujo esencial de principio a fin', async ({ page }) => {
     await page.getByTestId('reset-button').click();
 
     await expect(page.getByTestId('session-status')).toHaveText('running');
-    await expect(page.getByTestId('pause-overlay')).not.toBeVisible();
+    await expect(page.getByTestId('pause-shutter')).not.toHaveClass(/rf-pause-shutter--sealed/);
     await expect
       .poll(async () => Number(await page.getByTestId('session-step').textContent()))
       .toBeLessThan(Number(stepBeforeReset));

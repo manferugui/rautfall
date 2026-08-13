@@ -20,6 +20,8 @@ const SFX_ASSET_URL_MAP: Partial<Record<AudioSfxType, string>> = {
   suddenDeathStarted: '/audio/sfx/sudden-death-started.wav',
   gameOver: '/audio/sfx/game-over.wav',
   victoryFallback: '/audio/sfx/victory-fallback.wav',
+  pauseShutterClose: '/audio/sfx/pause-shutter-close.wav',
+  pauseShutterOpen: '/audio/sfx/pause-shutter-open.wav',
 };
 
 const MUSIC_ASSET_URL_MAP: Partial<Record<MusicTrack, string>> = {
@@ -75,6 +77,12 @@ export class AudioManager implements AudioService {
 
   private currentMusicTrack: MusicTrack | null = null;
   private musicIntensity = 1.0;
+
+  // Estado de transporte musical (offset, pausado)
+  private musicStartedAtContextTime = 0;
+  private musicPlaybackOffsetSeconds = 0;
+  private isMusicPausedState = false;
+  private pausedMusicTrack: MusicTrack | null = null;
 
   constructor() {
     this.muted = this.readMutedFromStorage();
@@ -621,9 +629,18 @@ export class AudioManager implements AudioService {
   }
 
   public playMusic(track: MusicTrack, options?: { fadeOutDurationMs?: number }): void {
-    if (this.currentMusicTrack === track && this.currentMusicSource) {
+    if (this.isMusicPausedState && (this.pausedMusicTrack === track || this.currentMusicTrack === track)) {
+      this.resumeMusic();
+      return;
+    }
+
+    if (this.currentMusicTrack === track && this.currentMusicSource && !this.isMusicPausedState) {
       return; // Pista ya activa sonando en loop: se mantiene sin reiniciar
     }
+
+    this.isMusicPausedState = false;
+    this.pausedMusicTrack = null;
+    this.musicPlaybackOffsetSeconds = 0;
 
     const previousTrackGain = this.currentTrackGainNode;
     const previousSource = this.currentMusicSource;
@@ -683,14 +700,138 @@ export class AudioManager implements AudioService {
       source.buffer = audioBuffer;
       source.loop = true;
       source.connect(trackGain);
-      source.start(nowCtx);
+      source.start(nowCtx, 0);
 
       this.currentMusicSource = source;
       this.currentTrackGainNode = trackGain;
+      this.musicStartedAtContextTime = nowCtx;
     } catch {
       this.currentMusicSource = null;
       this.currentTrackGainNode = null;
     }
+  }
+
+  public pauseMusic(options?: { fadeOutDurationMs?: number }): void {
+    if (this.isMusicPausedState || !this.ctx || !this.currentMusicTrack) {
+      return;
+    }
+
+    const nowCtx = this.ctx.currentTime;
+    const elapsed = Math.max(0, nowCtx - this.musicStartedAtContextTime);
+    const audioBuffer = this.musicAudioBufferMap.get(this.currentMusicTrack);
+    const bufferDuration = audioBuffer ? audioBuffer.duration : 0;
+
+    let newOffset = this.musicPlaybackOffsetSeconds + elapsed;
+    if (bufferDuration > 0) {
+      newOffset = newOffset % bufferDuration;
+    }
+
+    this.musicPlaybackOffsetSeconds = newOffset;
+    this.isMusicPausedState = true;
+    this.pausedMusicTrack = this.currentMusicTrack;
+
+    const fadeDurationMs = options?.fadeOutDurationMs ?? 150;
+    const sourceToStop = this.currentMusicSource;
+    const gainToStop = this.currentTrackGainNode;
+
+    this.currentMusicSource = null;
+    this.currentTrackGainNode = null;
+
+    if (gainToStop && sourceToStop) {
+      try {
+        const fadeSec = fadeDurationMs / 1000;
+        gainToStop.gain.cancelScheduledValues(nowCtx);
+        gainToStop.gain.setValueAtTime(gainToStop.gain.value, nowCtx);
+        gainToStop.gain.linearRampToValueAtTime(0.0001, nowCtx + fadeSec);
+        window.setTimeout(() => {
+          try {
+            sourceToStop.stop();
+            sourceToStop.disconnect();
+            gainToStop.disconnect();
+          } catch {
+            // Ignorar
+          }
+        }, fadeDurationMs + 20);
+      } catch {
+        // Ignorar
+      }
+    }
+  }
+
+  public resumeMusic(options?: { fadeInDurationMs?: number }): void {
+    if (!this.isMusicPausedState && this.currentMusicSource) {
+      return; // Ya está sonando activamente
+    }
+
+    const trackToResume = this.pausedMusicTrack || this.currentMusicTrack;
+    if (!trackToResume) {
+      return;
+    }
+
+    if (!this.ctx || !this.musicGain || this.ctx.state !== 'running') {
+      return;
+    }
+
+    const audioBuffer = this.musicAudioBufferMap.get(trackToResume);
+    if (!audioBuffer) {
+      if (!this.failedMusicAssetSet.has(trackToResume) && MUSIC_ASSET_URL_MAP[trackToResume]) {
+        void this.loadMusicBufferAsset(trackToResume).then((loadedBuffer) => {
+          if (loadedBuffer && this.isMusicPausedState) {
+            this.resumeMusic(options);
+          }
+        });
+      }
+      return;
+    }
+
+    if (this.currentMusicSource && this.currentTrackGainNode) {
+      try {
+        this.currentMusicSource.stop();
+        this.currentMusicSource.disconnect();
+        this.currentTrackGainNode.disconnect();
+      } catch {
+        // Ignorar
+      }
+      this.currentMusicSource = null;
+      this.currentTrackGainNode = null;
+    }
+
+    const bufferDuration = audioBuffer.duration;
+    let startOffset = this.musicPlaybackOffsetSeconds;
+    if (bufferDuration > 0) {
+      startOffset = startOffset % bufferDuration;
+    }
+
+    const fadeInMs = options?.fadeInDurationMs ?? 250;
+    const nowCtx = this.ctx.currentTime;
+
+    try {
+      const trackGain = this.ctx.createGain();
+      const fadeInSec = fadeInMs / 1000;
+      trackGain.gain.setValueAtTime(0.0001, nowCtx);
+      trackGain.gain.linearRampToValueAtTime(1.0, nowCtx + fadeInSec);
+      trackGain.connect(this.musicGain);
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.loop = true;
+      source.connect(trackGain);
+      source.start(nowCtx, startOffset);
+
+      this.currentMusicTrack = trackToResume;
+      this.currentMusicSource = source;
+      this.currentTrackGainNode = trackGain;
+      this.musicStartedAtContextTime = nowCtx;
+      this.isMusicPausedState = false;
+      this.pausedMusicTrack = null;
+    } catch {
+      this.currentMusicSource = null;
+      this.currentTrackGainNode = null;
+    }
+  }
+
+  public isMusicPaused(): boolean {
+    return this.isMusicPausedState;
   }
 
   public restartMusic(track: MusicTrack): void {
@@ -700,7 +841,12 @@ export class AudioManager implements AudioService {
   }
 
   public stopMusic(options?: { fadeOutDurationMs?: number }): void {
+    this.isMusicPausedState = false;
+    this.pausedMusicTrack = null;
+    this.musicPlaybackOffsetSeconds = 0;
+    this.musicStartedAtContextTime = 0;
     this.currentMusicTrack = null;
+
     if (!this.ctx || !this.currentMusicSource || !this.currentTrackGainNode) {
       this.currentMusicSource = null;
       this.currentTrackGainNode = null;
@@ -820,6 +966,10 @@ export class AudioManager implements AudioService {
     this.failedMusicAssetSet.clear();
     this.activePlayingTypes.clear();
     this.currentMusicTrack = null;
+    this.musicStartedAtContextTime = 0;
+    this.musicPlaybackOffsetSeconds = 0;
+    this.isMusicPausedState = false;
+    this.pausedMusicTrack = null;
   }
 }
 
