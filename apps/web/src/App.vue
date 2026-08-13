@@ -12,6 +12,7 @@ import SettingsScreen from './components/SettingsScreen.vue';
 import HistoryScreen from './components/HistoryScreen.vue';
 import RankingScreen from './components/RankingScreen.vue';
 import ResultsModal from './components/ResultsModal.vue';
+import OperatorTagModal from './components/OperatorTagModal.vue';
 import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive, isDebugPanelActive } from './game/battle-demo';
 import { isTSpinDemoActive } from './game/tspin-demo';
@@ -21,7 +22,7 @@ import { isGarbageDemoActive } from './game/garbage-demo';
 import { isPolarityDemoActive } from './game/polarity-demo';
 import { getLevelDemoTarget } from './game/level-demo';
 import { getAudioManager } from './audio';
-import { getOrCreatePlayerId, getPlayerName } from './api/identity';
+import { getOrCreatePlayerId, getPlayerTag, setPlayerTag, hasPlayerTag } from './api/identity';
 import { submitMatch } from './api/client';
 import type { CreateMatchInput } from '@rautfall/contracts';
 
@@ -85,6 +86,7 @@ const gameState = ref<GamePresentationState>({
   nextPieces: ['I', 'I', 'I'],
   heldPiece: null,
   score: 0,
+  clearedLines: 0,
   combo: 0,
   backToBack: 0,
   combatEnergy: 0,
@@ -102,64 +104,104 @@ const isSuddenDeathActive = computed(() => {
 });
 
 const gameResult = ref<GameResultSummary | null>(null);
-const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
 const error = ref<string | null>(null);
 let controller: PhaserGameController | null = null;
+
+interface PendingMatchResultData {
+  clientMatchId: string;
+  playerId: string;
+  score: number;
+  linesCleared: number;
+  durationMs: number;
+  level: number;
+  mode: GameMode;
+  result: 'finished' | 'victory' | 'defeat' | 'draw';
+  opponentProfile: string | null;
+}
+
+const pendingMatchResult = ref<PendingMatchResultData | null>(null);
+const saveStatus = ref<'idle' | 'awaitingTag' | 'readyToSave' | 'saving' | 'saved' | 'failed' | 'error'>('idle');
+const currentOperatorTag = ref<string | null>(getPlayerTag());
+const isTagModalOpen = ref(false);
+const tagModalCanCancel = ref(true);
+
+function updateOperatorTagState(): void {
+  currentOperatorTag.value = getPlayerTag();
+}
 
 // Idempotencia de envío de partidas
 let currentClientMatchId = crypto.randomUUID();
 const submittedMatchIdsSet = new Set<string>();
 
-async function trySaveMatchResult(state: GamePresentationState): Promise<void> {
-  if (submittedMatchIdsSet.has(currentClientMatchId)) {
+const rankingInitialMode = ref<GameMode>('battle');
+
+async function confirmAndSaveMatchResult(rawTag: string): Promise<void> {
+  const normalizedTag = rawTag ? rawTag.trim().toUpperCase() : '';
+  if (!/^[A-Z0-9]{3}$/.test(normalizedTag)) {
     return;
   }
-  submittedMatchIdsSet.add(currentClientMatchId);
-  saveStatus.value = 'saving';
+  if (!pendingMatchResult.value) {
+    return;
+  }
+  if (saveStatus.value === 'saving' || saveStatus.value === 'saved') {
+    return;
+  }
 
-  const playerId = getOrCreatePlayerId();
-  const playerName = getPlayerName(playerId);
+  const matchData = pendingMatchResult.value;
+  if (submittedMatchIdsSet.has(matchData.clientMatchId)) {
+    saveStatus.value = 'saved';
+    return;
+  }
+
+  saveStatus.value = 'saving';
+  submittedMatchIdsSet.add(matchData.clientMatchId);
 
   let payload: CreateMatchInput;
-
-  if (gameMode.value === 'training') {
+  if (matchData.mode === 'training') {
     payload = {
-      clientMatchId: currentClientMatchId,
-      playerId,
-      playerName,
-      score: state.score,
-      linesCleared: Math.floor(state.score / 100), // Estimación o total acumulado
-      durationMs: state.elapsedMs,
-      level: state.level,
+      clientMatchId: matchData.clientMatchId,
+      playerId: matchData.playerId,
+      playerName: normalizedTag,
+      score: matchData.score,
+      linesCleared: matchData.linesCleared,
+      durationMs: matchData.durationMs,
+      level: matchData.level,
       mode: 'training',
       result: 'finished',
       opponentProfile: null,
     };
   } else {
-    const winner = state.battleState?.winner;
-    let result: 'victory' | 'defeat' | 'draw' = 'defeat';
-    if (winner === 'playerOne') result = 'victory';
-    else if (winner === 'draw') result = 'draw';
-
     payload = {
-      clientMatchId: currentClientMatchId,
-      playerId,
-      playerName,
-      score: state.score,
-      linesCleared: Math.floor(state.score / 100),
-      durationMs: state.elapsedMs,
-      level: state.level,
+      clientMatchId: matchData.clientMatchId,
+      playerId: matchData.playerId,
+      playerName: normalizedTag,
+      score: matchData.score,
+      linesCleared: matchData.linesCleared,
+      durationMs: matchData.durationMs,
+      level: matchData.level,
       mode: 'battle',
-      result,
-      opponentProfile: 'bot-deterministic-v1',
+      result: matchData.result as 'victory' | 'defeat' | 'draw',
+      opponentProfile: matchData.opponentProfile || 'bot-deterministic-v1',
     };
   }
 
   try {
     await submitMatch(payload);
+
+    // REQUISITO 7: Persistir tag localmente SOLO tras POST correcto
+    setPlayerTag(normalizedTag);
+    updateOperatorTagState();
+
     saveStatus.value = 'saved';
+
+    // REQUISITO 9 & 20: Capturar modo y navegar a Ranking de ese modo
+    const completedMode = matchData.mode;
+    pendingMatchResult.value = null;
+    rankingInitialMode.value = completedMode;
+    appScreen.value = 'ranking';
   } catch {
-    saveStatus.value = 'error';
+    submittedMatchIdsSet.delete(matchData.clientMatchId);
+    saveStatus.value = 'failed';
   }
 }
 
@@ -172,26 +214,44 @@ function onStateUpdate(state: GamePresentationState): void {
   if (!isDevDemo && (isEngineGameOver || isBattleEnded) && appScreen.value === 'playing') {
     let title = 'ENTRENAMIENTO FINALIZADO';
     let subtitle: string | undefined = undefined;
+    let matchResultType: 'finished' | 'victory' | 'defeat' | 'draw' = 'finished';
 
     if (gameMode.value === 'battle' && state.battleState) {
       const winner = state.battleState.winner;
       if (winner === 'playerOne') {
         title = 'VICTORIA';
         subtitle = 'Has derrotado al rival autónomo';
+        matchResultType = 'victory';
       } else if (winner === 'playerTwo') {
         title = 'DERROTA';
         subtitle = 'El rival ha dominado la batalla';
+        matchResultType = 'defeat';
       } else if (winner === 'draw') {
         title = 'EMPATE';
         subtitle = 'Ambos tableros colapsaron simultáneamente';
+        matchResultType = 'draw';
       }
     }
+
+    const playerId = getOrCreatePlayerId();
+    pendingMatchResult.value = {
+      clientMatchId: currentClientMatchId,
+      playerId,
+      score: state.score,
+      linesCleared: state.clearedLines,
+      durationMs: state.elapsedMs,
+      level: state.level,
+      mode: gameMode.value,
+      result: matchResultType,
+      opponentProfile: gameMode.value === 'battle' ? 'bot-deterministic-v1' : null,
+    };
 
     gameResult.value = {
       mode: gameMode.value,
       title,
       subtitle,
       score: state.score,
+      linesCleared: state.clearedLines,
       level: state.level,
       elapsedMs: state.elapsedMs,
       battleResult: state.battleState
@@ -204,12 +264,35 @@ function onStateUpdate(state: GamePresentationState): void {
     };
 
     appScreen.value = 'results';
-    void trySaveMatchResult(state);
+
+    updateOperatorTagState();
+    if (hasPlayerTag()) {
+      saveStatus.value = 'idle';
+    } else {
+      saveStatus.value = 'awaitingTag';
+    }
   }
 }
 
 function onControllerReady(c: PhaserGameController): void {
   controller = c;
+}
+
+function handleTagConfirmed(rawTag: string): void {
+  setPlayerTag(rawTag);
+  updateOperatorTagState();
+  isTagModalOpen.value = false;
+}
+
+function handleTagCancelled(): void {
+  isTagModalOpen.value = false;
+}
+
+
+
+function openTagModalFromSettings(): void {
+  tagModalCanCancel.value = true;
+  isTagModalOpen.value = true;
 }
 
 function selectMode(mode: GameMode): void {
@@ -218,6 +301,7 @@ function selectMode(mode: GameMode): void {
   audioManager.playMusic('gameplay');
   currentClientMatchId = crypto.randomUUID();
   saveStatus.value = 'idle';
+  pendingMatchResult.value = null;
   matchSeed.value = generateMatchSeed();
   gameMode.value = mode;
   gameResult.value = null;
@@ -230,6 +314,7 @@ function doReset(): void {
   audioManager.restartMusic('gameplay');
   currentClientMatchId = crypto.randomUUID();
   saveStatus.value = 'idle';
+  pendingMatchResult.value = null;
   if (controller) {
     controller.reset();
   }
@@ -245,6 +330,7 @@ async function doReplay(): Promise<void> {
   audioManager.restartMusic('gameplay');
   currentClientMatchId = crypto.randomUUID();
   saveStatus.value = 'idle';
+  pendingMatchResult.value = null;
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
@@ -261,6 +347,7 @@ function goToMenu(): void {
   isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
+  pendingMatchResult.value = null;
   appScreen.value = 'menu';
 
   if (typeof window !== 'undefined' && window.location && window.history) {
@@ -282,6 +369,7 @@ function openHistory(): void {
 
 function openRanking(): void {
   audioManager.playSfx('uiClick');
+  rankingInitialMode.value = 'battle';
   appScreen.value = 'ranking';
 }
 
@@ -323,13 +411,21 @@ function openDevTools(): void {
       />
 
       <!-- Pantalla de Configuración -->
-      <SettingsScreen v-else-if="appScreen === 'settings'" @back="goToMenu" />
+      <SettingsScreen
+        v-else-if="appScreen === 'settings'"
+        @back="goToMenu"
+        @change-tag="openTagModalFromSettings"
+      />
 
       <!-- Pantalla de Historial -->
       <HistoryScreen v-else-if="appScreen === 'history'" @back-to-menu="goToMenu" />
 
       <!-- Pantalla de Ranking -->
-      <RankingScreen v-else-if="appScreen === 'ranking'" @back-to-menu="goToMenu" />
+      <RankingScreen
+        v-else-if="appScreen === 'ranking'"
+        :initial-mode="rankingInitialMode"
+        @back-to-menu="goToMenu"
+      />
 
       <!-- Pantalla de Juego ('playing' o 'results') -->
       <div v-else class="tactical-chassis" :class="{ 'tactical-chassis--sudden-death': isSuddenDeathActive }">
@@ -664,10 +760,21 @@ function openDevTools(): void {
           v-if="appScreen === 'results' && gameResult"
           :result="gameResult"
           :save-status="saveStatus"
+          :player-tag="currentOperatorTag"
           @replay="doReplay"
           @main-menu="goToMenu"
+          @confirm-save="confirmAndSaveMatchResult"
         />
       </div>
+
+      <!-- Modal / Flujo de Tag de Operador -->
+      <OperatorTagModal
+        :is-open="isTagModalOpen"
+        :can-cancel="tagModalCanCancel"
+        :initial-tag="currentOperatorTag || ''"
+        @confirm="handleTagConfirmed"
+        @cancel="handleTagCancelled"
+      />
     </template>
   </div>
 </template>

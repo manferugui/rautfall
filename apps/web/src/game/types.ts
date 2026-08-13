@@ -81,6 +81,7 @@ export type GameResultSummary = Readonly<{
   title: string;
   subtitle?: string | undefined;
   score: number;
+  linesCleared?: number;
   level: number;
   elapsedMs: number;
   battleResult?: Readonly<{
@@ -100,6 +101,7 @@ export type GamePresentationState = Readonly<{
   nextPieces: readonly PieceType[];
   heldPiece: PieceType | null;
   score: number;
+  clearedLines: number;
   combo: number;
   backToBack: number;
   combatEnergy: number;

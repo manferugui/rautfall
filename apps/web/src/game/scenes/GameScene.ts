@@ -744,6 +744,7 @@ export class GameScene extends Phaser.Scene {
       nextPieces: [...snap.nextPieces],
       heldPiece: snap.heldPiece,
       score: snap.score,
+      clearedLines: snap.clearedLines,
       combo: snap.combo,
       backToBack: snap.backToBack,
       combatEnergy: snap.combatEnergy,

@@ -16,6 +16,25 @@
       </div>
 
       <div class="controls-section rf-panel-inset">
+        <div class="section-title">IDENTIFICACIÓN DE OPERADOR</div>
+        <div class="tag-setting-row">
+          <div class="tag-info">
+            <span class="tag-label">TAG ACTUAL:</span>
+            <span class="rf-keycap tag-display" data-testid="current-operator-tag">{{ currentTag }}</span>
+          </div>
+          <button
+            type="button"
+            class="rf-btn-tactical rf-btn-primary change-tag-btn"
+            data-testid="change-operator-tag-button"
+            :disabled="capturingAction !== null"
+            @click="onChangeTag"
+          >
+            CAMBIAR TAG
+          </button>
+        </div>
+      </div>
+
+      <div class="controls-section rf-panel-inset">
         <div class="section-title">CONTROLES DE GAMEPLAY</div>
         <table class="controls-table">
           <thead>
@@ -83,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import {
   CONTROL_ACTIONS,
   ACTION_LABELS,
@@ -91,15 +110,23 @@ import {
   type ControlAction,
 } from '../settings/control-bindings';
 import { useSettings } from '../settings/settings-store';
+import { getPlayerTag } from '../api/identity';
 
 const emit = defineEmits<{
   (e: 'back'): void;
+  (e: 'change-tag'): void;
 }>();
 
 const { bindings, updateBinding, resetControlBindings } = useSettings();
 
 const capturingAction = ref<ControlAction | null>(null);
 const errorMessage = ref<string | null>(null);
+const currentTag = computed(() => getPlayerTag() || '---');
+
+function onChangeTag(): void {
+  stopCapture();
+  emit('change-tag');
+}
 
 let currentKeyDownListener: ((event: KeyboardEvent) => void) | null = null;
 
@@ -296,4 +323,33 @@ onUnmounted(() => {
   gap: 1rem;
   margin-top: 0.5rem;
 }
+
+.tag-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tag-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tag-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
+}
+
+.tag-display {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--rf-color-cyan, #00d4ff);
+  padding: 0.25rem 0.75rem;
+}
+
 </style>

@@ -20,9 +20,10 @@ describe('RankingScreen.vue', () => {
   it('muestra la tabla de ranking si existen registros', async () => {
     const mockRanking = [
       {
+        id: 'rec-1',
         rank: 1,
         playerId: '11111111-1111-4111-8111-111111111111',
-        playerName: 'Jugador-1111',
+        playerName: 'RAU',
         score: 4500,
         linesCleared: 30,
         level: 4,
@@ -38,14 +39,14 @@ describe('RankingScreen.vue', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.find('[data-testid="ranking-table"]').exists()).toBe(true);
-    expect(wrapper.findAll('[data-testid="ranking-row"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="ranking-row-1"]').exists()).toBe(true);
   });
 
   it('permite cambiar entre los tabs de Batalla y Entrenamiento', async () => {
     vi.spyOn(clientModule, 'getRanking').mockResolvedValue([]);
     const wrapper = mount(RankingScreen);
 
-    await wrapper.find('[data-testid="ranking-tab-training"]').trigger('click');
+    await wrapper.find('[data-testid="tab-training"]').trigger('click');
     expect(clientModule.getRanking).toHaveBeenCalledWith('training', 30);
   });
 

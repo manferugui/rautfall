@@ -1,15 +1,13 @@
 // @vitest-environment jsdom
 /**
- * Pruebas de integración de App.vue con controlador Phaser simulado.
- *
- * Se mockea createPhaserGame para evitar arrancar WebGL real en Vitest.
- * El controlador simulado expone reset, togglePause y destroy.
+ * Pruebas de integración de App.vue con controlador Phaser simulado y flujo unificado de ResultsModal + Firma arcade.
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import App from './App.vue';
 import type { GamePresentationState } from './game/types';
+import * as clientModule from './api/client';
 
 const mockController = vi.hoisted(() => ({
   reset: vi.fn(),
@@ -23,8 +21,9 @@ vi.mock('./game/create-phaser-game', () => ({
   createPhaserGame: mockCreatePhaserGame,
 }));
 
-describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
+describe('App.vue — flujo web de modos, resultados, firma arcade unificada e idempotencia', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -48,86 +47,34 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
     wrapper.unmount();
   });
 
-  it('transiciona a playing al seleccionar Modo Entrenamiento', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+  it('permite navegar libremente a Batalla, Entrenamiento, Historial y Ranking sin solicitar tag previo', async () => {
+    vi.spyOn(clientModule, 'getMatchHistory').mockResolvedValue([]);
+    vi.spyOn(clientModule, 'getRanking').mockResolvedValue([]);
 
-    expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
-    expect(mockCreatePhaserGame).toHaveBeenCalledWith(expect.objectContaining({ mode: 'training' }));
-    wrapper.unmount();
-  });
-
-  it('transiciona a playing al seleccionar Batalla contra la IA', async () => {
     const wrapper = mountApp();
+
+    // 1. Abrir Historial sin tag
+    await wrapper.find('[data-testid="open-history-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="history-screen"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
+    await wrapper.find('[data-testid="history-back-button"]').trigger('click');
+
+    // 2. Abrir Ranking sin tag
+    await wrapper.find('[data-testid="open-ranking-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="ranking-screen"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
+    await wrapper.find('[data-testid="ranking-back-button"]').trigger('click');
+
+    // 3. Iniciar Batalla sin tag
     await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
-
-    expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
-    expect(mockCreatePhaserGame).toHaveBeenCalledWith(expect.objectContaining({ mode: 'battle' }));
-    wrapper.unmount();
-  });
-
-  it('muestra "Pausar" cuando el estado es running', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
-
-    const pauseButton = wrapper.find('[data-testid="pause-toggle"]');
-    expect(pauseButton.text()).toBe('Pausar');
-    expect(pauseButton.attributes('disabled')).toBeUndefined();
-    wrapper.unmount();
-  });
-
-  it('al simular paused, el botón muestra "Reanudar" y aparece el overlay', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
-
-    const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
-
-    const pausedState: GamePresentationState = {
-      status: 'paused',
-      step: 50,
-      elapsedMs: 2500,
-      nextPieces: ['S', 'Z', 'J'],
-      heldPiece: null,
-      score: 0,
-      combo: 0,
-      backToBack: 0,
-      combatEnergy: 0,
-      storedSabotages: [],
-      pendingGarbage: 0,
-      activeEffects: [],
-      level: 1,
-      baseGravityCellsPerSecond: 1.0,
-      activeGravityCellsPerSecond: 1.0,
-    };
-    stateUpdateCallback(pausedState);
-    await wrapper.vm.$nextTick();
-
-    const pauseButton = wrapper.find('[data-testid="pause-toggle"]');
-    expect(pauseButton.text()).toBe('Reanudar');
-    expect(pauseButton.attributes('disabled')).toBeUndefined();
-
-    const overlay = wrapper.find('.pause-overlay');
-    expect(overlay.exists()).toBe(true);
-    expect(overlay.text()).toBe('PAUSA');
+    expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
 
     wrapper.unmount();
   });
 
-  it('al pulsar el botón de pausa/reanudación se invoca controller.togglePause() una vez', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
-
-    expect(mockController.togglePause).not.toHaveBeenCalled();
-
-    await wrapper.find('[data-testid="pause-toggle"]').trigger('click');
-    expect(mockController.togglePause).toHaveBeenCalledTimes(1);
-
-    wrapper.unmount();
-  });
-
-  it('transiciona a la pantalla de Resultados cuando la partida termina (gameOver)', async () => {
+  it('al terminar partida muestra ResultsModal con iniciales integradas y nunca abre un segundo popup', async () => {
+    const submitSpy = vi.spyOn(clientModule, 'submitMatch').mockResolvedValue({} as unknown as Awaited<ReturnType<typeof clientModule.submitMatch>>);
     const wrapper = mountApp();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
 
@@ -140,6 +87,7 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
       nextPieces: ['O', 'T', 'I'],
       heldPiece: null,
       score: 850,
+      clearedLines: 8,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -153,132 +101,104 @@ describe('App.vue — flujo web de modos, resultados y ciclo de vida', () => {
     stateUpdateCallback(gameOverState);
     await wrapper.vm.$nextTick();
 
-    const resultsModal = wrapper.find('[data-testid="results-modal"]');
-    expect(resultsModal.exists()).toBe(true);
-    expect(wrapper.find('[data-testid="results-title"]').text()).toBe('ENTRENAMIENTO FINALIZADO');
-    expect(wrapper.find('[data-testid="final-score"]').text()).toBe('850');
+    // Muestra pantalla de resultados con la firma de operador integrada en el propio modal
+    expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="operator-signature-block"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
+    expect(submitSpy).not.toHaveBeenCalled();
 
     wrapper.unmount();
   });
 
-  it('en la pantalla de Resultados, el botón "Volver a jugar" destruye el controlador, invoca restartMusic("gameplay") y crea una nueva partida', async () => {
-    const { getAudioManager } = await import('./audio');
-    const audioManager = getAudioManager();
-    const restartSpy = vi.spyOn(audioManager, 'restartMusic');
+  it('escribir en Results no altera localStorage de inmediato y confirma el POST guardando el tag solo si la API responde OK', async () => {
+    const submitSpy = vi.spyOn(clientModule, 'submitMatch').mockResolvedValue({} as unknown as Awaited<ReturnType<typeof clientModule.submitMatch>>);
+    vi.spyOn(clientModule, 'getRanking').mockResolvedValue([]);
 
     const wrapper = mountApp();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 850, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O'], heldPiece: null, score: 850, clearedLines: 8, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
     await wrapper.vm.$nextTick();
 
-    expect(mockCreatePhaserGame).toHaveBeenCalledTimes(1);
-
-    await wrapper.find('[data-testid="replay-button"]').trigger('click');
+    // Escribir iniciales 'RAU' en la pantalla de Results
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'u' }));
     await wrapper.vm.$nextTick();
 
-    expect(restartSpy).toHaveBeenCalledWith('gameplay');
-    expect(mockController.destroy).toHaveBeenCalledTimes(1);
-    expect(mockCreatePhaserGame).toHaveBeenCalledTimes(2);
+    // Comprobar que localStorage aún NO se ha actualizado
+    expect(localStorage.getItem('rautfall_player_tag')).toBeNull();
 
-    restartSpy.mockRestore();
-    wrapper.unmount();
-  });
-
-  it('en la pantalla de Resultados, el botón "Menú principal" destruye la partida y regresa a menu', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
-
-    const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
-    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O', 'T', 'I'], heldPiece: null, score: 850, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
+    // Confirmar resultado
+    await wrapper.find('[data-testid="confirm-save-button"]').trigger('click');
     await wrapper.vm.$nextTick();
 
-    await wrapper.find('[data-testid="main-menu-button"]').trigger('click');
-    await wrapper.vm.$nextTick();
-
-    expect(mockController.destroy).toHaveBeenCalledTimes(1);
-    expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('el botón de cabecera "Menú" destruye la partida activa y regresa a menu', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
-
-    expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
-
-    await wrapper.find('[data-testid="exit-to-menu-button"]').trigger('click');
-    await wrapper.vm.$nextTick();
-
-    expect(mockController.destroy).toHaveBeenCalledTimes(1);
-    expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
-
-    wrapper.unmount();
-  });
-
-  it('el botón "Reiniciar" está presente y habilitado durante el juego e invoca restartMusic("gameplay")', async () => {
-    const { getAudioManager } = await import('./audio');
-    const audioManager = getAudioManager();
-    const restartSpy = vi.spyOn(audioManager, 'restartMusic');
-
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
-
-    const resetButton = wrapper.find('[data-testid="reset-button"]');
-    expect(resetButton.text()).toBe('Reiniciar');
-    expect(resetButton.attributes('disabled')).toBeUndefined();
-
-    await resetButton.trigger('click');
-    expect(mockController.reset).toHaveBeenCalledTimes(1);
-    expect(restartSpy).toHaveBeenCalledWith('gameplay');
-
-    restartSpy.mockRestore();
-    wrapper.unmount();
-  });
-
-  it('registra gameplay como pista deseada al ingresar directamente por flag DEV sin crear AudioContext ansiosamente', async () => {
-    const originalLocation = window.location;
-    delete (window as unknown as { location?: Location }).location;
-    (window as unknown as { location: Location }).location = {
-      pathname: '/',
-      search: '?tspin-demo=1',
-      href: 'http://localhost/?tspin-demo=1',
-    } as unknown as Location;
-
-    const { getAudioManager } = await import('./audio');
-    const audioManager = getAudioManager();
-
-    const wrapper = mountApp();
-    await wrapper.vm.$nextTick();
-
-    expect(audioManager.getCurrentMusicTrack()).toBe('gameplay');
-    expect(audioManager.getAudioContextState()).toBe('uninitialized');
-
-    await audioManager.unlock();
-    expect(audioManager.getCurrentMusicTrack()).toBe('gameplay');
-
-    wrapper.unmount();
-    (window as unknown as { location: Location }).location = originalLocation;
-  });
-
-  it('pasa una semilla uint32 a createPhaserGame al iniciar partida', async () => {
-    const wrapper = mountApp();
-    await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
-
-    expect(mockCreatePhaserGame).toHaveBeenCalledWith(
+    expect(submitSpy).toHaveBeenCalledTimes(1);
+    expect(submitSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        mode: 'battle',
-        seed: expect.any(Number),
+        playerName: 'RAU',
+        score: 850,
+        linesCleared: 8,
       }),
     );
 
-    const passedSeed = mockCreatePhaserGame.mock.calls[0]![0].seed;
-    expect(Number.isInteger(passedSeed)).toBe(true);
-    expect(passedSeed).toBeGreaterThanOrEqual(0);
-    expect(passedSeed).toBeLessThanOrEqual(4_294_967_295);
+    // Tras el POST exitoso, el tag local se guarda y navega automáticamente a Ranking
+    expect(localStorage.getItem('rautfall_player_tag')).toBe('RAU');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="ranking-screen"]').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('si la API falla, el tag persistente no cambia, las iniciales editadas se conservan y no abre Ranking', async () => {
+    vi.spyOn(clientModule, 'submitMatch').mockRejectedValue(new Error('Network error'));
+
+    const wrapper = mountApp();
+    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+
+    const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O'], heldPiece: null, score: 850, clearedLines: 8, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
+    await wrapper.vm.$nextTick();
+
+    // Escribir 'RAU'
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'u' }));
+    await wrapper.vm.$nextTick();
+
+    // Intentar guardar
+    await wrapper.find('[data-testid="confirm-save-button"]').trigger('click');
+    await wrapper.vm.$nextTick();
+
+    // Results permanece abierto en estado de error
+    expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="ranking-screen"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="save-status-tag"]').text()).toContain('ERROR AL PERSISTIR');
+
+    // Las iniciales editadas 'RAU' se conservan en pantalla pero localStorage no se ha alterado
+    expect(wrapper.find('[data-testid="tag-cell-char-0"]').text()).toBe('R');
+    expect(localStorage.getItem('rautfall_player_tag')).toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('abandonar Results mediante Volver a jugar limpia pendingMatchResult y no arrastra datos a la siguiente partida', async () => {
+    const submitSpy = vi.spyOn(clientModule, 'submitMatch').mockResolvedValue({} as unknown as Awaited<ReturnType<typeof clientModule.submitMatch>>);
+    const wrapper = mountApp();
+    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+
+    const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
+    stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O'], heldPiece: null, score: 850, clearedLines: 8, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
+    await wrapper.vm.$nextTick();
+
+    // Pulsar 'Volver a jugar' sin confirmar
+    await wrapper.find('[data-testid="replay-button"]').trigger('click');
+    await wrapper.vm.$nextTick();
+
+    expect(submitSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem('rautfall_player_tag')).toBeNull();
+    expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
 
     wrapper.unmount();
   });

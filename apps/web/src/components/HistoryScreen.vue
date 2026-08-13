@@ -20,7 +20,7 @@ const emit = defineEmits<{
 
 const audioManager = getAudioManager();
 const playerId = getOrCreatePlayerId();
-const playerName = getPlayerName(playerId);
+const playerName = getPlayerName();
 
 const status = ref<'loading' | 'empty' | 'error' | 'success'>('loading');
 const errorMessage = ref<string>('');

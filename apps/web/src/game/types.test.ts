@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GamePresentationState } from './types';
 
 describe('GamePresentationState', () => {
-  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, combo, backToBack, combatEnergy, storedSabotages, pendingGarbage, activeEffects, level, baseGravityCellsPerSecond y activeGravityCellsPerSecond', () => {
+  it('el estado enviado a Vue contiene status, step, elapsedMs, nextPieces, heldPiece, score, clearedLines, combo, backToBack, combatEnergy, storedSabotages, pendingGarbage, activeEffects, level, baseGravityCellsPerSecond y activeGravityCellsPerSecond', () => {
     const state: GamePresentationState = {
       status: 'running',
       step: 42,
@@ -10,6 +10,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['I', 'O', 'T'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -21,15 +22,16 @@ describe('GamePresentationState', () => {
       activeGravityCellsPerSecond: 1.0,
     };
 
-    // Verificar que solo tiene las 15 propiedades esperadas
+    // Verificar que tiene las 16 propiedades esperadas
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(15);
+    expect(keys).toHaveLength(16);
     expect(keys).toContain('status');
     expect(keys).toContain('step');
     expect(keys).toContain('elapsedMs');
     expect(keys).toContain('nextPieces');
     expect(keys).toContain('heldPiece');
     expect(keys).toContain('score');
+    expect(keys).toContain('clearedLines');
     expect(keys).toContain('combo');
     expect(keys).toContain('backToBack');
     expect(keys).toContain('combatEnergy');
@@ -49,6 +51,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['T', 'S', 'Z'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -71,6 +74,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['I', 'J', 'L'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -82,13 +86,9 @@ describe('GamePresentationState', () => {
       activeGravityCellsPerSecond: 1.0,
     };
 
-    // Verificar que no hay propiedades como board, activePiece, etc.
     expect('board' in state).toBe(false);
     expect('activePiece' in state).toBe(false);
-    expect('clearedLines' in state).toBe(false);
-    // holdUsed no debe filtrarse a nivel superior
     expect('holdUsed' in state).toBe(false);
-    // maxCombo no debe estar presente
     expect('maxCombo' in state).toBe(false);
   });
 
@@ -100,6 +100,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['O', 'T', 'I'],
       heldPiece: null,
       score: 1234,
+      clearedLines: 12,
       combo: 3,
       backToBack: 0,
       combatEnergy: 50,
@@ -113,6 +114,7 @@ describe('GamePresentationState', () => {
 
     expect(state.status).toBe('gameOver');
     expect(state.score).toBe(1234);
+    expect(state.clearedLines).toBe(12);
     expect(state.combo).toBe(3);
     expect(state.combatEnergy).toBe(50);
   });
@@ -125,6 +127,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['S', 'Z', 'J'],
       heldPiece: null,
       score: 500,
+      clearedLines: 5,
       combo: 2,
       backToBack: 1,
       combatEnergy: 25,
@@ -138,7 +141,7 @@ describe('GamePresentationState', () => {
 
     expect(state.status).toBe('paused');
     const keys = Object.keys(state);
-    expect(keys).toHaveLength(15);
+    expect(keys).toHaveLength(16);
   });
 
   it('nextPieces tiene tres elementos', () => {
@@ -149,6 +152,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['J', 'L', 'S'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -171,6 +175,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['T', 'I', 'O'],
       heldPiece: 'L',
       score: 100,
+      clearedLines: 1,
       combo: 1,
       backToBack: 0,
       combatEnergy: 10,
@@ -193,6 +198,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['I', 'I', 'I'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -215,6 +221,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['I', 'I', 'I'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,
@@ -238,6 +245,7 @@ describe('GamePresentationState', () => {
       nextPieces: ['I', 'I', 'I'],
       heldPiece: null,
       score: 0,
+      clearedLines: 0,
       combo: 0,
       backToBack: 0,
       combatEnergy: 0,

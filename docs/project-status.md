@@ -764,3 +764,27 @@ Ver [Informe de implementación](implementation/0030-backend-persistencia-rankin
 - Validación final: `pnpm test` (832/832), `pnpm lint`, `pnpm typecheck`, `pnpm build` (warning no bloqueante de tamaño de chunk) y `pnpm test:e2e` (11/11) en verde; `git diff --check` limpio.
 
 Ver [Informe de implementación](implementation/0031-pulido-visual-fx-identidad-industrial.md).
+
+## Task [0032 — Operator Tag de 3 caracteres y firma arcade postpartida](tasks/0032-operator-tag-firma-postpartida.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-13 |
+| **Resultado** | Reestructuración de la firma de iniciales arcade del Operator Tag integrada directamente en la consola de resultados (`ResultsModal.vue`), eliminando el overlay separado postpartida. Corrección demostrada de la causa raíz del bug de duplicación de caracteres de teclado (`event.preventDefault()` + `if (event.repeat) return;`). Persistencia local diferida de `rautfall_player_tag` únicamente tras recibir respuesta exitosa de la API POST. Limpieza garantizada de `pendingMatchResult` al abandonar Results (`VOLVER A JUGAR` / `MENÚ PRINCIPAL`) y transición automática a `RankingScreen` en el modo de la partida recién guardada (Entrenamiento o Batalla vs Bot). |
+
+### Resumen
+
+> El Operator Tag de 3 caracteres es una identidad visual local provisional inspirada en la introducción de iniciales de máquinas arcade. Se solicita en el flujo postpartida para firmar resultados y no constituye autenticación ni sustituye el modelo definitivo de cuentas previsto para Rautfall.
+
+- Fusión UX en una única pantalla postpartida (`ResultsModal.vue`) con celdas de iniciales integradas.
+- Solución limpia al bug de teclado: 1 pulsación física = 1 carácter (`[R] [_] [_]`) e ignorado de `event.repeat` (no produce `RRR`).
+- Persistencia local diferida: `setPlayerTag` se ejecuta exclusivamente tras un POST exitoso a la API.
+- Si la API falla, se conservan las iniciales editadas en pantalla y el tag persistente previo en `localStorage` no cambia.
+- Abandonar Results sin confirmar limpia `pendingMatchResult` sin enviar datos ni arrastrar resultados a partidas siguientes.
+- Transición automática a Ranking respetando el modo jugado (`initial-mode`).
+- `linesCleared` procedente del snapshot real del motor (`state.clearedLines`).
+- Suite completa de pruebas unitarias (`ResultsModal.test.ts` con test de regresión explícito, `App.test.ts`, `OperatorTagModal.test.ts`) y E2E (`operator-tag-flow.spec.ts`) en verde.
+
+Ver [Informe de implementación](implementation/0032-operator-tag-firma-postpartida.md).
+
