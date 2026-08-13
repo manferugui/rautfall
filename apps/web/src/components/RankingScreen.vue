@@ -215,17 +215,20 @@ function formatDate(isoString: string): string {
   height: 100%;
   min-height: 100vh;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: flex-start;
   background: var(--rf-color-graphite-900, #0d0e10);
-  padding: 1.5rem;
+  padding: 1.75rem 1.5rem 1.5rem;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .ranking-plate {
   position: relative;
   width: 100%;
   max-width: 860px;
+  height: calc(100vh - 3.5rem);
+  max-height: calc(100vh - 3.5rem);
   background: linear-gradient(165deg, #1c1d21 0%, #101114 60%, #0a0b0d 100%);
   border: 2px solid var(--rf-color-metal-600, #3a3b3f);
   border-radius: var(--rf-radius-md, 6px);
@@ -238,6 +241,7 @@ function formatDate(isoString: string): string {
   flex-direction: column;
   gap: 1.25rem;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .plate-bolt {
@@ -345,9 +349,33 @@ function formatDate(isoString: string): string {
 }
 
 .ranking-body {
-  min-height: 320px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  padding-right: 0.35rem;
+  scrollbar-width: thin;
+  scrollbar-color: #4a4c54 #14151a;
+}
+
+.ranking-body::-webkit-scrollbar {
+  width: 9px;
+}
+
+.ranking-body::-webkit-scrollbar-track {
+  background: #14151a;
+}
+
+.ranking-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #52545c 0%, #34363c 100%);
+  border: 1px solid #0a0b0c;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.ranking-body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #62646c 0%, #40424a 100%);
 }
 
 .status-box {
@@ -413,12 +441,16 @@ function formatDate(isoString: string): string {
 }
 
 .ranking-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: #141518;
   color: var(--rf-color-text-muted, rgba(232, 232, 236, 0.6));
   font-weight: 800;
   letter-spacing: 0.08em;
   padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--rf-color-metal-600, #3a3b3f);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 .ranking-table td {
