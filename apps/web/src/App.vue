@@ -75,7 +75,8 @@ const matchSeed = ref<number>(generateMatchSeed());
 const isCanvasMounted = ref(isDevDemo && !isSfxLab);
 
 const audioManager = getAudioManager();
-const isAudioMuted = ref(audioManager.isMuted());
+const isMusicEnabled = ref(audioManager.isMusicEnabled());
+const isSfxEnabled = ref(audioManager.isSfxEnabled());
 const isAudioUnlocked = ref(audioManager.isUnlocked());
 const hasAudioPromptBeenDismissed = ref(false);
 const isAudioInitializing = ref(false);
@@ -110,8 +111,8 @@ async function handleInitializeAudio(): Promise<void> {
   try {
     await audioManager.unlock();
     isAudioUnlocked.value = audioManager.isUnlocked();
-    audioManager.setMuted(false);
-    isAudioMuted.value = audioManager.isMuted();
+    isMusicEnabled.value = audioManager.isMusicEnabled();
+    isSfxEnabled.value = audioManager.isSfxEnabled();
     audioManager.playSfx('uiClick');
     reconcileScreenAudio();
   } catch {
@@ -125,16 +126,27 @@ function handleKeepSilentAudio(): void {
   hasAudioPromptBeenDismissed.value = true;
 }
 
-function toggleAudioMute(): void {
+function toggleMusic(): void {
   void audioManager.unlock().then(() => {
     isAudioUnlocked.value = audioManager.isUnlocked();
-    reconcileScreenAudio();
   }).catch(() => {
     // Ignorar si falla el unlock diferido
   });
   audioManager.playSfx('uiClick');
-  isAudioMuted.value = audioManager.toggleMute();
+  isMusicEnabled.value = audioManager.toggleMusic();
+  reconcileScreenAudio();
 }
+
+function toggleSfx(): void {
+  void audioManager.unlock().then(() => {
+    isAudioUnlocked.value = audioManager.isUnlocked();
+  }).catch(() => {
+    // Ignorar si falla el unlock diferido
+  });
+  isSfxEnabled.value = audioManager.toggleSfx();
+  audioManager.playSfx('uiClick');
+}
+
 
 const gameState = ref<GamePresentationState>({
   status: 'running',
@@ -709,22 +721,29 @@ function openDevTools(): void {
           <div class="header-controls">
             <button
               type="button"
-              class="rf-btn-tactical rf-btn-utility audio-mute-btn"
-              data-testid="audio-mute-button"
-              :data-audio-muted="isAudioMuted"
-              :aria-label="isAudioMuted ? 'Activar audio' : 'Silenciar audio'"
-              @click="toggleAudioMute"
+              class="rf-btn-tactical rf-btn-utility music-toggle-btn"
+              data-testid="music-toggle-button"
+              :data-music-enabled="isMusicEnabled"
+              :aria-label="isMusicEnabled ? 'Desactivar música' : 'Activar música'"
+              @click="toggleMusic"
             >
-              <svg v-if="isAudioMuted" class="btn-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path fill="currentColor" d="M4 9v6h4l5 5V4L8 9H4Z" />
-                <path fill="currentColor" d="M16.3 8.3 15 9.6l1.9 1.9-1.9 1.9 1.3 1.3 1.9-1.9 1.9 1.9 1.3-1.3-1.9-1.9 1.9-1.9-1.3-1.3-1.9 1.9-1.9-1.9Z" />
+              <svg class="btn-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <path fill="currentColor" d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6Z" />
               </svg>
-              <svg v-else class="btn-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path fill="currentColor" d="M4 9v6h4l5 5V4L8 9H4Z" />
-                <path fill="currentColor" d="M16.5 12c0-1.4-.7-2.6-1.8-3.3l.9-1.6A5.6 5.6 0 0 1 18.3 12a5.6 5.6 0 0 1-2.7 4.9l-.9-1.6c1.1-.7 1.8-1.9 1.8-3.3Z" />
-                <path fill="currentColor" d="M19.3 12c0-2.5-1.3-4.7-3.3-5.9l.9-1.6c2.5 1.5 4.1 4.2 4.1 7.5s-1.6 6-4.1 7.5l-.9-1.6c2-1.2 3.3-3.4 3.3-5.9Z" />
+              {{ isMusicEnabled ? 'MÚSICA: ON' : 'MÚSICA: OFF' }}
+            </button>
+            <button
+              type="button"
+              class="rf-btn-tactical rf-btn-utility sfx-toggle-btn"
+              data-testid="sfx-toggle-button"
+              :data-sfx-enabled="isSfxEnabled"
+              :aria-label="isSfxEnabled ? 'Desactivar efectos' : 'Activar efectos'"
+              @click="toggleSfx"
+            >
+              <svg class="btn-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <path fill="currentColor" d="M3 9v6h4l5 5V4L8 9H3Z" />
               </svg>
-              {{ isAudioMuted ? 'AUDIO SILENCIADO' : 'AUDIO ACTIVO' }}
+              {{ isSfxEnabled ? 'SFX: ON' : 'SFX: OFF' }}
             </button>
             <button
               type="button"

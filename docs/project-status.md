@@ -856,3 +856,23 @@ Ver [Informe de implementación](implementation/0034-cortinilla-industrial-compu
 
 Ver [Informe de implementación](implementation/0035-perfiles-dificultad-bot.md).
 
+## Task [0036 — Mejora de audio: activación independiente de Música y SFX](docs/implementation/0036-activacion-independiente-musica-sfx.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-14 |
+| **Resultado** | Activación y desactivación independiente y persistente de los canales de **MÚSICA** y **SFX / EFECTOS** en Rautfall, cubriendo las 4 combinaciones operativas (ON/ON, OFF/ON, ON/OFF, OFF/OFF). `AudioManager` ampliado con `musicEnabled`, `sfxEnabled` y `desiredMusicTrack` para la recuperación automática de pistas BGM sin duplicación de nodos. Guarda centralizada de efectos en `playSfx()`. Persistencia independiente en `localStorage` (`rautfall_audio_music_enabled` y `rautfall_audio_sfx_enabled`) con migración defensiva desde la clave legacy `rautfall_audio_muted`. Preservación estricta de `AudioContext` pre-unlock sin creaciones ni destrucciones ansiosas. Interfaz Industrial Dramatic con toggles en cabecera (`App.vue`) y ajustes (`SettingsScreen.vue`). 956 tests Vitest en verde, lint, typecheck, build y test:e2e limpios. |
+
+### Resumen
+
+- `musicEnabled` y `sfxEnabled` representan las preferencias independientes de reproducción.
+- `desiredMusicTrack` conserva la pista correspondiente a la pantalla activa, deteniendo el nodo sonoro cuando `musicEnabled === false` y reactivándolo al pasar a `true` sin fuentes duplicadas ni huérfanas.
+- Centralización de la guarda de SFX en `playSfx()` para todas las rutas de efectos (eventos de motor, eventos de combate, UI, etc.).
+- Persistencia en `localStorage` con claves explícitas y migración defensiva desde `rautfall_audio_muted` solo cuando ambas claves nuevas están ausentes.
+- Compatibilidad retroactiva con `isMuted()` y `setMuted(muted)`.
+- `AudioActivationModal.vue` inicializa y desbloquea `AudioContext` sin sobrescribir las preferencias individuales del operador.
+- Controles de UI con estética Industrial Dramatic en la cabecera (`App.vue`) y en la pantalla de configuración (`SettingsScreen.vue`).
+- Validación completa: 956 tests Vitest pasados en verde (57 archivos), 0 errores de lint, 0 errores de typecheck, build exitoso y pruebas E2E en Playwright pasando.
+
+Ver [Informe de implementación](implementation/0036-activacion-independiente-musica-sfx.md).

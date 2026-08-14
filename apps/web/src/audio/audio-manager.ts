@@ -3,6 +3,8 @@ import type { BattleEvent } from '@rautfall/battle-engine';
 import type { AudioService, AudioSfxPriority, AudioSfxType, MusicTrack } from './types';
 import { getSfxMetadata, renderSyntheticSfx } from './sfx-synth';
 
+const MUSIC_STORAGE_KEY = 'rautfall_audio_music_enabled';
+const SFX_STORAGE_KEY = 'rautfall_audio_sfx_enabled';
 const MUTE_STORAGE_KEY = 'rautfall_audio_muted';
 const DEDUPLICATION_WINDOW_MS = 40;
 
@@ -47,7 +49,9 @@ export class AudioManager implements AudioService {
   private sfxGain: GainNode | null = null;
 
   private unlocked = false;
-  private muted = false;
+  private musicEnabled = true;
+  private sfxEnabled = true;
+  private desiredMusicTrack: MusicTrack | null = null;
   private sfxBusVolume = 1.0;
   private musicBusVolume = 1.0;
 
@@ -85,7 +89,9 @@ export class AudioManager implements AudioService {
   private pausedMusicTrack: MusicTrack | null = null;
 
   constructor() {
-    this.muted = this.readMutedFromStorage();
+    const prefs = this.readPreferencesFromStorage();
+    this.musicEnabled = prefs.musicEnabled;
+    this.sfxEnabled = prefs.sfxEnabled;
   }
 
   /**
@@ -108,19 +114,42 @@ export class AudioManager implements AudioService {
     }
   }
 
-  private readMutedFromStorage(): boolean {
-    if (typeof localStorage === 'undefined') return false;
+  private readPreferencesFromStorage(): { musicEnabled: boolean; sfxEnabled: boolean } {
+    if (typeof localStorage === 'undefined') {
+      return { musicEnabled: true, sfxEnabled: true };
+    }
     try {
-      return localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
+      const rawMusic = localStorage.getItem(MUSIC_STORAGE_KEY);
+      const rawSfx = localStorage.getItem(SFX_STORAGE_KEY);
+
+      const hasMusicKey = rawMusic !== null;
+      const hasSfxKey = rawSfx !== null;
+
+      if (!hasMusicKey && !hasSfxKey) {
+        const rawLegacyMuted = localStorage.getItem(MUTE_STORAGE_KEY);
+        if (rawLegacyMuted === 'true') {
+          return { musicEnabled: false, sfxEnabled: false };
+        } else if (rawLegacyMuted === 'false') {
+          return { musicEnabled: true, sfxEnabled: true };
+        }
+        return { musicEnabled: true, sfxEnabled: true };
+      }
+
+      const musicEnabled = hasMusicKey ? rawMusic !== 'false' : true;
+      const sfxEnabled = hasSfxKey ? rawSfx !== 'false' : true;
+
+      return { musicEnabled, sfxEnabled };
     } catch {
-      return false;
+      return { musicEnabled: true, sfxEnabled: true };
     }
   }
 
-  private writeMutedToStorage(muted: boolean): void {
+  private writePreferencesToStorage(): void {
     if (typeof localStorage === 'undefined') return;
     try {
-      localStorage.setItem(MUTE_STORAGE_KEY, String(muted));
+      localStorage.setItem(MUSIC_STORAGE_KEY, String(this.musicEnabled));
+      localStorage.setItem(SFX_STORAGE_KEY, String(this.sfxEnabled));
+      localStorage.setItem(MUTE_STORAGE_KEY, String(this.isMuted()));
     } catch {
       // Ignorar errores defensivamente si localStorage no está disponible
     }
@@ -137,7 +166,7 @@ export class AudioManager implements AudioService {
       const ctx = new AudioCtxClass();
 
       const masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(this.muted ? 0 : 1, ctx.currentTime);
+      masterGain.gain.setValueAtTime(this.isMuted() ? 0 : 1, ctx.currentTime);
       masterGain.connect(ctx.destination);
 
       const musicGain = ctx.createGain();
@@ -176,8 +205,11 @@ export class AudioManager implements AudioService {
       throw new Error(`AudioContext en estado no activo: ${this.ctx.state}`);
     }
 
-    if (this.currentMusicTrack && !this.currentMusicSource) {
-      this.playMusic(this.currentMusicTrack);
+    if (this.musicEnabled && (this.desiredMusicTrack || this.currentMusicTrack) && !this.currentMusicSource) {
+      const trackToPlay = this.desiredMusicTrack || this.currentMusicTrack;
+      if (trackToPlay) {
+        this.playMusic(trackToPlay);
+      }
     }
 
     // Precargar asíncronamente activos de audio registrados sin bloquear la reanudación del contexto
@@ -188,27 +220,54 @@ export class AudioManager implements AudioService {
     return this.unlocked;
   }
 
+  public isMusicEnabled(): boolean {
+    return this.musicEnabled;
+  }
+
+  public setMusicEnabled(enabled: boolean): void {
+    this.musicEnabled = enabled;
+    this.writePreferencesToStorage();
+
+    if (!this.musicEnabled) {
+      this.stopActiveMusicSource({ fadeOutDurationMs: 0 });
+    } else if (this.unlocked && this.desiredMusicTrack && !this.currentMusicSource) {
+      this.playMusic(this.desiredMusicTrack);
+    }
+  }
+
+  public toggleMusic(): boolean {
+    this.setMusicEnabled(!this.musicEnabled);
+    return this.musicEnabled;
+  }
+
+  public isSfxEnabled(): boolean {
+    return this.sfxEnabled;
+  }
+
+  public setSfxEnabled(enabled: boolean): void {
+    this.sfxEnabled = enabled;
+    this.writePreferencesToStorage();
+  }
+
+  public toggleSfx(): boolean {
+    this.setSfxEnabled(!this.sfxEnabled);
+    return this.sfxEnabled;
+  }
+
   public isMuted(): boolean {
-    return this.muted;
+    return !this.musicEnabled && !this.sfxEnabled;
   }
 
   public toggleMute(): boolean {
-    this.setMuted(!this.muted);
-    return this.muted;
+    this.setMuted(!this.isMuted());
+    return this.isMuted();
   }
 
   public setMuted(muted: boolean): void {
-    this.muted = muted;
-    this.writeMutedToStorage(muted);
-
-    if (this.ctx && this.masterGain) {
-      try {
-        this.masterGain.gain.setValueAtTime(this.muted ? 0 : 1, this.ctx.currentTime);
-      } catch {
-        // Ignorar si el contexto ya no está activo
-      }
-    }
+    this.setMusicEnabled(!muted);
+    this.setSfxEnabled(!muted);
   }
+
 
   /**
    * Precarga de forma asíncrona todos los activos binarios de SFX y BGM registrados.
@@ -470,7 +529,7 @@ export class AudioManager implements AudioService {
   }
 
   public playSfx(type: AudioSfxType, options?: { forceSynthetic?: boolean }): void {
-    if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
+    if (!this.sfxEnabled || !this.ctx || this.ctx.state !== 'running') return;
 
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const lastTime = this.lastSfxTimeMap.get(type) ?? 0;
@@ -533,7 +592,7 @@ export class AudioManager implements AudioService {
   }
 
   public handleEngineEvent(event: EngineEvent): void {
-    if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
+    if (!this.sfxEnabled || !this.ctx || this.ctx.state !== 'running') return;
 
     switch (event.type) {
       case 'pieceMoved':
@@ -565,7 +624,7 @@ export class AudioManager implements AudioService {
   }
 
   public handleBattleEvent(event: BattleEvent): void {
-    if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
+    if (!this.ctx || this.ctx.state !== 'running') return;
     switch (event.type) {
       case 'participantEvent':
         if (event.participant === 'playerOne') {
@@ -629,12 +688,21 @@ export class AudioManager implements AudioService {
   }
 
   public playMusic(track: MusicTrack, options?: { fadeOutDurationMs?: number }): void {
+    this.desiredMusicTrack = track;
+
     if (this.isMusicPausedState && (this.pausedMusicTrack === track || this.currentMusicTrack === track)) {
+      if (!this.musicEnabled) {
+        this.stopActiveMusicSource(options);
+        return;
+      }
       this.resumeMusic();
       return;
     }
 
     if (this.currentMusicTrack === track && this.currentMusicSource && !this.isMusicPausedState) {
+      if (!this.musicEnabled) {
+        this.stopActiveMusicSource(options);
+      }
       return; // Pista ya activa sonando en loop: se mantiene sin reiniciar
     }
 
@@ -645,6 +713,11 @@ export class AudioManager implements AudioService {
     const previousTrackGain = this.currentTrackGainNode;
     const previousSource = this.currentMusicSource;
     this.currentMusicTrack = track;
+
+    if (!this.musicEnabled) {
+      this.stopActiveMusicSource(options);
+      return;
+    }
 
     if (!this.ctx || !this.musicGain) {
       if (!this.failedMusicAssetSet.has(track) && MUSIC_ASSET_URL_MAP[track]) {
@@ -846,7 +919,12 @@ export class AudioManager implements AudioService {
     this.musicPlaybackOffsetSeconds = 0;
     this.musicStartedAtContextTime = 0;
     this.currentMusicTrack = null;
+    this.desiredMusicTrack = null;
 
+    this.stopActiveMusicSource(options);
+  }
+
+  private stopActiveMusicSource(options?: { fadeOutDurationMs?: number }): void {
     if (!this.ctx || !this.currentMusicSource || !this.currentTrackGainNode) {
       this.currentMusicSource = null;
       this.currentTrackGainNode = null;
@@ -957,6 +1035,9 @@ export class AudioManager implements AudioService {
     this.musicGain = null;
     this.sfxGain = null;
     this.unlocked = false;
+    this.musicEnabled = true;
+    this.sfxEnabled = true;
+    this.desiredMusicTrack = null;
     this.lastSfxTimeMap.clear();
     this.sfxAudioBufferMap.clear();
     this.musicAudioBufferMap.clear();
@@ -971,6 +1052,7 @@ export class AudioManager implements AudioService {
     this.isMusicPausedState = false;
     this.pausedMusicTrack = null;
   }
+
 }
 
 /**

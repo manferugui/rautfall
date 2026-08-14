@@ -119,4 +119,22 @@ describe('SettingsScreen.vue — Interfaz y captura de controles', () => {
 
     expect(wrapper.emitted('back')).toBeTruthy();
   });
+
+  it('renderiza la sección de canales de audio y permite alternar Música y SFX', async () => {
+    const wrapper = mount(SettingsScreen);
+
+    const musicBtn = wrapper.find('[data-testid="settings-music-toggle-button"]');
+    const sfxBtn = wrapper.find('[data-testid="settings-sfx-toggle-button"]');
+
+    expect(musicBtn.exists()).toBe(true);
+    expect(sfxBtn.exists()).toBe(true);
+    expect(musicBtn.text()).toContain('MÚSICA ACTIVADA');
+    expect(sfxBtn.text()).toContain('EFECTOS ACTIVADOS');
+
+    await musicBtn.trigger('click');
+    expect(musicBtn.text()).toContain('MÚSICA DESACTIVADA');
+
+    await sfxBtn.trigger('click');
+    expect(sfxBtn.text()).toContain('EFECTOS DESACTIVADOS');
+  });
 });

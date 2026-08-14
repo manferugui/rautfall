@@ -411,13 +411,13 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       wrapper.unmount();
     });
 
-    it('10. INICIALIZAR AUDIO desbloquea el sistema, desactiva mute mediante API oficial y reproduce uiClick tras éxito', async () => {
+    it('10. INICIALIZAR AUDIO desbloquea el sistema sin sobrescribir preferencias persistidas y reproduce uiClick tras éxito', async () => {
       const manager = AudioManager.getInstance();
       manager.setMuted(true);
       expect(manager.isMuted()).toBe(true);
       expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
 
-      const setMutedSpy = vi.spyOn(manager, 'setMuted');
+      const unlockSpy = vi.spyOn(manager, 'unlock');
       const playSfxSpy = vi.spyOn(manager, 'playSfx');
       const playMusicSpy = vi.spyOn(manager, 'playMusic');
 
@@ -426,10 +426,10 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
 
+      expect(unlockSpy).toHaveBeenCalled();
       expect(manager.isUnlocked()).toBe(true);
-      expect(setMutedSpy).toHaveBeenCalledWith(false);
-      expect(manager.isMuted()).toBe(false);
-      expect(localStorage.getItem('rautfall_audio_muted')).toBe('false');
+      expect(manager.isMuted()).toBe(true);
+      expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
       expect(playSfxSpy).toHaveBeenCalledWith('uiClick');
       expect(playMusicSpy).toHaveBeenCalledWith('menu');
       expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
@@ -484,6 +484,34 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       expect(unlockSpy).not.toHaveBeenCalled();
       expect(manager.isMuted()).toBe(true);
       expect(localStorage.getItem('rautfall_audio_muted')).toBe('true');
+      wrapper.unmount();
+    });
+
+    it('14. permite alternar independientemente los canales de Música y SFX mediante los botones de la cabecera', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      const wrapper = mountApp();
+      await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const musicBtn = wrapper.find('[data-testid="music-toggle-button"]');
+      const sfxBtn = wrapper.find('[data-testid="sfx-toggle-button"]');
+
+      expect(musicBtn.text()).toContain('MÚSICA: ON');
+      expect(sfxBtn.text()).toContain('SFX: ON');
+
+      await musicBtn.trigger('click');
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(true);
+      expect(musicBtn.text()).toContain('MÚSICA: OFF');
+      expect(sfxBtn.text()).toContain('SFX: ON');
+
+      await sfxBtn.trigger('click');
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+      expect(sfxBtn.text()).toContain('SFX: OFF');
+
       wrapper.unmount();
     });
 

@@ -16,6 +16,38 @@
       </div>
 
       <div class="controls-section rf-panel-inset">
+        <div class="section-title">CANALES DE AUDIO</div>
+        <div class="tag-setting-row">
+          <div class="tag-info">
+            <span class="tag-label">MÚSICA:</span>
+            <button
+              type="button"
+              class="rf-btn-tactical audio-setting-btn"
+              data-testid="settings-music-toggle-button"
+              :data-music-enabled="isMusicEnabled"
+              :disabled="capturingAction !== null"
+              @click="toggleMusic"
+            >
+              {{ isMusicEnabled ? 'MÚSICA ACTIVADA' : 'MÚSICA DESACTIVADA' }}
+            </button>
+          </div>
+          <div class="tag-info">
+            <span class="tag-label">EFECTOS:</span>
+            <button
+              type="button"
+              class="rf-btn-tactical audio-setting-btn"
+              data-testid="settings-sfx-toggle-button"
+              :data-sfx-enabled="isSfxEnabled"
+              :disabled="capturingAction !== null"
+              @click="toggleSfx"
+            >
+              {{ isSfxEnabled ? 'EFECTOS ACTIVADOS' : 'EFECTOS DESACTIVADOS' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-section rf-panel-inset">
         <div class="section-title">IDENTIFICACIÓN DE OPERADOR</div>
         <div class="tag-setting-row">
           <div class="tag-info">
@@ -111,11 +143,26 @@ import {
 } from '../settings/control-bindings';
 import { useSettings } from '../settings/settings-store';
 import { getPlayerTag } from '../api/identity';
+import { getAudioManager } from '../audio';
 
 const emit = defineEmits<{
   (e: 'back'): void;
   (e: 'change-tag'): void;
 }>();
+
+const audioManager = getAudioManager();
+const isMusicEnabled = ref(audioManager.isMusicEnabled());
+const isSfxEnabled = ref(audioManager.isSfxEnabled());
+
+function toggleMusic(): void {
+  audioManager.playSfx('uiClick');
+  isMusicEnabled.value = audioManager.toggleMusic();
+}
+
+function toggleSfx(): void {
+  isSfxEnabled.value = audioManager.toggleSfx();
+  audioManager.playSfx('uiClick');
+}
 
 const { bindings, updateBinding, resetControlBindings } = useSettings();
 
@@ -198,6 +245,7 @@ onUnmounted(() => {
 .settings-screen {
   width: 100%;
   max-width: 780px;
+  max-height: calc(100vh - 64px);
   margin: 1.5rem auto;
   padding: 1.75rem;
   box-sizing: border-box;
@@ -205,6 +253,37 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  overflow: hidden;
+}
+
+.settings-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #4a4c54 #14151a;
+}
+
+.settings-content::-webkit-scrollbar {
+  width: 9px;
+}
+
+.settings-content::-webkit-scrollbar-track {
+  background: #14151a;
+}
+
+.settings-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #52545c 0%, #34363c 100%);
+  border: 1px solid #0a0b0c;
+  border-radius: 2px;
+}
+
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #62646c 0%, #40424a 100%);
 }
 
 .settings-header {

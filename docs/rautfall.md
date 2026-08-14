@@ -1701,8 +1701,10 @@ Se adopta una dirección de audio industrial sintética:
 - Música ambiental opcional, discreta y no invasiva.
 - Generación parcial mediante Web Audio.
 - Colección mínima de efectos externos con licencia compatible.
-- Controles independientes para volumen general, música y efectos.
-- Opción de silenciar.
+- Controles independientes para activación de música y efectos (implementados).
+- Persistencia de preferencias de música y efectos en almacenamiento local (implementada).
+- Opción de silencio global (implementada mediante compatibilidad setMuted/isMuted).
+- Controles de volumen general y sliders de volumen por canal (previstos en el roadmap futuro).
 - Todo evento crítico tendrá equivalente visual.
 
 ## Pantalla inicial

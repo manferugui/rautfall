@@ -39,7 +39,8 @@ export type MusicTrack = 'menu' | 'gameplay' | 'suddenDeath' | 'victory';
  * Preferencias de audio persistidas.
  */
 export interface AudioPreferences {
-  muted: boolean;
+  musicEnabled: boolean;
+  sfxEnabled: boolean;
 }
 
 /**
@@ -50,11 +51,23 @@ export interface AudioService {
   unlock(): Promise<void>;
   /** Indica si el sistema de audio está desbloqueado y activo (AudioContext en ejecución). */
   isUnlocked(): boolean;
-  /** Indica si el audio global está silenciado. */
+  /** Indica si la música de fondo está habilitada. */
+  isMusicEnabled(): boolean;
+  /** Establece la preferencia de activación de la música de fondo. */
+  setMusicEnabled(enabled: boolean): void;
+  /** Alterna la activación de la música de fondo y devuelve el nuevo estado. */
+  toggleMusic(): boolean;
+  /** Indica si los efectos de sonido sintéticos/muestras están habilitados. */
+  isSfxEnabled(): boolean;
+  /** Establece la preferencia de activación de efectos de sonido. */
+  setSfxEnabled(enabled: boolean): void;
+  /** Alterna la activación de efectos de sonido y devuelve el nuevo estado. */
+  toggleSfx(): boolean;
+  /** Indica si el audio global está silenciado (ambos canales deshabilitados). */
   isMuted(): boolean;
   /** Alterna el silencio global y devuelve el nuevo estado de mute. */
   toggleMute(): boolean;
-  /** Establece explícitamente el estado de silencio global. */
+  /** Establece explícitamente el estado de ambos canales de audio. */
   setMuted(muted: boolean): void;
   /** Reproduce un efecto de sonido (muestra o fallback sintético). */
   playSfx(type: AudioSfxType, options?: { forceSynthetic?: boolean }): void;

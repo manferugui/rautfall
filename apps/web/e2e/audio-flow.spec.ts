@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { initializeAudioIfPrompted, continueSilentlyIfPrompted } from './audio-helpers';
+import { initializeAudioIfPrompted } from './audio-helpers';
 
-test.describe('Flujo de Audio y Mute', () => {
-  test('navega por la aplicación sin errores de consola ni de AudioContext y conmuta el botón de Mute', async ({ page }) => {
+test.describe('Flujo de Audio de Música y SFX', () => {
+  test('navega por la aplicación sin errores de consola ni de AudioContext y conmuta los canales de Música y SFX', async ({ page }) => {
     const consoleErrors: string[] = [];
     const pageErrors: Error[] = [];
 
@@ -20,37 +20,41 @@ test.describe('Flujo de Audio y Mute', () => {
     await page.goto('/');
     await initializeAudioIfPrompted(page);
 
-    const muteBtn = page.locator('[data-testid="audio-mute-button"]');
-    await expect(muteBtn).toBeVisible();
-    await expect(muteBtn).toHaveAttribute('data-audio-muted', 'false');
-
-    // 2. Conmutar Mute a activado (silenciado)
-    await muteBtn.click();
-    await expect(muteBtn).toHaveAttribute('data-audio-muted', 'true');
-
-    // 3. Recargar la página y verificar que la preferencia de silencio persiste al continuar en silencio
-    await page.reload();
-    await continueSilentlyIfPrompted(page);
-    const muteBtnAfterReload = page.locator('[data-testid="audio-mute-button"]');
-    await expect(muteBtnAfterReload).toHaveAttribute('data-audio-muted', 'true');
-
-    // 4. Iniciar modo Entrenamiento y verificar la cabecera
+    // 2. Iniciar modo Entrenamiento para acceder a los controles de la cabecera
     await page.click('[data-testid="start-training-button"]');
     await expect(page.locator('.app-title')).toHaveText('RAUTFALL');
 
-    const headerMuteBtn = page.locator('.app-header [data-testid="audio-mute-button"]');
-    await expect(headerMuteBtn).toBeVisible();
-    await expect(headerMuteBtn).toHaveAttribute('data-audio-muted', 'true');
+    const musicBtn = page.locator('[data-testid="music-toggle-button"]');
+    const sfxBtn = page.locator('[data-testid="sfx-toggle-button"]');
 
-    // 5. Volver al menú
+    await expect(musicBtn).toBeVisible();
+    await expect(sfxBtn).toBeVisible();
+    await expect(musicBtn).toHaveAttribute('data-music-enabled', 'true');
+    await expect(sfxBtn).toHaveAttribute('data-sfx-enabled', 'true');
+
+    // 3. Conmutar Música a OFF y SFX a OFF
+    await musicBtn.click();
+    await expect(musicBtn).toHaveAttribute('data-music-enabled', 'false');
+
+    await sfxBtn.click();
+    await expect(sfxBtn).toHaveAttribute('data-sfx-enabled', 'false');
+
+    // 4. Volver al menú
     await page.click('[data-testid="exit-to-menu-button"]');
     await expect(page.locator('[data-testid="mode-selector"]')).toBeVisible();
+
+    // 5. Ir a la pantalla de Ajustes y verificar que la sección de Canales de Audio muestra las preferencias
+    await page.click('[data-testid="open-settings-button"]');
+    await expect(page.locator('[data-testid="settings-screen"]')).toBeVisible();
+
+    const settingsMusicBtn = page.locator('[data-testid="settings-music-toggle-button"]');
+    const settingsSfxBtn = page.locator('[data-testid="settings-sfx-toggle-button"]');
+
+    await expect(settingsMusicBtn).toHaveAttribute('data-music-enabled', 'false');
+    await expect(settingsSfxBtn).toHaveAttribute('data-sfx-enabled', 'false');
 
     // Confirmar ausencia de errores fatales en consola
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
-
-    // Limpieza explícita de la clave de silencio en localStorage
-    await page.evaluate(() => localStorage.removeItem('rautfall_audio_muted'));
   });
 });

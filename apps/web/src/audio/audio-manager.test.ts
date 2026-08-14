@@ -912,4 +912,184 @@ describe('AudioManager', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('Tarea 0036 — Activación independiente de Música y SFX', () => {
+    it('representa y permite operar las cuatro combinaciones independientes de canales', () => {
+      const manager = AudioManager.getInstance();
+
+      // 1. ON / ON (Default)
+      expect(manager.isMusicEnabled()).toBe(true);
+      expect(manager.isSfxEnabled()).toBe(true);
+      expect(manager.isMuted()).toBe(false);
+
+      // 2. OFF / ON
+      manager.setMusicEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(true);
+      expect(manager.isMuted()).toBe(false);
+
+      // 3. ON / OFF
+      manager.setMusicEnabled(true);
+      manager.setSfxEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(true);
+      expect(manager.isSfxEnabled()).toBe(false);
+      expect(manager.isMuted()).toBe(false);
+
+      // 4. OFF / OFF
+      manager.setMusicEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+      expect(manager.isMuted()).toBe(true);
+    });
+
+    it('respeta la semántica legacy de setMuted(true/false) e isMuted()', () => {
+      const manager = AudioManager.getInstance();
+
+      manager.setMuted(true);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+      expect(manager.isMuted()).toBe(true);
+
+      manager.setMuted(false);
+      expect(manager.isMusicEnabled()).toBe(true);
+      expect(manager.isSfxEnabled()).toBe(true);
+      expect(manager.isMuted()).toBe(false);
+
+      manager.setMusicEnabled(false);
+      expect(manager.isMuted()).toBe(false);
+
+      manager.toggleMute();
+      expect(manager.isMuted()).toBe(true);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+    });
+
+    it('detiene la BGM activa al desactivar Música y la recupera al volver a activarla sin duplicar pistas', async () => {
+      const manager = AudioManager.getInstance();
+      const mockBuffer = {
+        duration: 30,
+        length: 1440000,
+        sampleRate: 48000,
+        numberOfChannels: 2,
+      } as unknown as AudioBuffer;
+
+      manager.registerMusicBuffer('gameplay', mockBuffer);
+      await manager.unlock();
+
+      manager.playMusic('gameplay');
+      expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+
+      // Desactivar música detiene el nodo activo pero conserva desiredMusicTrack
+      manager.setMusicEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(false);
+
+      // Reactivar música recupera la pista deseada 'gameplay'
+      manager.setMusicEnabled(true);
+      expect(manager.isMusicEnabled()).toBe(true);
+      expect(manager.getCurrentMusicTrack()).toBe('gameplay');
+    });
+
+    it('inhibe los efectos SFX cuando sfxEnabled === false sin interferir con la música ni el AudioContext', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      manager.setSfxEnabled(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+
+      const spySynth = vi.spyOn(mockAudioContext, 'createOscillator');
+      manager.playSfx('uiClick');
+
+      // Ningún sintetizador de Web Audio fue creado para el SFX
+      expect(spySynth).not.toHaveBeenCalled();
+      expect(manager.isUnlocked()).toBe(true);
+
+      // Reactivar SFX permite reproducir efectos posteriores
+      manager.setSfxEnabled(true);
+      manager.playSfx('uiClick');
+      expect(spySynth).toHaveBeenCalled();
+    });
+
+    it('mantiene la independencia de preferencias entre cambios de Música y SFX', () => {
+      const manager = AudioManager.getInstance();
+
+      manager.setMusicEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(true);
+
+      manager.setSfxEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+
+      manager.setMusicEnabled(true);
+      expect(manager.isMusicEnabled()).toBe(true);
+      expect(manager.isSfxEnabled()).toBe(false);
+    });
+
+    it('persiste las preferencias independientemente en localStorage y las restaura al reiniciar la instancia', () => {
+      const manager1 = AudioManager.getInstance();
+      manager1.setMusicEnabled(false);
+      manager1.setSfxEnabled(true);
+
+      expect(localStorage.getItem('rautfall_audio_music_enabled')).toBe('false');
+      expect(localStorage.getItem('rautfall_audio_sfx_enabled')).toBe('true');
+
+      AudioManager.resetInstance();
+      const manager2 = AudioManager.getInstance();
+
+      expect(manager2.isMusicEnabled()).toBe(false);
+      expect(manager2.isSfxEnabled()).toBe(true);
+    });
+
+    it('aplica migración defensiva desde la clave legacy únicamente cuando ambas claves nuevas están ausentes', () => {
+      localStorage.setItem('rautfall_audio_muted', 'true');
+      const manager1 = AudioManager.getInstance();
+
+      expect(manager1.isMusicEnabled()).toBe(false);
+      expect(manager1.isSfxEnabled()).toBe(false);
+
+      AudioManager.resetInstance();
+      localStorage.clear();
+      localStorage.setItem('rautfall_audio_music_enabled', 'true');
+      localStorage.setItem('rautfall_audio_muted', 'true');
+
+      const manager2 = AudioManager.getInstance();
+      // La clave nueva de música manda sobre la legacy
+      expect(manager2.isMusicEnabled()).toBe(true);
+      expect(manager2.isSfxEnabled()).toBe(true);
+    });
+
+    it('maneja valores ausentes o corruptos en localStorage produciendo fallbacks seguros', () => {
+      localStorage.setItem('rautfall_audio_music_enabled', 'corrupt_value');
+      localStorage.setItem('rautfall_audio_sfx_enabled', 'invalid');
+
+      const manager = AudioManager.getInstance();
+      expect(manager.isMusicEnabled()).toBe(true);
+      expect(manager.isSfxEnabled()).toBe(true);
+    });
+
+    it('los toggles de canales no instancian AudioContext de forma ansiosa antes del unlock', () => {
+      const manager = AudioManager.getInstance();
+      expect(manager.getAudioContext()).toBeNull();
+
+      manager.setMusicEnabled(false);
+      manager.setSfxEnabled(false);
+
+      expect(manager.getAudioContext()).toBeNull();
+      expect(manager.isUnlocked()).toBe(false);
+    });
+
+    it('desactivar o reactivar un canal tras el unlock no destruye ni cierra el AudioContext', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      expect(manager.isUnlocked()).toBe(true);
+
+      manager.setMusicEnabled(false);
+      expect(mockAudioContext.close).not.toHaveBeenCalled();
+      expect(manager.isUnlocked()).toBe(true);
+
+      manager.setMusicEnabled(true);
+      expect(manager.isUnlocked()).toBe(true);
+    });
+  });
 });
