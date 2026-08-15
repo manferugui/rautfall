@@ -28,7 +28,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm --filter @rautfall/web dev -- --host ${HOST} --port ${PORT} --strictPort`,
+    command: `pnpm --filter @rautfall/web exec vite --host ${HOST} --port ${PORT} --strictPort`,
     cwd: WORKSPACE_ROOT,
     url: BASE_URL,
     timeout: 60_000,

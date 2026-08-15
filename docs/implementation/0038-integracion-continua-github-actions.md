@@ -150,18 +150,40 @@ Todas las comprobaciones obligatorias se han ejecutado desde la raíz del monore
 
 ---
 
+## Diagnóstico y Corrección de la Primera Ejecución Remota en GitHub Actions
+
+En la primera ejecución real del workflow en GitHub Actions, el job `quality` finalizó con éxito al 100%, pero el job `e2e` falló por un error de timeout al arrancar el servidor web:
+`Error: Timed out waiting 60000ms from config.webServer.`
+
+### Causa Raíz
+`apps/web/playwright.config.ts` utilizaba `command: pnpm --filter @rautfall/web dev -- --host 127.0.0.1 --port 5173 --strictPort`.
+En pnpm v10 Workspaces, ejecutar `pnpm --filter @rautfall/web dev` desde la raíz invoca el script `"dev"` del `package.json` raíz (`"pnpm --parallel --filter @rautfall/web --filter @rautfall/api dev"`), el cual propaga los argumentos de Vite (`--host 127.0.0.1 --port 5173 --strictPort`) tanto a la web como a la API.
+En `apps/api`, el script dev es `tsx watch src/server.ts`. `tsx` rechazaba los argumentos desconocidos de Vite y abortaba con error. En entorno local sin `CI=1`, Playwright reutilizaba el servidor previamente activo (`reuseExistingServer: true`), pero en GitHub Actions (`CI=1`), `reuseExistingServer: false` forzaba a Playwright a ejecutar el comando, que fallaba al arrancar.
+
+### Corrección Aplicada
+En [`apps/web/playwright.config.ts`](file:///home/manuel/dev/rautfall/apps/web/playwright.config.ts), se actualizó la propiedad `webServer.command` para invocar Vite directamente en el workspace de la web sin pasar por los scripts paralelos de la raíz:
+```ts
+command: `pnpm --filter @rautfall/web exec vite --host ${HOST} --port ${PORT} --strictPort`
+```
+
+### Validación Local con `CI=1`
+Se detuvo cualquier servidor previo en el puerto 5173 y se ejecutó:
+`CI=1 pnpm test:e2e`
+Playwright arrancó su propio servidor web con `exec vite` en 178 ms, descubrió los 19 tests E2E en 10 archivos y los ejecutó con éxito al 100% (`19 passed (1.5m)`).
+
+---
+
 ## Distinción entre Validación Local y Validación Remota en GitHub Actions
 
-- **Validación Local (Realizada y Completada)**:
-  Se ha confirmado que la sintaxis YAML es correcta y que todos los comandos que ejecutará la CI (`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:e2e`) funcionan y pasan sin errores en el entorno local.
+- **Validación Local (Realizada y Completada con `CI=1`)**:
+  Se ha verificado localmente con la variable `CI=1` (que desactiva la reutilización de servidores) que Playwright levanta dinámicamente su servidor web Vite y ejecuta las 19 pruebas E2E correctamente. Todas las comprobaciones de calidad (`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` y `git diff --check`) pasan sin errores.
 - **Validación Remota en GitHub Actions (Pendiente de Push)**:
-  La ejecución real de las GitHub Actions en los servidores de GitHub se activará automáticamente en el momento en que se realice un `git push origin main` o se abra un Pull Request hacia `main`. En dicha primera ejecución remota se confirmará la resolución de los tags de las acciones en GitHub Marketplace (`actions/checkout@v6`, `pnpm/action-setup@v6`, `actions/setup-node@v6`, `actions/upload-artifact@v7`).
+  La reejecución real del workflow en los servidores de GitHub se activará con el próximo `git push origin main`.
 
 ---
 
 ## Confirmación de Alcance Excluido
 
-- No se han modificado los scripts de `package.json` ni la configuración de `playwright.config.ts`.
 - No se han introducido secretos, variables de entorno productivas ni bases de datos Neon.
 - No se han añadido servicios de PostgreSQL en la definición del workflow (`services:`).
 - No se han creado Dockerfiles ni archivos de docker-compose.
