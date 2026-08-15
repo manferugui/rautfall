@@ -7,6 +7,7 @@ import {
   BOT_REACTION_DELAY_STEPS,
   createDeterministicBot,
   isActivePieceFullyVisible,
+  isNeutralPlacementInput,
   normalizeBotConfig,
   selectCandidate,
 } from './deterministic-bot';
@@ -508,6 +509,29 @@ describe('deterministic-bot', () => {
       // ELITE restinge la selección a candidatos de mayor o igual puntuación heurística respecto a la tolerancia permissiva de CADET
       if (diagElite.planDiagnostic && diagCadet1.planDiagnostic) {
         expect(diagElite.planDiagnostic.selectedHeuristicScore).toBeGreaterThanOrEqual(diagCadet1.planDiagnostic.selectedHeuristicScore);
+      }
+    });
+
+    it('garantiza la exclusividad mutua entre acciones de colocación y disparos de sabotaje en una única llamada a nextStep', () => {
+      const engine = createMockOwnEngine(100, ['residuos']);
+      const opponentSnap = createMockOpponentSnapshot(10);
+      const bot = createDeterministicBot();
+
+      while (!isActivePieceFullyVisible(engine)) {
+        engine.step({
+          leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false,
+          softDropHeld: true, hardDrop: false,
+        });
+      }
+
+      for (let i = 0; i < 200; i++) {
+        const input = bot.nextStep(engine, 'running', opponentSnap);
+        const placementActions = isNeutralPlacementInput(input) ? 0 : 1;
+        const sabotageActions = input.triggerSabotage ? 1 : 0;
+
+        expect(placementActions + sabotageActions, `Conflicto de acciones en paso ${i}`).toBeLessThanOrEqual(1);
+
+        engine.step(input);
       }
     });
   });

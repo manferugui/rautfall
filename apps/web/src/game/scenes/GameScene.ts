@@ -33,6 +33,7 @@ import {
   createBattleSession,
   createDeterministicBot,
   getBotProfileConfig,
+  isNeutralPlacementInput,
   normalizeBotProfileId,
   type BattleSession,
   type BotProfileId,
@@ -146,7 +147,6 @@ export class GameScene extends Phaser.Scene {
   /** Telemetría acumulativa de diagnóstico exclusiva para entornos DEV. */
   private devHardDropPhaseStepCount = 0;
   private devMaxActionsInSingleStep = 0;
-  private lastBotActionIndex = 0;
   private devSessionGeneration = 1;
 
   private matchSeed = 42;
@@ -423,6 +423,16 @@ export class GameScene extends Phaser.Scene {
               p2Input = { ...this.emptyStepInput(), triggerSabotage: true };
             }
 
+            if (import.meta.env.DEV && this.playerTwoBot) {
+              const placementActions = isNeutralPlacementInput(p2Input) ? 0 : 1;
+              const sabotageActions = p2Input.triggerSabotage ? 1 : 0;
+              const actionsInThisStep = placementActions + sabotageActions;
+
+              if (actionsInThisStep > this.devMaxActionsInSingleStep) {
+                this.devMaxActionsInSingleStep = actionsInThisStep;
+              }
+            }
+
             this.battleSession.step({
               playerOne: input,
               playerTwo: p2Input,
@@ -596,7 +606,6 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       this.devHardDropPhaseStepCount = 0;
       this.devMaxActionsInSingleStep = 0;
-      this.lastBotActionIndex = 0;
       this.devSessionGeneration = (this.devSessionGeneration || 0) + 1;
     }
 
@@ -956,12 +965,6 @@ export class GameScene extends Phaser.Scene {
         if (diag.currentPhase === 'waitingBeforeHardDrop') {
           this.devHardDropPhaseStepCount++;
         }
-
-        const actionsInStep = diag.actionIndex - this.lastBotActionIndex;
-        if (actionsInStep > this.devMaxActionsInSingleStep) {
-          this.devMaxActionsInSingleStep = actionsInStep;
-        }
-        this.lastBotActionIndex = diag.actionIndex;
 
         botDevDiagnostic = Object.freeze({
           pieceId: p2Active?.pieceId ?? null,

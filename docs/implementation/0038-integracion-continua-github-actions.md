@@ -167,7 +167,14 @@ jobs:
 - **Solución Aplicada**:
   - **Escenario 1**: Ajuste del timeout de visibilidad inicial a `{ timeout: 15000 }` (mismo margen de infraestructura usado en los Escenarios 3 y 5).
   - **Señal DEV Persistente (`sessionGeneration`)**: Se introdujo el campo `sessionGeneration` en la telemetría DEV (`BotDevDiagnostic` en `GameScene.ts` expuesto en `App.vue` con `data-testid="bot-session-generation"`). Este contador se inicia en `1`, se incrementa exactamente una unidad tras cada reset de sesión (`resetEngine()`) y permanece inmutable durante toda la vida de la nueva sesión.
-  - **Escenario 6**: Verificación determinista e inmutable del reset comprobando `st.sessionGeneration > preResetGen` en combinación con la discontinuidad de pasos `battleStep < preResetStep`, eliminando todas las expectativas sobre estados efímeros de los primeros fotogramas (`lastActionStep === null`, `lastAction === null`, `planLength === 0`, etc.).
+### Cuarta Incidencia: Corrección de Instrumentación en `maxActionsInSingleStep`
+- **Problema**: `expect(st3.maxActionsInSingleStep).toBeLessThanOrEqual(1)` fallaba esporádicamente en CI (recibiendo `2`).
+- **Causa raíz**: `maxActionsInSingleStep` se calculaba restando deltas de `actionIndex` dentro de `notifyState()` (que se ejecuta una vez por fotograma visual de Phaser). En fotogramas con `stepsToExecute >= 2` (al reanudar la pausa o con caídas a 30 FPS), se ejecutaban 2 pasos lógicos en el mismo fotograma visual. Si el bot ejecutaba 1 acción en el paso 1 y 1 acción en el paso 2, el delta acumulado en la pantalla era $2$, atribuyendo falsamente 2 acciones a un supuesto "único paso".
+- **Solución Aplicada**:
+  - Eliminación de la variable `lastBotActionIndex` y del delta en `notifyState()`.
+  - Medición directa del output de `playerTwoBot.nextStep(...)` dentro del bucle de pasos lógicos (`for (let i = 0; i < stepsToExecute; i++)`) en `GameScene.ts`, sumando `placementActions + sabotageActions` para cada `battleStep` individual.
+  - Adición de prueba de regresión en `GameScene.test.ts` que simula `stepsToExecute = 2` y verifica que `maxActionsInSingleStep` permanece $\le 1$.
+  - Adición de prueba de exclusividad mutua de acciones y sabotaje en `deterministic-bot.test.ts`.
 
 ---
 
