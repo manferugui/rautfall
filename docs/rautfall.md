@@ -2467,3 +2467,57 @@ Rautfall utiliza **Vue Router** (`vue-router@^4`) como mecanismo único de orque
 - **Entorno de desarrollo (Vite) / Playwright E2E**: Vite Dev Server intercepta la navegación cliente y sirve el fallback SPA a `index.html` de forma nativa.
 - **Backend API (`@rautfall/api`)**: Fastify sirve exclusivamente endpoints de la API (`/api/*`, `/health`) y no gestiona assets de la SPA en esta fase.
 - **Despliegue Final**: La integración de la SPA con el servidor de producción (vía plugin de estáticos en Fastify o servidor web de producción) requerirá fallback SPA a `index.html`, garantizando que `/api/*` y `/health` conserven sus contratos.
+
+## 26. Arquitectura de Despliegue e Infraestructura Cloud (Vercel + Neon)
+
+Rautfall utiliza **Vercel** para la compilación y alojamiento de la SPA Vue 3 / Vite y la ejecución de la API Fastify 5 (mediante Serverless Functions / Fluid Compute), combinada con **Neon PostgreSQL** como base de datos administrada serverless.
+
+### Estrategia de Planes
+
+* **Desarrollo:** Vercel Hobby + Neon Free
+* **Entrega/evaluación:** Vercel Pro + Neon
+
+### Justificación de Alternativas Descartadas
+
+**Azure Container Apps (ACA)** fue evaluada como opción de despliegue en contenedores pero descartada para la entrega del TFM por:
+1. **Coste e infraestructura desproporcionados**: Para la escala de tráfico del TFM y la arquitectura del juego, mantener un registro de contenedores (ACR), entornos de Container Apps y buckets adicionaba costes fijos y gastos de mantenimiento innecesarios.
+2. **Complejidad operativa**: La gestión de manifiestos, ingress y escalado en contenedores incrementaba el riesgo operativo sin aportar ventajas frente a una plataforma PaaS/Serverless administrada.
+
+### Diseño Técnico de Despliegue
+
+```text
+GitHub Push (main)
+  ↓
+GitHub Actions (CI: ci.yml / CD: cd.yml)
+  ├── 1. CI: quality & e2e (Tests de regresión en verde)
+  ├── 2. CD: db:migrate (Ejecución contra NEON_DIRECT_URL)
+  └── 3. CD: vercel deploy --prod (Despliegue automático a producción)
+        ↓
+     Vercel Platform (Dominio Único: https://rautfall.es)
+       ├── SPA Vue 3 / Vite (apps/web/dist)
+       └── Serverless Function Fastify 5 (api/index.ts)
+            ↓
+          Neon PostgreSQL (DATABASE_URL Pooled via PgBouncer)
+```
+
+1. **Adaptador Serverless de Fastify (`api/index.ts`)**:
+   * Reutiliza `buildApp()` de `@rautfall/api` sin modificar la arquitectura del backend.
+   * Inicializa Fastify en el ámbito del módulo (*module scope*) reutilizando el caché de peticiones en ejecuciones *warm*.
+   * Delega las peticiones HTTP con `fastify.server.emit('request', req, res)`.
+
+2. **Separación de Conexiones a Neon**:
+   * **Runtime (`DATABASE_URL`)**: Cadena de conexión **Pooled** (PgBouncer) configurada en Vercel, optimizada para Serverless.
+   * **Migraciones (`NEON_DIRECT_URL`)**: Cadena de conexión **Directa** configurada en los Secretos de GitHub para ejecuciones controladas de `drizzle-kit` durante el CD.
+   * **Cero migraciones en Cold Start**: Ninguna Serverless Function ejecuta migraciones al arrancar.
+
+3. **Orquestación en Vercel (`vercel.json`)**:
+   * Configura la construcción del workspace (`pnpm --filter @rautfall/web build`) y salida en `apps/web/dist`.
+   * Reescribe `/api/(.*)` hacia `/api/index.ts` y redirige el resto de rutas SPA (`/((?!api/).*)`) a `/index.html` bajo el mismo origen HTTPS.
+
+4. **Deshabilitación de Auto-deploy por Git en Vercel**:
+   * En la configuración del proyecto Vercel se **desactiva el auto-deploy automático por Git en `main`**. El despliegue a producción es desencadenado exclusivamente por GitHub Actions CD tras verificar las pruebas CI y aplicar con éxito las migraciones DDL con `NEON_DIRECT_URL`.
+
+5. **Comportamiento de Cold Starts (Hobby vs. Pro)**:
+   * La transición a Vercel Pro amplia tiempos de timeout y recursos pero no elimina de forma intrínseca los *cold starts* (latencia al instanciar el runtime tras inactividad), inherentes al paradigma Serverless. Dado que el motor del juego y la experiencia de partida corren en cliente, los *cold starts* sólo impactan levemente peticiones iniciales de datos (rácking/historial), no afectando a la fluidez del combate.
+
+

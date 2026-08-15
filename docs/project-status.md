@@ -917,3 +917,23 @@ Ver [Informe de implementación](implementation/0037-sincronizacion-url-y-soport
 - Validación local completada al 100%: 960 tests Vitest pasados, 19 pruebas Playwright E2E pasadas, ESLint sin errores, typecheck limpio en 6 paquetes, build exitoso de Vite y `git diff --check` sin observaciones.
 
 Ver [Informe de implementación](implementation/0038-integracion-continua-github-actions.md).
+
+## Task [0039 — Despliegue en Vercel + Neon](tasks/0039-despliegue-vercel-neon.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-15 |
+| **Resultado** | Arquitectura de despliegue cloud para Rautfall implementada en **Vercel** (SPA Vue 3 / Vite y Serverless Functions de Fastify 5 via `api/index.ts`) y **Neon PostgreSQL** (base de datos serverless administrada). Sustitución de Azure Container Apps como opción principal (documentada como alternativa descartada por coste/complejidad). Separación de conexiones `DATABASE_URL` (Pooled PgBouncer para runtime Vercel) y `NEON_DIRECT_URL` (Directa para migraciones `drizzle-kit`). Workflow de CD en GitHub Actions (`.github/workflows/cd.yml`) con ejecución secuencial (`CI verde → db:migrate en Neon → vercel deploy --prod`). 961 tests Vitest pasados, lint, typecheck y build exitosos. |
+
+### Resumen
+
+- Adaptador Serverless oficial Fastify 5 en `api/index.ts` instanciando `buildApp()` en module scope y emitiendo `fastify.server.emit('request', req, res)`.
+- Configuración de monorepo Vercel en `vercel.json` sirviendo `apps/web/dist` y reescribiendo `/api/(.*)` a la Serverless Function y fallback a `/index.html`.
+- Estrategia Neon: `DATABASE_URL` Pooled para runtime y `NEON_DIRECT_URL` Directa para migraciones en CD (cero migraciones en cold start).
+- Pipeline `.github/workflows/cd.yml` en GitHub Actions garantizando el flujo determinista.
+- Actualización de documentación técnica y de arquitectura en `docs/rautfall.md`.
+- 961 tests Vitest, lint, typecheck y build de Vite en verde.
+
+Ver [Informe de implementación](implementation/0039-despliegue-vercel-neon.md).
+
