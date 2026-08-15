@@ -581,30 +581,37 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
 
       const { scene, onStateUpdate } = setupSceneWithListeners();
 
-      // Avanzar varios fotogramas para que la pieza de P2 esté visible y finalice la fase de reacción (20 pasos)
-      for (let t = 0; t < 40; t++) {
-        scene.update(t * 16, 16);
-      }
+      // Inyectar bot controlado para simular de forma determinista 2 acciones activas en 2 pasos consecutivos del mismo frame
+      const mockNextStep = vi.fn()
+        .mockReturnValueOnce({ leftHeld: true, leftPressed: true, rightHeld: false, rightPressed: false, softDropHeld: false, hardDrop: false })
+        .mockReturnValueOnce({ leftHeld: false, leftPressed: false, rightHeld: true, rightPressed: true, softDropHeld: false, hardDrop: false })
+        .mockReturnValue({ leftHeld: false, rightHeld: false, leftPressed: false, rightPressed: false, softDropHeld: false, hardDrop: false });
 
-      // Capturar actionIndex inicial del bot
-      const bot = (scene as unknown as { playerTwoBot: import('@rautfall/battle-engine').DeterministicBot }).playerTwoBot;
-      const initialActionIndex = bot.getDiagnostic().actionIndex;
+      (scene as unknown as { playerTwoBot: unknown }).playerTwoBot = {
+        nextStep: mockNextStep,
+        getDiagnostic: () => ({
+          currentPhase: 'executing',
+          reactionTimerSteps: 0,
+          actionIntervalTimer: 0,
+          hardDropDelayTimer: 0,
+          actionIndex: 2,
+          lastActionStep: 1,
+          lastAction: 'left',
+        }),
+      };
 
       // Ejecutar un fotograma visual con delta = 34 ms (hace que computeSteps devuelva stepsToExecute = 2)
       scene.update(1000, 34);
 
-      const finalActionIndex = bot.getDiagnostic().actionIndex;
-      const totalActionsInFrame = finalActionIndex - initialActionIndex;
+      // Demostrar explícitamente que nextStep fue invocado exactamente 2 veces (2 pasos lógicos en este fotograma visual)
+      expect(mockNextStep).toHaveBeenCalledTimes(2);
 
-      // Demostración explícita: este fotograma visual ejecutó de verdad >= 2 acciones del bot en 2 pasos lógicos distintos
-      expect(totalActionsInFrame, 'El fotograma visual debió procesar 2 acciones del bot en 2 pasos distintos').toBeGreaterThanOrEqual(2);
-
-      // Aserción del bug de telemetría: maxActionsInSingleStep mide por paso lógico (<= 1), no por fotograma visual (que fue >= 2)
+      // Demostrar que la telemetría reporta maxActionsInSingleStep = 1 (medición por paso lógico)
       const lastCall = onStateUpdate.mock.calls[onStateUpdate.mock.calls.length - 1]?.[0] as import('../types').GamePresentationState | undefined;
       const diag = lastCall?.battleState?.botDevDiagnostic;
 
       expect(diag).toBeDefined();
-      expect(diag!.maxActionsInSingleStep, 'La telemetría debió reportar 1 (por paso), no 2 (por fotograma)').toBeLessThanOrEqual(1);
+      expect(diag!.maxActionsInSingleStep).toBe(1);
 
       window.history.pushState({}, '', '/');
     });
