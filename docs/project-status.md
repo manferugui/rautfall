@@ -904,7 +904,7 @@ Ver [Informe de implementación](implementation/0037-sincronizacion-url-y-soport
 |-------|-------|
 | **Estado** | ✅ Completada |
 | **Fecha de actualización** | 2026-08-15 |
-| **Resultado** | Workflow de Integración Continua (CI) en GitHub Actions (`.github/workflows/ci.yml`) que automatiza el control de calidad en cada `push` a `main` y en cada `pull_request` hacia `main`. Configuración en runners `ubuntu-24.04` con permisos globales acotados a `contents: read`. Dos jobs en paralelo: `quality` (ejecuta `pnpm lint`, `pnpm typecheck`, `pnpm test` utilizando Docker nativo para `@testcontainers/postgresql` con PostgreSQL 16 y `pnpm build`) y `e2e` (instala Chromium y sus dependencias del SO con `pnpm --filter @rautfall/web exec playwright install --with-deps chromium`, ejecuta `pnpm test:e2e` y sube los artefactos de `apps/web/playwright-report/` y `apps/web/test-results/` solo en caso de fallo). 958 tests Vitest en verde, 19 pruebas E2E de Playwright en verde, lint, typecheck, build y `git diff --check` limpios. |
+| **Resultado** | Workflow de Integración Continua (CI) en GitHub Actions (`.github/workflows/ci.yml`) que automatiza el control de calidad en cada `push` a `main` y en cada `pull_request` hacia `main`. Configuración en runners `ubuntu-24.04` con permisos globales acotados a `contents: read`. Dos jobs en paralelo: `quality` (ejecuta `pnpm lint`, `pnpm typecheck`, `pnpm test` utilizando Docker nativo para `@testcontainers/postgresql` con PostgreSQL 16 y `pnpm build`) y `e2e` (instala Chromium y sus dependencias del SO con `pnpm --filter @rautfall/web exec playwright install --with-deps chromium`, ejecuta `pnpm test:e2e` y sube los artefactos de `apps/web/playwright-report/` y `apps/web/test-results/` solo en caso de fallo). 960 tests Vitest en verde, 19 pruebas E2E de Playwright en verde, lint, typecheck, build y `git diff --check` limpios. |
 
 ### Resumen
 
@@ -914,6 +914,6 @@ Ver [Informe de implementación](implementation/0037-sincronizacion-url-y-soport
 - Job `quality`: `actions/checkout@v6` -> `pnpm/action-setup@v6` (`10.34.5`) -> `actions/setup-node@v6` (`22.22.3`, `cache: pnpm`) -> `pnpm install --frozen-lockfile` -> `pnpm lint` -> `pnpm typecheck` -> `pnpm test` -> `pnpm build`.
 - Job `e2e`: `actions/checkout@v6` -> `pnpm/action-setup@v6` (`10.34.5`) -> `actions/setup-node@v6` (`22.22.3`, `cache: pnpm`) -> `pnpm install --frozen-lockfile` -> `pnpm --filter @rautfall/web exec playwright install --with-deps chromium` -> `pnpm test:e2e` -> `actions/upload-artifact@v7` (si falla).
 - Sin secretos, sin Neon, sin PostgreSQL `services:`, sin CD, sin Dockerfile de producción ni infraestructura innecesaria.
-- Validación local completada al 100%: 958 tests Vitest pasados, 19 pruebas Playwright E2E pasadas, ESLint sin errores, typecheck limpio en 6 paquetes, build exitoso de Vite y `git diff --check` sin observaciones.
+- Validación local completada al 100%: 960 tests Vitest pasados, 19 pruebas Playwright E2E pasadas, ESLint sin errores, typecheck limpio en 6 paquetes, build exitoso de Vite y `git diff --check` sin observaciones.
 
 Ver [Informe de implementación](implementation/0038-integracion-continua-github-actions.md).

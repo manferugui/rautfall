@@ -196,7 +196,7 @@ Todas las comprobaciones obligatorias se han ejecutado desde la raíz del monore
 
 4. `pnpm test`:
    - Estado: **Éxito (Código de salida 0)**.
-   - Resultado: 57 test files pasados / 958 tests unitarios e integración pasados (Testcontainers en `apps/api`).
+   - Resultado: 57 test files pasados / 960 tests unitarios e integración pasados (Testcontainers en `apps/api`). La aserción del test de telemetría multi-paso en `GameScene.test.ts` fue estabilizada usando `toBeGreaterThanOrEqual(2)` sobre los pasos lógicos ejecutados con delta=24ms.
 
 5. `pnpm build`:
    - Estado: **Éxito (Código de salida 0)**.
