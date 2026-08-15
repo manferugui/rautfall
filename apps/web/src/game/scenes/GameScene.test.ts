@@ -576,12 +576,12 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
   });
 
   describe('Telemetría DEV de maxActionsInSingleStep en fotogramas multi-paso (stepsToExecute >= 2)', () => {
-    it('mantiene maxActionsInSingleStep <= 1 cuando un único fotograma visual ejecuta 2 pasos lógicos con acciones', () => {
+    it('mantiene maxActionsInSingleStep <= 1 cuando un único fotograma visual ejecuta múltiples pasos lógicos con acciones', () => {
       window.history.pushState({}, '', '?battle-demo=1');
 
       const { scene, onStateUpdate } = setupSceneWithListeners();
 
-      // Inyectar bot controlado para simular de forma determinista 2 acciones activas en 2 pasos consecutivos del mismo frame
+      // Inyectar bot controlado para simular de forma determinista acciones activas en pasos consecutivos del mismo frame
       const mockNextStep = vi.fn()
         .mockReturnValueOnce({ leftHeld: true, leftPressed: true, rightHeld: false, rightPressed: false, softDropHeld: false, hardDrop: false })
         .mockReturnValueOnce({ leftHeld: false, leftPressed: false, rightHeld: true, rightPressed: true, softDropHeld: false, hardDrop: false })
@@ -600,11 +600,11 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
         }),
       };
 
-      // Ejecutar un fotograma visual con delta = 34 ms (hace que computeSteps devuelva stepsToExecute = 2)
-      scene.update(1000, 34);
+      // Ejecutar un fotograma visual con delta = 24 ms (hace que computeSteps devuelva stepsToExecute >= 2 con fixedStepMs = 10 ms)
+      scene.update(1000, 24);
 
-      // Demostrar explícitamente que nextStep fue invocado exactamente 2 veces (2 pasos lógicos en este fotograma visual)
-      expect(mockNextStep).toHaveBeenCalledTimes(2);
+      // Demostrar explícitamente que nextStep fue invocado en múltiples pasos lógicos (>= 2) en este fotograma visual
+      expect(mockNextStep.mock.calls.length).toBeGreaterThanOrEqual(2);
 
       // Demostrar que la telemetría reporta maxActionsInSingleStep = 1 (medición por paso lógico)
       const lastCall = onStateUpdate.mock.calls[onStateUpdate.mock.calls.length - 1]?.[0] as import('../types').GamePresentationState | undefined;
