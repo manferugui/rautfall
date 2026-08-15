@@ -27,11 +27,29 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: `pnpm --filter @rautfall/web exec vite --host ${HOST} --port ${PORT} --strictPort`,
-    cwd: WORKSPACE_ROOT,
-    url: BASE_URL,
-    timeout: 60_000,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: 'pnpm --filter @rautfall/api exec tsx src/server.ts',
+      cwd: WORKSPACE_ROOT,
+      url: 'http://127.0.0.1:3000/api/health',
+      timeout: 60_000,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        DATABASE_URL: process.env.DATABASE_URL || 'postgres://rautfall:rautfall@127.0.0.1:5432/rautfall',
+        PORT: '3000',
+        HOST: '127.0.0.1',
+        CORS_ORIGIN: 'http://localhost:5173,http://127.0.0.1:5173',
+      },
+    },
+    {
+      command: `pnpm --filter @rautfall/web exec vite --host ${HOST} --port ${PORT} --strictPort`,
+      cwd: WORKSPACE_ROOT,
+      url: BASE_URL,
+      timeout: 60_000,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        VITE_API_BASE_URL: 'http://127.0.0.1:3000',
+      },
+    },
+  ],
 });

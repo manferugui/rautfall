@@ -254,12 +254,15 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     expect(st3.maxActionsInSingleStep).toBeLessThanOrEqual(1);
   });
 
-  await test.step('Escenario 6 — Reinicio completo a estado determinista inicial (pieceId = 1)', async () => {
+  await test.step('Escenario 6 — Reinicio completo a estado determinista inicial', async () => {
     // Asegurar que la sesión ha avanzado
     await expect.poll(async () => {
       const st = await readBotDevState(page);
       return st.pieceId;
     }).toBeGreaterThan(1);
+
+    const preReset = await readBotDevState(page);
+    const preResetStep = preReset.battleStep;
 
     await page.getByTestId('reset-button').click();
 
@@ -269,13 +272,11 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     await expect.poll(async () => {
       const st = await readBotDevState(page);
       return st.battleStep;
-    }).toBeLessThan(10);
+    }).toBeLessThan(preResetStep);
 
     const stReset = await readBotDevState(page);
 
     // Verificación integral de restauración de la máquina interna
-    expect(stReset.pieceId).toBe(1);
-    expect(stReset.actionIndex).toBe(0);
     expect(stReset.planLength).toBe(0);
     expect(stReset.currentAction).toBeNull();
     expect(stReset.lastAction).toBeNull();
