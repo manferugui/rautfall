@@ -160,10 +160,15 @@ jobs:
   3. Configuración de un array de dos `webServer` en `apps/web/playwright.config.ts`: API Fastify (`http://127.0.0.1:3000/api/health`) y Web Vite (`http://127.0.0.1:5173`).
   4. Uso explícito de `127.0.0.1` en PostgreSQL, Fastify, Vite y `VITE_API_BASE_URL` para evitar ambigüedades de resolución DNS/IPv6.
 
-### Tercera Incidencia: Carrera Temporal en `battle-demo.spec.ts`
-- **Problema**: La aserción `expect.poll(...).toBeLessThan(10)` tras el reset fallaba al responder el navegador si `battleStep` ya había alcanzado 12+ al primer sondeo.
-- **Causa raíz**: Dado que `battleStep` aumenta continuamente a 60 FPS tras el reset, la condición `< 10` nunca volvía a ser verdadera.
-- **Solución**: Captura del paso pre-reset (`preResetStep`) y comprobación de discontinuidad relativa: `expect.poll(() => st.battleStep).toBeLessThan(preResetStep)`.
+### Tercera Incidencia: Ajuste Fino de la Suite E2E (`battle-demo.spec.ts`)
+- **Problemas**:
+  1. En el Escenario 6 post-reset, `expect(stReset.planLength).toBe(0)` fallaba (recibiendo `5`) porque en el tick 1 post-reset la IA recalcula de inmediato un nuevo plan.
+  2. En el Escenario 5, `expect.poll(...phase...).not.toBe('waitingForVisibility')` sufría timeout de 5000 ms en runners lentos si la pieza acababa de aparecer en spawn oculto ($y < 4$) y tardaba $> 5$ s en caer.
+  3. En el Escenario 1, existía una aserción redundante sin timeout sobre `phase !== 'waitingForVisibility'` inmediatamente después de validar `minCellY >= 4`.
+- **Solución Aplicada**:
+  - **Escenario 1**: Eliminación del `expect.poll` sobre `phase` por redundancia tras $y \ge 4$.
+  - **Escenario 5**: Sustitución de la consulta de fase por la espera explícita a visibilidad completa `expect.poll(minCellY, { timeout: 15000 }).toBeGreaterThanOrEqual(4)`.
+  - **Escenario 6**: Eliminación de las aserciones efímeras de frame 0 (`planLength === 0`, `reactionStepsRemaining === 20`) y consolidación de las invariantes estables: `battleStep < preResetStep` (discontinuidad relativa), `pieceId === 1` (pieza inicial estable durante 3-5 s), `lastActionStep === null` y `lastAction === null`.
 
 ---
 

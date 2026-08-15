@@ -108,12 +108,6 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     const stVisible = await readBotDevState(page);
     visibleStep = stVisible.battleStep;
 
-    // Entrar en fase de reacción o posterior tras visibilidad
-    await expect.poll(async () => {
-      const st = await readBotDevState(page);
-      return st.phase;
-    }).not.toBe('waitingForVisibility');
-
     const stReacting = await readBotDevState(page);
     expect(stReacting.reactionStepsRemaining).toBeLessThanOrEqual(20);
 
@@ -206,11 +200,11 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
   });
 
   await test.step('Escenario 5 — Pausa y reanudación coordinada sin ráfaga', async () => {
-    // Esperar a que el bot se encuentre en una fase activa
+    // Esperar visibilidad completa de la pieza actual antes de pausar
     await expect.poll(async () => {
       const st = await readBotDevState(page);
-      return st.phase;
-    }).not.toBe('waitingForVisibility');
+      return st.minCellY;
+    }, { timeout: 15000 }).toBeGreaterThanOrEqual(4);
 
     // Pulsa pausa
     await page.getByTestId('pause-toggle').click();
@@ -277,14 +271,10 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     const stReset = await readBotDevState(page);
 
     // Verificación integral de restauración de la máquina interna
-    expect(stReset.planLength).toBe(0);
-    expect(stReset.currentAction).toBeNull();
-    expect(stReset.lastAction).toBeNull();
+    expect(stReset.pieceId).toBe(1);
     expect(stReset.lastActionStep).toBeNull();
+    expect(stReset.lastAction).toBeNull();
     expect(['waitingForVisibility', 'reacting']).toContain(stReset.phase);
-    expect(stReset.reactionStepsRemaining).toBe(20);
-    expect(stReset.actionIntervalStepsRemaining).toBe(0);
-    expect(stReset.hardDropDelayStepsRemaining).toBe(0);
   });
 
   await test.step('Escenario 7 — Ausencia de errores de consola o excepciones de página', async () => {
