@@ -1082,6 +1082,10 @@ function openDevTools(): void {
               <span class="session-label">Tiempo (ms)</span>
               <span class="session-value">{{ gameState.elapsedMs }}</span>
             </div>
+            <div v-if="gameState.battleState?.botDevDiagnostic?.sessionGeneration" class="session-item">
+              <span class="session-label">Session Gen</span>
+              <span class="session-value" data-testid="bot-session-generation">{{ gameState.battleState.botDevDiagnostic.sessionGeneration }}</span>
+            </div>
             <template v-if="gameState.battleState">
               <div class="session-item">
                 <span class="session-label">Battle Status</span>

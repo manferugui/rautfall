@@ -147,6 +147,7 @@ export class GameScene extends Phaser.Scene {
   private devHardDropPhaseStepCount = 0;
   private devMaxActionsInSingleStep = 0;
   private lastBotActionIndex = 0;
+  private devSessionGeneration = 1;
 
   private matchSeed = 42;
 
@@ -596,6 +597,7 @@ export class GameScene extends Phaser.Scene {
       this.devHardDropPhaseStepCount = 0;
       this.devMaxActionsInSingleStep = 0;
       this.lastBotActionIndex = 0;
+      this.devSessionGeneration = (this.devSessionGeneration || 0) + 1;
     }
 
     const levelDemoTarget = getLevelDemoTarget();
@@ -986,6 +988,7 @@ export class GameScene extends Phaser.Scene {
           frontStoredSabotage: diag.frontStoredSabotage ?? null,
           hardDropPhaseStepCount: this.devHardDropPhaseStepCount,
           maxActionsInSingleStep: this.devMaxActionsInSingleStep,
+          sessionGeneration: this.devSessionGeneration,
         });
       }
 

@@ -160,15 +160,14 @@ jobs:
   3. Configuración de un array de dos `webServer` en `apps/web/playwright.config.ts`: API Fastify (`http://127.0.0.1:3000/api/health`) y Web Vite (`http://127.0.0.1:5173`).
   4. Uso explícito de `127.0.0.1` en PostgreSQL, Fastify, Vite y `VITE_API_BASE_URL` para evitar ambigüedades de resolución DNS/IPv6.
 
-### Tercera Incidencia: Ajuste Fino de la Suite E2E (`battle-demo.spec.ts`)
+### Tercera Incidencia: Ajuste Fino de la Suite E2E (`battle-demo.spec.ts`) y Señal DEV Persistente de Reset
 - **Problemas**:
-  1. En el Escenario 6 post-reset, `expect(stReset.planLength).toBe(0)` fallaba (recibiendo `5`) porque en el tick 1 post-reset la IA recalcula de inmediato un nuevo plan.
-  2. En el Escenario 5, `expect.poll(...phase...).not.toBe('waitingForVisibility')` sufría timeout de 5000 ms en runners lentos si la pieza acababa de aparecer en spawn oculto ($y < 4$) y tardaba $> 5$ s en caer.
-  3. En el Escenario 1, existía una aserción redundante sin timeout sobre `phase !== 'waitingForVisibility'` inmediatamente después de validar `minCellY >= 4`.
+  1. En el Escenario 1, `expect.poll(minCellY, { timeout: 5000 }).toBeGreaterThanOrEqual(4)` expiró en CI (`Received 3`) por caer más lento que 5 s bajo estrangulamiento de CPU en runners de Linux.
+  2. En el Escenario 6 post-reset, la comprobación `expect(stReset.lastActionStep).toBeNull()` recibió `145` al ejecutarse la primera acción del bot antes de que Playwright tomara el snapshot, demostrando que no era una invariante estable.
 - **Solución Aplicada**:
-  - **Escenario 1**: Eliminación del `expect.poll` sobre `phase` por redundancia tras $y \ge 4$.
-  - **Escenario 5**: Sustitución de la consulta de fase por la espera explícita a visibilidad completa `expect.poll(minCellY, { timeout: 15000 }).toBeGreaterThanOrEqual(4)`.
-  - **Escenario 6**: Eliminación de las aserciones efímeras de frame 0 (`planLength === 0`, `reactionStepsRemaining === 20`) y consolidación de las invariantes estables: `battleStep < preResetStep` (discontinuidad relativa), `pieceId === 1` (pieza inicial estable durante 3-5 s), `lastActionStep === null` y `lastAction === null`.
+  - **Escenario 1**: Ajuste del timeout de visibilidad inicial a `{ timeout: 15000 }` (mismo margen de infraestructura usado en los Escenarios 3 y 5).
+  - **Señal DEV Persistente (`sessionGeneration`)**: Se introdujo el campo `sessionGeneration` en la telemetría DEV (`BotDevDiagnostic` en `GameScene.ts` expuesto en `App.vue` con `data-testid="bot-session-generation"`). Este contador se inicia en `1`, se incrementa exactamente una unidad tras cada reset de sesión (`resetEngine()`) y permanece inmutable durante toda la vida de la nueva sesión.
+  - **Escenario 6**: Verificación determinista e inmutable del reset comprobando `st.sessionGeneration > preResetGen` en combinación con la discontinuidad de pasos `battleStep < preResetStep`, eliminando todas las expectativas sobre estados efímeros de los primeros fotogramas (`lastActionStep === null`, `lastAction === null`, `planLength === 0`, etc.).
 
 ---
 

@@ -51,6 +51,7 @@ export type BotDevDiagnostic = Readonly<{
   frontStoredSabotage?: SabotageType | null;
   hardDropPhaseStepCount?: number;
   maxActionsInSingleStep?: number;
+  sessionGeneration?: number;
 }>;
 
 export type SabotageBlockedDetails = Readonly<{

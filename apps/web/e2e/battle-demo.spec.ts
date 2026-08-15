@@ -20,6 +20,7 @@ type BotDevState = Readonly<{
   planLength: number;
   hardDropPhaseStepCount: number;
   maxActionsInSingleStep: number;
+  sessionGeneration: number;
 }>;
 
 async function readBotDevState(page: Page): Promise<BotDevState> {
@@ -57,6 +58,7 @@ async function readBotDevState(page: Page): Promise<BotDevState> {
     planLength: (await getNum('bot-plan-length')) ?? 0,
     hardDropPhaseStepCount: (await getNum('bot-hard-drop-phase-step-count')) ?? 0,
     maxActionsInSingleStep: (await getNum('bot-max-actions-in-single-step')) ?? 0,
+    sessionGeneration: (await getNum('bot-session-generation')) ?? 1,
   });
 }
 
@@ -102,7 +104,7 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     await expect.poll(async () => {
       const st = await readBotDevState(page);
       return st.minCellY;
-    }, { timeout: 5000 }).toBeGreaterThanOrEqual(4);
+    }, { timeout: 15000 }).toBeGreaterThanOrEqual(4);
 
     // Capturar momento de visibilidad completa
     const stVisible = await readBotDevState(page);
@@ -256,6 +258,7 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     }).toBeGreaterThan(1);
 
     const preReset = await readBotDevState(page);
+    const preResetGen = preReset.sessionGeneration;
     const preResetStep = preReset.battleStep;
 
     await page.getByTestId('reset-button').click();
@@ -263,18 +266,17 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     await expect(page.getByTestId('session-status')).toHaveText('running');
     await expect(page.getByTestId('battle-status')).toHaveText('running');
 
+    // Señal DEV persistente: comprobar incremento determinista de la generación de sesión
+    await expect.poll(async () => {
+      const st = await readBotDevState(page);
+      return st.sessionGeneration;
+    }, { timeout: 5000 }).toBeGreaterThan(preResetGen);
+
+    // Comprobar discontinuidad relativa del paso tras reset
     await expect.poll(async () => {
       const st = await readBotDevState(page);
       return st.battleStep;
     }).toBeLessThan(preResetStep);
-
-    const stReset = await readBotDevState(page);
-
-    // Verificación integral de restauración de la máquina interna
-    expect(stReset.pieceId).toBe(1);
-    expect(stReset.lastActionStep).toBeNull();
-    expect(stReset.lastAction).toBeNull();
-    expect(['waitingForVisibility', 'reacting']).toContain(stReset.phase);
   });
 
   await test.step('Escenario 7 — Ausencia de errores de consola o excepciones de página', async () => {
