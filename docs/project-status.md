@@ -876,3 +876,24 @@ Ver [Informe de implementación](implementation/0035-perfiles-dificultad-bot.md)
 - Validación completa: 956 tests Vitest pasados en verde (57 archivos), 0 errores de lint, 0 errores de typecheck, build exitoso y pruebas E2E en Playwright pasando.
 
 Ver [Informe de implementación](implementation/0036-activacion-independiente-musica-sfx.md).
+
+## Task [0037 — Navegación web con Vue Router: URL sincronizada y soporte real de Back/Forward](tasks/0037-sincronizacion-url-y-soporte-back-forward.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-14 |
+| **Resultado** | Navegación web real para la SPA de Rautfall mediante **Vue Router** (`vue-router@^4.5.0`), sincronizando la URL del navegador con la pantalla activa y habilitando el uso natural del historial (**Atrás**, **Adelante**, **Reinicio / F5** y **Deep Links**). Mapa de 10 rutas nombradas estables (`home`, `training`, `battle`, `settings`, `history`, `ranking`, `results`, `dev-tools`, `sfx-lab`, `not-found`). Eliminada completamente la ref `appScreen`. `gameMode`, `isCanvasMounted` y la reconciliación sonora derivan de `currentRouteName`. Guardas de navegación en `router/index.ts` para rutas DEV y fallback seguro de `/results` expirado hacia `home` (`replace`). Auditada y documentada la frontera de fallback SPA. 958 tests Vitest en verde, lint, typecheck, build y test:e2e Playwright limpios. |
+
+### Resumen
+
+- Integración de `vue-router@^4.5.0` en `@rautfall/web`.
+- `router/index.ts` exporta `routes` y la factoría `createAppRouter(options)` para aislamiento en pruebas unitarias (`createMemoryHistory()`).
+- Rutas nombradas estables (`name`: `'home'`, `'training'`, `'battle'`, `'settings'`, `'history'`, `'ranking'`, `'results'`, `'dev-tools'`, `'sfx-lab'`, `'not-found'`).
+- Orquestación en `App.vue` impulsada por `currentRouteName` sin `appScreen` ref paralela.
+- Guardas de navegación para restringir `/dev-tools` y `/sfx-lab` en producción (`!import.meta.env.DEV`) y redirigir accesos directos a `/results` sin partida activa hacia `home` (`replace`).
+- Salida limpia de sesión Phaser en un solo canvas de juego al alternar entre rutas.
+- Auditoría de la frontera del servidor de desarrollo (Vite servirá `index.html` para deep links en dev/E2E; Fastify API no sirve la SPA; documentada la exigencia de fallback estático `index.html` para servidores de producción).
+- Validación completa: 958 tests Vitest en verde (57 archivos), lint sin errores ni warnings, typecheck limpio en 6 paquetes, build de producción en Vite correcto y 19 pruebas E2E en Playwright pasadas.
+
+Ver [Informe de implementación](implementation/0037-sincronizacion-url-y-soporte-back-forward.md).

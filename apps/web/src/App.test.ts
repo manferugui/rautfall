@@ -5,7 +5,9 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { createMemoryHistory } from 'vue-router';
 import App from './App.vue';
+import { createAppRouter } from './router';
 import type { GamePresentationState } from './game/types';
 import * as clientModule from './api/client';
 import { AudioManager } from './audio/audio-manager';
@@ -119,9 +121,15 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
     }
   });
 
-  function mountApp(): ReturnType<typeof mount> {
-    return mount(App, {
+  function mountApp(initialRoute = '/', hasActiveResult?: () => boolean): { wrapper: ReturnType<typeof mount>; router: ReturnType<typeof createAppRouter> } {
+    const router = createAppRouter({
+      history: createMemoryHistory(),
+      hasActiveResult,
+    });
+    void router.push(initialRoute);
+    const wrapper = mount(App, {
       global: {
+        plugins: [router],
         stubs: {
           NextPiecesPreview: true,
           ScorePanel: true,
@@ -130,12 +138,21 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
         },
       },
     });
+    return { wrapper, router };
   }
 
-  it('arranca por defecto en la pantalla de Menú Principal (ModeSelector)', () => {
-    const wrapper = mountApp();
+  async function flushRouter(wrapper: ReturnType<typeof mount>): Promise<void> {
+    await wrapper.vm.$nextTick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wrapper.vm.$nextTick();
+  }
+
+  it('arranca por defecto en la pantalla de Menú Principal (ModeSelector)', async () => {
+    const { wrapper, router } = mountApp();
+    await router.isReady();
     expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(false);
+    expect(router.currentRoute.value.name).toBe('home');
     wrapper.unmount();
   });
 
@@ -143,22 +160,33 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
     vi.spyOn(clientModule, 'getMatchHistory').mockResolvedValue([]);
     vi.spyOn(clientModule, 'getRanking').mockResolvedValue([]);
 
-    const wrapper = mountApp();
+    const { wrapper, router } = mountApp();
+    await router.isReady();
 
     // 1. Abrir Historial sin tag
     await wrapper.find('[data-testid="open-history-button"]').trigger('click');
+    await flushRouter(wrapper);
+    expect(router.currentRoute.value.name).toBe('history');
     expect(wrapper.find('[data-testid="history-screen"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
     await wrapper.find('[data-testid="history-back-button"]').trigger('click');
+    await flushRouter(wrapper);
+    expect(router.currentRoute.value.name).toBe('home');
 
     // 2. Abrir Ranking sin tag
     await wrapper.find('[data-testid="open-ranking-button"]').trigger('click');
+    await flushRouter(wrapper);
+    expect(router.currentRoute.value.name).toBe('ranking');
     expect(wrapper.find('[data-testid="ranking-screen"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
     await wrapper.find('[data-testid="ranking-back-button"]').trigger('click');
+    await flushRouter(wrapper);
+    expect(router.currentRoute.value.name).toBe('home');
 
     // 3. Iniciar Batalla sin tag
     await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
+    await flushRouter(wrapper);
+    expect(router.currentRoute.value.name).toBe('battle');
     expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="operator-tag-modal"]').exists()).toBe(false);
 
@@ -167,8 +195,10 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
   it('al terminar partida muestra ResultsModal con iniciales integradas y nunca abre un segundo popup', async () => {
     const submitSpy = vi.spyOn(clientModule, 'submitMatch').mockResolvedValue({} as unknown as Awaited<ReturnType<typeof clientModule.submitMatch>>);
-    const wrapper = mountApp();
+    const { wrapper, router } = mountApp();
+    await router.isReady();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+    await flushRouter(wrapper);
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
 
@@ -191,7 +221,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       activeGravityCellsPerSecond: 1.25,
     };
     stateUpdateCallback(gameOverState);
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     // Muestra pantalla de resultados con la firma de operador integrada en el propio modal
     expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(true);
@@ -206,12 +236,14 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
     const submitSpy = vi.spyOn(clientModule, 'submitMatch').mockResolvedValue({} as unknown as Awaited<ReturnType<typeof clientModule.submitMatch>>);
     vi.spyOn(clientModule, 'getRanking').mockResolvedValue([]);
 
-    const wrapper = mountApp();
+    const { wrapper, router } = mountApp();
+    await router.isReady();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+    await flushRouter(wrapper);
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
     stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O'], heldPiece: null, score: 850, clearedLines: 8, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     // Escribir iniciales 'RAU' en la pantalla de Results
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
@@ -224,7 +256,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
     // Confirmar resultado
     await wrapper.find('[data-testid="confirm-save-button"]').trigger('click');
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     expect(submitSpy).toHaveBeenCalledTimes(1);
     expect(submitSpy).toHaveBeenCalledWith(
@@ -237,7 +269,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
     // Tras el POST exitoso, el tag local se guarda y navega automáticamente a Ranking
     expect(localStorage.getItem('rautfall_player_tag')).toBe('RAU');
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
     expect(wrapper.find('[data-testid="ranking-screen"]').exists()).toBe(true);
 
     wrapper.unmount();
@@ -246,12 +278,14 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
   it('si la API falla, el tag persistente no cambia, las iniciales editadas se conservan y no abre Ranking', async () => {
     vi.spyOn(clientModule, 'submitMatch').mockRejectedValue(new Error('Network error'));
 
-    const wrapper = mountApp();
+    const { wrapper, router } = mountApp();
+    await router.isReady();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+    await flushRouter(wrapper);
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
     stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O'], heldPiece: null, score: 850, clearedLines: 8, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     // Escribir 'RAU'
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
@@ -261,7 +295,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
     // Intentar guardar
     await wrapper.find('[data-testid="confirm-save-button"]').trigger('click');
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     // Results permanece abierto en estado de error
     expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(true);
@@ -277,16 +311,18 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
   it('abandonar Results mediante Volver a jugar limpia pendingMatchResult y no arrastra datos a la siguiente partida', async () => {
     const submitSpy = vi.spyOn(clientModule, 'submitMatch').mockResolvedValue({} as unknown as Awaited<ReturnType<typeof clientModule.submitMatch>>);
-    const wrapper = mountApp();
+    const { wrapper, router } = mountApp();
+    await router.isReady();
     await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+    await flushRouter(wrapper);
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
     stateUpdateCallback({ status: 'gameOver', step: 100, elapsedMs: 5000, nextPieces: ['O'], heldPiece: null, score: 850, clearedLines: 8, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 2, baseGravityCellsPerSecond: 1.25, activeGravityCellsPerSecond: 1.25 });
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     // Pulsar 'Volver a jugar' sin confirmar
     await wrapper.find('[data-testid="replay-button"]').trigger('click');
-    await wrapper.vm.$nextTick();
+    await flushRouter(wrapper);
 
     expect(submitSpy).not.toHaveBeenCalled();
     expect(localStorage.getItem('rautfall_player_tag')).toBeNull();
@@ -300,7 +336,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const manager = AudioManager.getInstance();
       expect(manager.isUnlocked()).toBe(false);
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
       expect(wrapper.find('[data-testid="keep-silent-button"]').exists()).toBe(true);
       wrapper.unmount();
@@ -311,7 +347,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       await manager.unlock();
       expect(manager.isUnlocked()).toBe(true);
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(false);
       wrapper.unmount();
     });
@@ -327,7 +363,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
         (manager as unknown as { unlocked: boolean }).unlocked = true;
       });
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
 
       await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
@@ -349,7 +385,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const manager = AudioManager.getInstance();
       const playMusicSpy = vi.spyOn(manager, 'playMusic');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
@@ -363,7 +399,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const unlockSpy = vi.spyOn(manager, 'unlock');
       const playMusicSpy = vi.spyOn(manager, 'playMusic');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       expect(wrapper.find('[data-testid="initialize-audio-button"]').exists()).toBe(true);
 
       await wrapper.find('[data-testid="keep-silent-button"]').trigger('click');
@@ -388,7 +424,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const playSfxSpy = vi.spyOn(manager, 'playSfx');
       const playMusicSpy = vi.spyOn(manager, 'playMusic');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
@@ -421,7 +457,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const playSfxSpy = vi.spyOn(manager, 'playSfx');
       const playMusicSpy = vi.spyOn(manager, 'playMusic');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
@@ -443,7 +479,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const setMutedSpy = vi.spyOn(manager, 'setMuted');
       const playSfxSpy = vi.spyOn(manager, 'playSfx');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
@@ -461,7 +497,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       manager.setMuted(false);
       expect(manager.isMuted()).toBe(false);
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="initialize-audio-button"]').trigger('click');
       await new Promise((resolve) => setTimeout(resolve, 0));
       await wrapper.vm.$nextTick();
@@ -477,7 +513,7 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       manager.setMuted(true);
       const unlockSpy = vi.spyOn(manager, 'unlock');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="keep-silent-button"]').trigger('click');
       await wrapper.vm.$nextTick();
 
@@ -491,9 +527,9 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const manager = AudioManager.getInstance();
       await manager.unlock();
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="start-training-button"]').trigger('click');
-      await wrapper.vm.$nextTick();
+      await flushRouter(wrapper);
 
       const musicBtn = wrapper.find('[data-testid="music-toggle-button"]');
       const sfxBtn = wrapper.find('[data-testid="sfx-toggle-button"]');
@@ -523,8 +559,9 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       const pauseMusicSpy = vi.spyOn(manager, 'pauseMusic');
       const resumeMusicSpy = vi.spyOn(manager, 'resumeMusic');
 
-      const wrapper = mountApp();
+      const { wrapper } = mountApp();
       await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+      await flushRouter(wrapper);
 
       const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
 
@@ -560,6 +597,41 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
       expect(playSfxSpy).toHaveBeenCalledWith('pauseShutterOpen');
       expect(resumeMusicSpy).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+    });
+  });
+
+  describe('Integración de Vue Router y sincronización de URL', () => {
+    it('la pantalla renderizada y la URL derivan directamente del router y no pueden divergir', async () => {
+      const { wrapper, router } = mountApp('/');
+      await router.isReady();
+
+      expect(router.currentRoute.value.name).toBe('home');
+      expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
+
+      await router.push({ name: 'settings' });
+      await wrapper.vm.$nextTick();
+      expect(router.currentRoute.value.name).toBe('settings');
+      expect(wrapper.find('[data-testid="settings-screen"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(false);
+
+      await router.push({ name: 'ranking' });
+      await wrapper.vm.$nextTick();
+      expect(router.currentRoute.value.name).toBe('ranking');
+      expect(wrapper.find('[data-testid="ranking-screen"]').exists()).toBe(true);
+
+      wrapper.unmount();
+    });
+
+    it('acceder directamente a /results sin resultado activo redirige deterministamente a home', async () => {
+      const { wrapper, router } = mountApp('/results', () => false);
+      await router.isReady();
+      await wrapper.vm.$nextTick();
+
+      expect(router.currentRoute.value.name).toBe('home');
+      expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(false);
 
       wrapper.unmount();
     });

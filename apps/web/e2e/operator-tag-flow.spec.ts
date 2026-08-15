@@ -74,10 +74,11 @@ test('flujo postpartida unificado de firma de iniciales arcade del Operator Tag 
   });
 
   await test.step('al provocar fin de partida abre ResultsModal con métricas e iniciales integradas en la misma pantalla', async () => {
-    // Forzar fin de partida mediante hard drop continuo
-    for (let i = 0; i < 35; i++) {
+    // Forzar fin de partida mediante hard drop continuo hasta top-out
+    for (let i = 0; i < 80; i++) {
       await page.keyboard.press('Space');
-      await page.waitForTimeout(40);
+      await page.waitForTimeout(70);
+      if (await page.getByTestId('results-modal').isVisible()) break;
     }
 
     await expect(page.getByTestId('results-modal')).toBeVisible();

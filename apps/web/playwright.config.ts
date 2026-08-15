@@ -1,10 +1,10 @@
-// apps/web/playwright.config.ts
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 const WORKSPACE_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PORT = 5173;
-const BASE_URL = `http://localhost:${PORT}`;
+const HOST = '127.0.0.1';
+const BASE_URL = `http://${HOST}:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -28,7 +28,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm --filter @rautfall/web dev -- --port ${PORT} --strictPort`,
+    command: `pnpm --filter @rautfall/web dev -- --host ${HOST} --port ${PORT} --strictPort`,
     cwd: WORKSPACE_ROOT,
     url: BASE_URL,
     timeout: 60_000,

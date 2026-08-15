@@ -20,7 +20,8 @@
     "@rautfall/game-engine": "workspace:*",
     "fflate": "^0.8.3",
     "phaser": "3.80.1",
-    "vue": "^3.5.39"
+    "vue": "^3.5.39",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@vue/test-utils": "^2.4.11",

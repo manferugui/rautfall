@@ -2447,3 +2447,23 @@ Son recortes exclusivos de esta primera iteración:
 
 Estos recortes no modifican el alcance posterior de Rautfall ni convierten el prototipo en una demo desechable.
 
+## 25. Arquitectura de Navegación Web (Vue Router)
+
+Rautfall utiliza **Vue Router** (`vue-router@^4`) como mecanismo único de orquestación navegacional en la aplicación web (`@rautfall/web`).
+
+### Principios de Navegación
+
+1. **Rutas nombradas estables (`name`)**: Todas las vistas de la aplicación se definen mediante identificadores estables (`home`, `training`, `battle`, `settings`, `history`, `ranking`, `results`, `dev-tools`, `sfx-lab`, `not-found`). Las navegaciones internas utilizan la forma `{ name: ... }`.
+2. **Sincronización bidireccional URL $\leftrightarrow$ Vista**: La URL del navegador refleja en todo momento la vista activa. El uso de los botones **Atrás** y **Adelante** del navegador, así como la actualización (`F5`), preserva el estado de navegación correcto.
+3. **Fuente Única de Verdad (`currentRouteName`)**: La vista renderizada y los estados derivados (`gameMode`, `isCanvasMounted`, `reconcileScreenAudio`) se calculan reactivamente a partir de `route.name`.
+4. **Ciclo de vida limpio de Phaser**: Salir de las rutas de juego (`training` o `battle`) destruye la sesión Phaser activa (`game.destroy(true)`). Volver a entrar mediante navegación directa o historial crea exactamente una sesión limpia de Phaser.
+5. **Guardas de navegación**:
+   - `/dev-tools` y `/sfx-lab` quedan restringidos en entornos de producción (`!import.meta.env.DEV`), redirigiendo a `home`.
+   - `/results` redirige a `home` (`replace`) si no existe una instantánea de partida activa en memoria.
+   - Rutas no encontradas (`not-found`) redirigen inmediatamente a `home` (`replace`).
+
+### Frontera del Servidor de Producción
+
+- **Entorno de desarrollo (Vite) / Playwright E2E**: Vite Dev Server intercepta la navegación cliente y sirve el fallback SPA a `index.html` de forma nativa.
+- **Backend API (`@rautfall/api`)**: Fastify sirve exclusivamente endpoints de la API (`/api/*`, `/health`) y no gestiona assets de la SPA en esta fase.
+- **Despliegue Final**: La integración de la SPA con el servidor de producción (vía plugin de estáticos en Fastify o servidor web de producción) requerirá fallback SPA a `index.html`, garantizando que `/api/*` y `/health` conserven sus contratos.

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
+import { setActiveResultHandler } from './router';
 import GameCanvas from './components/GameCanvas.vue';
 import NextPiecesPreview from './components/NextPiecesPreview.vue';
 import ScorePanel from './components/ScorePanel.vue';
@@ -15,7 +17,7 @@ import ResultsModal from './components/ResultsModal.vue';
 import OperatorTagModal from './components/OperatorTagModal.vue';
 import AudioActivationModal from './components/AudioActivationModal.vue';
 import PauseShutter from './components/PauseShutter.vue';
-import type { AppScreen, GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
+import type { GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive, isDebugPanelActive } from './game/battle-demo';
 import { isTSpinDemoActive } from './game/tspin-demo';
 import { isSabotageDemoActive } from './game/sabotage-demo';
@@ -64,15 +66,60 @@ function hasDevDemoFlag(): boolean {
 }
 
 const isDevDemo = hasDevDemoFlag();
-// Fuente reactiva explícita: `window.location.search` no es reactivo, así que no puede
-// modelarse como `computed()` (quedaría cacheado para siempre tras la primera lectura).
-// Se seedea una vez al cargar y se resetea de forma determinista en goToMenu() al limpiar la URL.
-const isDevDebugPanel = ref(import.meta.env.DEV && isDebugPanelActive());
-const appScreen = ref<AppScreen>(isDevDemo ? 'playing' : 'menu');
-const gameMode = ref<GameMode>(isBattleDemoActive() || isWarningDemo ? 'battle' : 'training');
+const routeFromVue = useRoute();
+const routerFromVue = useRouter();
+
+const fallbackRoute = ref<{ name: string; query: LocationQueryRaw }>({
+  name: isDevDemo ? (isBattleDemoActive() || isWarningDemo ? 'battle' : 'training') : 'home',
+  query: {},
+});
+
+const currentRouteName = computed<string>(() => {
+  if (routeFromVue && routeFromVue.name) {
+    return routeFromVue.name as string;
+  }
+  return fallbackRoute.value.name;
+});
+
+function pushRoute(name: string, query: LocationQueryRaw = routeFromVue?.query ?? {}): void {
+  if (routerFromVue) {
+    void routerFromVue.push({ name, query });
+  } else {
+    fallbackRoute.value = { name, query };
+  }
+}
+
+function replaceRoute(name: string, query: LocationQueryRaw = routeFromVue?.query ?? {}): void {
+  if (routerFromVue) {
+    void routerFromVue.replace({ name, query });
+  } else {
+    fallbackRoute.value = { name, query };
+  }
+}
+
+const activeRouteQuery = computed(() => routeFromVue?.query ?? fallbackRoute.value.query);
+
+const isDevDebugPanel = computed(
+  () => import.meta.env.DEV && (isDebugPanelActive() || activeRouteQuery.value['debug-panel'] === '1'),
+);
+
+const gameMode = computed<GameMode>(() => {
+  const name = currentRouteName.value;
+  if (name === 'battle') return 'battle';
+  if (name === 'training') return 'training';
+  if (name === 'results' && gameResult.value) return gameResult.value.mode;
+  if (isBattleDemoActive() || isWarningDemo) return 'battle';
+  return 'training';
+});
+
 const selectedBotProfile = ref<BotProfileId>('battleOperator');
 const matchSeed = ref<number>(generateMatchSeed());
-const isCanvasMounted = ref(isDevDemo && !isSfxLab);
+
+const isCanvasMounted = computed(() => {
+  if (isSfxLab) return false;
+  const name = currentRouteName.value;
+  return name === 'training' || name === 'battle' || name === 'results';
+});
 
 const audioManager = getAudioManager();
 const isMusicEnabled = ref(audioManager.isMusicEnabled());
@@ -88,9 +135,10 @@ const isAudioModalOpen = computed(
 
 function reconcileScreenAudio(): void {
   if (!audioManager.isUnlocked()) return;
-  if (appScreen.value === 'menu') {
+  const name = currentRouteName.value;
+  if (name === 'home' || name === 'settings' || name === 'ranking' || name === 'history' || name === 'dev-tools') {
     audioManager.playMusic('menu');
-  } else if (appScreen.value === 'playing') {
+  } else if (name === 'training' || name === 'battle' || name === 'results') {
     if (isSuddenDeathActive.value) {
       audioManager.playMusic('suddenDeath');
     } else {
@@ -98,6 +146,13 @@ function reconcileScreenAudio(): void {
     }
   }
 }
+
+watch(
+  currentRouteName,
+  () => {
+    reconcileScreenAudio();
+  },
+);
 
 if (audioManager.isUnlocked()) {
   reconcileScreenAudio();
@@ -370,6 +425,7 @@ interface PendingMatchResultData {
 }
 
 const pendingMatchResult = ref<PendingMatchResultData | null>(null);
+setActiveResultHandler(() => Boolean(gameResult.value || pendingMatchResult.value));
 const saveStatus = ref<'idle' | 'awaitingTag' | 'readyToSave' | 'saving' | 'saved' | 'failed' | 'error'>('idle');
 const currentOperatorTag = ref<string | null>(getPlayerTag());
 const isTagModalOpen = ref(false);
@@ -448,7 +504,7 @@ async function confirmAndSaveMatchResult(rawTag: string): Promise<void> {
     const completedMode = matchData.mode;
     pendingMatchResult.value = null;
     rankingInitialMode.value = completedMode;
-    appScreen.value = 'ranking';
+    replaceRoute('ranking');
   } catch {
     submittedMatchIdsSet.delete(matchData.clientMatchId);
     saveStatus.value = 'failed';
@@ -461,7 +517,7 @@ function onStateUpdate(state: GamePresentationState): void {
   const isEngineGameOver = state.status === 'gameOver';
   const isBattleEnded = Boolean(state.battleState && state.battleState.status !== 'running');
 
-  if (!isDevDemo && (isEngineGameOver || isBattleEnded) && appScreen.value === 'playing') {
+  if (!isDevDemo && (isEngineGameOver || isBattleEnded) && (currentRouteName.value === 'training' || currentRouteName.value === 'battle')) {
     let title = 'ENTRENAMIENTO FINALIZADO';
     let subtitle: string | undefined = undefined;
     let matchResultType: 'finished' | 'victory' | 'defeat' | 'draw' = 'finished';
@@ -513,7 +569,7 @@ function onStateUpdate(state: GamePresentationState): void {
         : undefined,
     };
 
-    appScreen.value = 'results';
+    pushRoute('results');
 
     updateOperatorTagState();
     if (hasPlayerTag()) {
@@ -556,10 +612,8 @@ function selectMode(mode: GameMode, botProfile?: BotProfileId): void {
   saveStatus.value = 'idle';
   pendingMatchResult.value = null;
   matchSeed.value = generateMatchSeed();
-  gameMode.value = mode;
   gameResult.value = null;
-  appScreen.value = 'playing';
-  isCanvasMounted.value = true;
+  pushRoute(mode);
 }
 
 function doReset(): void {
@@ -584,51 +638,49 @@ async function doReplay(): Promise<void> {
   currentClientMatchId = crypto.randomUUID();
   saveStatus.value = 'idle';
   pendingMatchResult.value = null;
-  isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
   matchSeed.value = generateMatchSeed();
-  appScreen.value = 'playing';
 
+  const targetMode = gameMode.value;
   await nextTick();
-  isCanvasMounted.value = true;
+  replaceRoute(targetMode);
 }
 
 function goToMenu(): void {
   audioManager.playSfx('uiClick');
   audioManager.playMusic('menu');
-  isCanvasMounted.value = false;
   controller = null;
   gameResult.value = null;
   pendingMatchResult.value = null;
-  appScreen.value = 'menu';
+
+  pushRoute('home');
 
   if (typeof window !== 'undefined' && window.location && window.history) {
     const cleanUrl = clearDevDemoQueryParams(window.location.href);
     window.history.replaceState({}, '', cleanUrl);
   }
-  isDevDebugPanel.value = false;
 }
 
 function openSettings(): void {
   audioManager.playSfx('uiClick');
-  appScreen.value = 'settings';
+  pushRoute('settings');
 }
 
 function openHistory(): void {
   audioManager.playSfx('uiClick');
-  appScreen.value = 'history';
+  pushRoute('history');
 }
 
 function openRanking(): void {
   audioManager.playSfx('uiClick');
   rankingInitialMode.value = 'battle';
-  appScreen.value = 'ranking';
+  pushRoute('ranking');
 }
 
 function openDevTools(): void {
   audioManager.playSfx('uiClick');
-  appScreen.value = 'devTools';
+  pushRoute('dev-tools');
 }
 </script>
 
@@ -648,7 +700,7 @@ function openDevTools(): void {
 
       <!-- Menú Principal -->
       <ModeSelector
-        v-if="appScreen === 'menu'"
+        v-if="currentRouteName === 'home'"
         @select-mode="selectMode"
         @open-settings="openSettings"
         @open-history="openHistory"
@@ -659,23 +711,23 @@ function openDevTools(): void {
       <!-- Pantalla DEV Tools (solo en desarrollo) -->
       <component
         :is="DevLauncherScreenComponent"
-        v-else-if="appScreen === 'devTools' && DevLauncherScreenComponent"
+        v-else-if="currentRouteName === 'dev-tools' && DevLauncherScreenComponent"
         @back-to-menu="goToMenu"
       />
 
       <!-- Pantalla de Configuración -->
       <SettingsScreen
-        v-else-if="appScreen === 'settings'"
+        v-else-if="currentRouteName === 'settings'"
         @back="goToMenu"
         @change-tag="openTagModalFromSettings"
       />
 
       <!-- Pantalla de Historial -->
-      <HistoryScreen v-else-if="appScreen === 'history'" @back-to-menu="goToMenu" />
+      <HistoryScreen v-else-if="currentRouteName === 'history'" @back-to-menu="goToMenu" />
 
       <!-- Pantalla de Ranking -->
       <RankingScreen
-        v-else-if="appScreen === 'ranking'"
+        v-else-if="currentRouteName === 'ranking'"
         :initial-mode="rankingInitialMode"
         @back-to-menu="goToMenu"
       />
@@ -1142,9 +1194,9 @@ function openDevTools(): void {
           </div>
         </div>
 
-        <!-- Modal de Resultados cuando appScreen === 'results' -->
+        <!-- Modal de Resultados cuando currentRouteName === 'results' -->
         <ResultsModal
-          v-if="appScreen === 'results' && gameResult"
+          v-if="currentRouteName === 'results' && gameResult"
           :result="gameResult"
           :save-status="saveStatus"
           :player-tag="currentOperatorTag"
