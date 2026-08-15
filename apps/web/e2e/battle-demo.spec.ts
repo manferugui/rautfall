@@ -117,7 +117,7 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
     await expect.poll(async () => {
       const st = await readBotDevState(page);
       return st.actionIndex;
-    }, { timeout: 5000 }).toBeGreaterThan(0);
+    }, { timeout: 15000 }).toBeGreaterThan(0);
 
     const stFirstAction = await readBotDevState(page);
     firstActionStep = stFirstAction.battleStep;

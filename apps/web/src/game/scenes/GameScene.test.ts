@@ -600,8 +600,8 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       expect(totalActionsInFrame, 'El fotograma visual debió procesar 2 acciones del bot en 2 pasos distintos').toBeGreaterThanOrEqual(2);
 
       // Aserción del bug de telemetría: maxActionsInSingleStep mide por paso lógico (<= 1), no por fotograma visual (que fue >= 2)
-      const lastCall = onStateUpdate.mock.calls[onStateUpdate.mock.calls.length - 1][0];
-      const diag = lastCall.battleState?.botDevDiagnostic;
+      const lastCall = onStateUpdate.mock.calls[onStateUpdate.mock.calls.length - 1]?.[0] as import('../types').GamePresentationState | undefined;
+      const diag = lastCall?.battleState?.botDevDiagnostic;
 
       expect(diag).toBeDefined();
       expect(diag!.maxActionsInSingleStep, 'La telemetría debió reportar 1 (por paso), no 2 (por fotograma)').toBeLessThanOrEqual(1);

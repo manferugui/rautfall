@@ -165,7 +165,7 @@ jobs:
   1. En el Escenario 1, `expect.poll(minCellY, { timeout: 5000 }).toBeGreaterThanOrEqual(4)` expiró en CI (`Received 3`) por caer más lento que 5 s bajo estrangulamiento de CPU en runners de Linux.
   2. En el Escenario 6 post-reset, la comprobación `expect(stReset.lastActionStep).toBeNull()` recibió `145` al ejecutarse la primera acción del bot antes de que Playwright tomara el snapshot, demostrando que no era una invariante estable.
 - **Solución Aplicada**:
-  - **Escenario 1**: Ajuste del timeout de visibilidad inicial a `{ timeout: 15000 }` (mismo margen de infraestructura usado en los Escenarios 3 y 5).
+  - **Escenario 1**: Ajuste del timeout de visibilidad inicial `minCellY >= 4` y de la primera acción `actionIndex > 0` a `{ timeout: 15000 }` (mismo margen de infraestructura usado en los Escenarios 3 y 5), conservando la verificación determinista `firstActionStep - visibleStep >= 20` en battleSteps.
   - **Señal DEV Persistente (`sessionGeneration`)**: Se introdujo el campo `sessionGeneration` en la telemetría DEV (`BotDevDiagnostic` en `GameScene.ts` expuesto en `App.vue` con `data-testid="bot-session-generation"`). Este contador se inicia en `1`, se incrementa exactamente una unidad tras cada reset de sesión (`resetEngine()`) y permanece inmutable durante toda la vida de la nueva sesión.
 ### Cuarta Incidencia: Corrección de Instrumentación en `maxActionsInSingleStep`
 - **Problema**: `expect(st3.maxActionsInSingleStep).toBeLessThanOrEqual(1)` fallaba esporádicamente en CI (recibiendo `2`).
