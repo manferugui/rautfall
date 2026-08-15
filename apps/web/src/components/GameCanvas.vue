@@ -13,7 +13,6 @@
 
 import type { BotProfileId } from '@rautfall/battle-engine';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { createPhaserGame } from '../game/create-phaser-game';
 import type { GameMode, GamePresentationState, PhaserGameController } from '../game/types';
 
 const props = defineProps<{
@@ -29,9 +28,13 @@ const emit = defineEmits<{
 
 const gameContainer = ref<HTMLElement | null>(null);
 let controller: PhaserGameController | null = null;
+let isUnmounted = false;
 
-onMounted(() => {
+onMounted(async () => {
   if (!gameContainer.value || controller) return;
+
+  const { createPhaserGame } = await import('../game/create-phaser-game');
+  if (isUnmounted || !gameContainer.value) return;
 
   controller = createPhaserGame({
     parent: gameContainer.value,
@@ -47,6 +50,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  isUnmounted = true;
   if (controller) {
     controller.destroy();
     controller = null;

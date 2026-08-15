@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import App from '../App.vue';
 import type { GamePresentationState } from '../game/types';
 
@@ -43,6 +43,7 @@ describe('Board Bezel Sabotage Warnings (Fase 1: 750 ms Pre-aviso)', () => {
     if (battleBtn.exists()) {
       await battleBtn.trigger('click');
       await wrapper.vm.$nextTick();
+      await flushPromises();
     }
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
@@ -1022,6 +1023,7 @@ describe('Board Bezel Sabotage Warnings (Fase 1: 750 ms Pre-aviso)', () => {
       if (battleBtn.exists()) {
         await battleBtn.trigger('click');
         await wrapper.vm.$nextTick();
+        await flushPromises();
       }
 
       const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import GameCanvas from './GameCanvas.vue';
 
 const mockController = vi.hoisted(() => ({
@@ -25,12 +25,14 @@ describe('GameCanvas.vue — ciclo de vida', () => {
     vi.clearAllMocks();
   });
 
-  it('crea una única instancia al montar', () => {
+  it('crea una única instancia al montar', async () => {
     const wrapper = mount(GameCanvas, {
       props: {
         onStateUpdate: vi.fn(),
       },
     });
+
+    await flushPromises();
 
     expect(mockCreatePhaserGame).toHaveBeenCalledTimes(1);
     expect(mockCreatePhaserGame).toHaveBeenCalledWith(
@@ -43,24 +45,28 @@ describe('GameCanvas.vue — ciclo de vida', () => {
     wrapper.unmount();
   });
 
-  it('no duplica instancia al montar de nuevo', () => {
+  it('no duplica instancia al montar de nuevo', async () => {
     const wrapper = mount(GameCanvas, {
       props: {
         onStateUpdate: vi.fn(),
       },
     });
+
+    await flushPromises();
 
     expect(mockCreatePhaserGame).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });
 
-  it('destruye la instancia al desmontar', () => {
+  it('destruye la instancia al desmontar', async () => {
     const wrapper = mount(GameCanvas, {
       props: {
         onStateUpdate: vi.fn(),
       },
     });
+
+    await flushPromises();
 
     expect(mockController.destroy).not.toHaveBeenCalled();
 
@@ -69,16 +75,34 @@ describe('GameCanvas.vue — ciclo de vida', () => {
     expect(mockController.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it('emite controllerReady con el controlador', () => {
+  it('emite controllerReady con el controlador', async () => {
     const wrapper = mount(GameCanvas, {
       props: {
         onStateUpdate: vi.fn(),
       },
     });
 
+    await flushPromises();
+
     expect(wrapper.emitted('controllerReady')).toHaveLength(1);
     expect(wrapper.emitted('controllerReady')![0]![0]).toBe(mockController);
 
     wrapper.unmount();
+  });
+
+  it('no crea la instancia de Phaser si se desmonta antes de resolver la carga asíncrona', async () => {
+    const wrapper = mount(GameCanvas, {
+      props: {
+        onStateUpdate: vi.fn(),
+      },
+    });
+
+    // Desmontar síncronamente antes de flushPromises()
+    wrapper.unmount();
+
+    await flushPromises();
+
+    expect(mockCreatePhaserGame).not.toHaveBeenCalled();
+    expect(wrapper.emitted('controllerReady')).toBeUndefined();
   });
 });
