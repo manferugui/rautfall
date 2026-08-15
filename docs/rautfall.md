@@ -377,7 +377,7 @@ La implementación deberá recrear esta dirección mediante Canvas, SVG, CSS, gr
 - **Esquemas y validación:** TypeBox.
 - **Estado de aplicación web:** Pinia, excluyendo el estado interno del motor.
 - **Despliegue:** aplicación web.
-- **Automatización:** GitHub Actions, pendiente de diseño.
+- **Automatización:** GitHub Actions (`.github/workflows/ci.yml`) con jobs independientes `quality` y `e2e` en `ubuntu-24.04`.
 - **Empaquetado de producción:** un único contenedor con Fastify sirviendo API y SPA compilada.
 - **Cloud:** Azure Container Apps y Neon PostgreSQL.
 - **Logging:** Pino con logs estructurados y correlación por petición y partida.
