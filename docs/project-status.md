@@ -922,9 +922,9 @@ Ver [Informe de implementación](implementation/0038-integracion-continua-github
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | 🟡 En validación de despliegue |
+| **Estado** | ✅ Completada |
 | **Fecha de actualización** | 2026-08-16 |
-| **Resultado** | Arquitectura de despliegue cloud para Rautfall en **Vercel** (SPA Vue 3 / Vite y Serverless Functions de Fastify 5 via `api/[...path].ts`) y **Neon PostgreSQL** (base de datos serverless administrada). Correcciones de empaquetado runtime de `@rautfall/contracts` (`dist/index.js` sin tests), enrutado, compilación TypeScript y resoluciones ESM relativas implementadas y validadas localmente. 961 tests Vitest pasados, lint, typecheck y build exitosos. Pendiente únicamente de commit/push y comprobación final en Vercel. |
+| **Resultado** | Arquitectura de despliegue cloud para Rautfall en **Vercel** (SPA Vue 3 / Vite y Serverless Functions de Fastify 5 via `api/[...path].ts`) y **Neon PostgreSQL** (base de datos serverless administrada). Correcciones de empaquetado runtime de `@rautfall/contracts` (`dist/index.js` sin tests), enrutado, compilación TypeScript y resoluciones ESM relativas completadas y verificadas. 961 tests Vitest pasados, lint, typecheck y build exitosos. |
 
 ### Resumen
 
@@ -933,11 +933,13 @@ Ver [Informe de implementación](implementation/0038-integracion-continua-github
 - `api/tsconfig.json` para compilar la Serverless Function con `module: ESNext` y `moduleResolution: Bundler`.
 - Corrección de resoluciones relativas ESM en 11 archivos de la API añadiendo extensiones `.js` y `/index.js`.
 - Corrección de empaquetado runtime en `@rautfall/contracts`: compilación TypeScript a `dist/` (`index.js` y `index.d.ts`), exclusión de archivos `*.test.ts` de la distribución, y exportación de runtime desde `./dist/index.js`.
+- Ajustes finales de configuración de Vercel: flexibilizado `engines.node` a `"22.x"` en `package.json` raíz y eliminada la propiedad obsoleta `memory` en `vercel.json` para evitar advertencias no bloqueantes.
 - Estrategia Neon: `DATABASE_URL` Pooled para runtime y `NEON_DIRECT_URL` Directa para migraciones en CD (cero migraciones en cold start).
 - Pipeline `.github/workflows/cd.yml` en GitHub Actions garantizando el flujo determinista.
-- **Estado actual**: Solución de empaquetado e infraestructura totalmente implementada y validada localmente. Pendiente de commit/push y verificación final en el despliegue de Vercel.
+- **Estado actual**: Despliegue en Vercel + Neon completado y verificado.
 
 Ver [Informe de implementación](implementation/0039-despliegue-vercel-neon.md).
+
 
 
 

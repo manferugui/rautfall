@@ -113,6 +113,13 @@ Actualmente la Tarea 0039 se encuentra **en fase de validación de despliegue en
   * Configurado `packages/contracts/tsconfig.json` con `outDir: "./dist"`, `noEmit: false`, `declaration: true`, `declarationMap: true` y `exclude: ["src/**/*.test.ts"]` para omitir artefactos de prueba en la distribución.
   * Actualizado `packages/contracts/package.json` con script `"build": "tsc"`, `"main": "./dist/index.js"`, `"module": "./dist/index.js"`, `"types": "./dist/index.d.ts"` y `"exports"` resolviendo `"import"` a `./dist/index.js` y `"types"` a `./dist/index.d.ts`.
   * Actualizado `vercel.json` configurando `buildCommand`: `"pnpm --filter @rautfall/contracts build && pnpm --filter @rautfall/web build"`.
-* **Estado de la solución**: Implementada y validada localmente al 100% (verificada generación limpia de `dist/` sin archivos `*.test.*`). Pendiente únicamente de `git commit`, `git push` y despliegue/validación final en Vercel.
+* **Estado de la solución**: Implementada, validada localmente y confirmada en el despliegue de Vercel.
+
+### 6. Ajustes de Configuración de Vercel (Eliminación de Advertencias No Bloqueantes)
+* **Acciones aplicadas**:
+  * En `package.json` raíz: se flexibilizó la versión de Node.js a `"engines": { "node": "22.x" }` (en lugar de `22.22.3`), eliminando las advertencias no bloqueantes del runtime de Vercel relativas a parches específicos.
+  * En `vercel.json`: se eliminó la clave de configuración obsoleta/redundante `"memory": 1024` de la Serverless Function `api/[...path].ts`, conservando únicamente `"maxDuration": 10`.
+* **Resultado**: Configuración de Vercel limpia y libre de advertencias de plataforma durante el despliegue.
+
 
 
