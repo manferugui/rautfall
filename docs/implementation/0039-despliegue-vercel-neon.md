@@ -12,6 +12,7 @@ Esta decisión sustituye a Azure Container Apps como opción principal, la cual 
 
 ### Creados
 - [`api/[...path].ts`](file:///home/manuel/dev/rautfall/api/%5B...path%5D.ts): Adaptador Serverless oficial para Fastify 5 en Vercel (catch-all route nativo), instanciando `buildApp()` en module scope y emitiendo peticiones mediante `fastify.server.emit('request', req, res)`.
+- [`api/tsconfig.json`](file:///home/manuel/dev/rautfall/api/tsconfig.json): Configuración de compilador TypeScript específica para la carpeta Serverless `api/`, aplicando `moduleResolution: Bundler` y `module: ESNext`.
 - [`vercel.json`](file:///home/manuel/dev/rautfall/vercel.json): Configuración del monorepo en Vercel definiendo `functions` para `api/[...path].ts`, compilación de `apps/web/dist` y fallback SPA a `/index.html`.
 - [`.github/workflows/cd.yml`](file:///home/manuel/dev/rautfall/.github/workflows/cd.yml): Workflow de Entrega Continua en GitHub Actions para ejecutar migraciones en Neon (`NEON_DIRECT_URL`) y desplegar en Vercel de forma secuencial.
 - [`docs/tasks/0039-despliegue-vercel-neon.md`](file:///home/manuel/dev/rautfall/docs/tasks/0039-despliegue-vercel-neon.md): Especificación inmutable de la Tarea 0039.
