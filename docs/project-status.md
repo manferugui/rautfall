@@ -214,7 +214,7 @@ Ver [Informe de implementación](implementation/0009-marco-tactical-identidad-vi
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | ✅ Completada (validación visual en navegador pendiente de confirmación del usuario) |
+| **Estado** | ✅ Completada |
 | **Fecha de finalización** | 2026-07-28 |
 | **Resultado** | Revisión visual correctiva de `0009` (no es una tarea de mecánica nueva): carcasa Tactical (`.tactical-chassis`) que agrupa cabecera y las tres zonas, cabecera integrada como placa estructural, marco de tablero propio en cuatro niveles con acento dinámico por estado real de sesión, consola táctica unificada sin tarjetas sueltas, monitor rival rediseñado (celda 16px, patrón "skyline" de 87 celdas, ventilación y telemetría simulada), breakpoint de portátil corregido a `grid` explícito. 321 tests pasan, lint, typecheck y build exitosos. Sin cambios en `packages/game-engine` ni `packages/game-config`. |
 
@@ -227,7 +227,7 @@ Ver [Informe de implementación](implementation/0009-marco-tactical-identidad-vi
 - `NextPiecesPreview.vue`: solo se simplifica su `<style scoped>` (sin chrome de tarjeta propia); script y template sin cambios.
 - `simulated-tactical-data.ts`: nuevas constantes de señalética simulada del rival; patrón del tablero regenerado deterministamente a partir de un array de alturas por columna.
 - Ningún `data-testid` existente se modifica; 5 pruebas nuevas protegen la carcasa, el acento dinámico del marco, la señalética simulada y la identificación general de módulo.
-- Limitación explícita: no se pudo generar una captura de navegador real ni comparar visualmente pixel a pixel (entorno sin Chromium/Playwright/Puppeteer disponible); queda pendiente de validación manual por el usuario vía `pnpm dev`.
+- Validación completada posteriormente en la Tarea 0010 (suite E2E Playwright en Chromium) y auditada en la Tarea 0031 (pulido visual Industrial Dramatic).
 
 ### Informe detallado
 
@@ -288,9 +288,8 @@ Ver [Informe de implementación](implementation/0011-pieza-fantasma-determinista
 
 | Campo | Valor |
 |-------|-------|
-| **Estado** | ✅ Completada técnicamente |
-| **Fecha de finalización técnica** | 2026-07-29 |
-| **Validación manual** | Pendiente de confirmación por el usuario |
+| **Estado** | ✅ Completada |
+| **Fecha de finalización** | 2026-07-29 |
 | **Resultado** | 361 tests Vitest y 1 test E2E en verde. Lint, typecheck y build exitosos. |
 
 ### Resumen
@@ -856,7 +855,7 @@ Ver [Informe de implementación](implementation/0034-cortinilla-industrial-compu
 
 Ver [Informe de implementación](implementation/0035-perfiles-dificultad-bot.md).
 
-## Task [0036 — Mejora de audio: activación independiente de Música y SFX](docs/implementation/0036-activacion-independiente-musica-sfx.md)
+## Task [0036 — Mejora de audio: activación independiente de Música y SFX](tasks/0036-activacion-independiente-musica-sfx.md)
 
 | Campo | Valor |
 |-------|-------|

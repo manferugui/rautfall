@@ -379,7 +379,7 @@ La implementación deberá recrear esta dirección mediante Canvas, SVG, CSS, gr
 - **Despliegue:** aplicación web.
 - **Automatización:** GitHub Actions (`.github/workflows/ci.yml`) con jobs independientes `quality` y `e2e` en `ubuntu-24.04`.
 - **Empaquetado de producción:** un único contenedor con Fastify sirviendo API y SPA compilada.
-- **Cloud:** Azure Container Apps y Neon PostgreSQL.
+- **Cloud:** Vercel (SPA Vue 3 + Fastify Serverless) y Neon PostgreSQL (Azure Container Apps fue evaluada y descartada).
 - **Logging:** Pino con logs estructurados y correlación por petición y partida.
 
 Phaser se encargará de representación, entrada, animaciones y audio. La lógica del juego no debe residir dentro de las escenas de Phaser.
@@ -1243,14 +1243,15 @@ En desarrollo, Vite y Fastify podrán ejecutarse por separado con proxy local pa
 1. Azure Container Apps con Neon PostgreSQL.
 2. Railway para aplicación y PostgreSQL.
 3. Azure Container Apps con Azure Database for PostgreSQL.
+4. Vercel con Neon PostgreSQL (arquitectura final adoptada).
 
-### Decisión cloud
+### Decisión cloud inicial y evolución final
 
-Se utilizarán:
+En la fase inicial de diseño se previó **Azure Container Apps** con **Neon PostgreSQL**. Sin embargo, para la entrega final del TFM se adoptó la arquitectura serverless de **Vercel** + **Neon PostgreSQL** (ver Sección 26 para el detalle del descarte de ACA por coste y complejidad operativa):
 
-- **Azure Container Apps:** ejecución del contenedor con HTTPS, configuración, secretos y capacidad de escala a cero.
-- **Neon PostgreSQL:** base de datos PostgreSQL gestionada y adecuada para una carga pequeña e intermitente.
-- **GitHub Actions:** validación, construcción de imagen, publicación y despliegue.
+- **Vercel:** alojamiento de la SPA Vue 3 / Vite y Serverless Functions Fastify 5 para la API vía `api/[...path].ts`.
+- **Neon PostgreSQL:** base de datos PostgreSQL gestionada serverless.
+- **GitHub Actions:** CI de calidad y E2E, migraciones directas en CD y despliegue a Vercel.
 
 ### Justificación
 
@@ -1321,7 +1322,7 @@ Pino deberá configurar redacción explícita de campos sensibles.
 - Desarrollo: formato legible y niveles detallados.
 - Producción: JSON estructurado por salida estándar.
 - Niveles configurables: `debug`, `info`, `warn` y `error`.
-- Azure Container Apps será responsable de capturar los streams del contenedor.
+- La plataforma cloud (Vercel) será responsable de capturar los logs y streams del servidor.
 
 ### Fuera del MVP
 
@@ -2495,7 +2496,7 @@ GitHub Actions (CI: ci.yml / CD: cd.yml)
         ↓
      Vercel Platform (Dominio Único: https://rautfall.es)
        ├── SPA Vue 3 / Vite (apps/web/dist)
-       └── Serverless Function Fastify 5 (api/index.ts)
+       └── Serverless Function Fastify 5 (api/[...path].ts)
             ↓
           Neon PostgreSQL (DATABASE_URL Pooled via PgBouncer)
 ```
