@@ -69,4 +69,50 @@ Todas las comprobaciones de calidad han finalizado con éxito desde la raíz del
 - No se alteró Phaser, bot ni Playwright.
 - No se modificó el esquema de base de datos de PostgreSQL.
 - No se modificó `apps/api/src/config/env.ts` ni `apps/api/src/app.ts`.
-- No se realizaron commits ni pushes.
+
+---
+
+## Registro de Incidencias de Despliegue en Vercel y Diagnóstico (En Validación)
+
+Actualmente la Tarea 0039 se encuentra **en fase de validación de despliegue en producción**. A continuación se detalla el bloque de correcciones aplicadas y el diagnóstico actual en estricto orden cronológico:
+
+### 1. Problema inicial de routing en Vercel
+* **Síntomas**: Accesos directos o recarga (F5) en rutas de la SPA (ej. `/settings`) devolvían error `404 Not Found`. Peticiones a `/api/health` devolvían `404 Not Found`. El *Deployment Summary* de Vercel indicaba únicamente *Static Assets* y `0 Functions`.
+* **Causa**: Vercel no estaba reconociendo la entrada Serverless bajo la estructura monorepo previa y las reglas de rewrite entraban en conflicto.
+
+### 2. Corrección del enrutado y detección de Serverless Function
+* **Acciones aplicadas**:
+  * Se renombró el entrypoint Serverless de `api/index.ts` a `api/[...path].ts` para seguir la convención nativa catch-all de Vercel.
+  * Se declaró explícitamente la función en `vercel.json` (`functions: { "api/[...path].ts": { memory: 1024, maxDuration: 10 } }`).
+  * Se eliminó el rewrite explícito `/api/*`.
+  * Se mantuvo la regla de fallback SPA en `vercel.json` (`{ "source": "/((?!api/).*)", "destination": "/index.html" }`).
+* **Resultado**: Vercel pasó a detectar y compilar correctamente la Serverless Function en los despliegues.
+
+### 3. Errores de compilación TypeScript en el build de Vercel
+* **Síntomas**: El build en Vercel fallaba con errores `TS2835` (imports ESM sin extensión relativa `.js`) y errores secundarios `TS2305` relacionados con `@rautfall/contracts`.
+* **Causa**: Vercel no encontraba un archivo `tsconfig.json` dedicado para la Serverless Function en `api/`, aplicando por defecto una resolución estricta `Node16`/`NodeNext`.
+* **Acciones aplicadas**:
+  * Se creó `api/tsconfig.json` configurando `module: ESNext` y `moduleResolution: Bundler`.
+* **Resultado**: Los errores de compilación `TS2835` y `TS2305` desaparecieron por completo durante el build en Vercel.
+
+### 4. Problema runtime de resoluciones ESM relativas
+* **Síntomas**: El build de Vercel finalizaba correctamente, pero `/api/health` devolvía error HTTP 500 en producción. Los logs de ejecución mostraban `ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/apps/api/src/app' imported from /var/task/api/[...path].js`.
+* **Causa**: Node.js en tiempo de ejecución (ESM nativo) requiere extensiones explícitas (`.js` / `/index.js`) en las rutas relativas importadas.
+* **Acciones aplicadas**:
+  * Se añadieron extensiones `.js` y `/index.js` a todas las importaciones y reexportaciones relativas del grafo runtime de la API (11 archivos modificados: `api/[...path].ts`, `packages/contracts/src/index.ts`, `apps/api/src/server.ts`, `apps/api/src/app.ts`, `apps/api/src/db/index.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/cli-migrate.ts`, `apps/api/src/repositories/matches-repository.ts`, `apps/api/src/routes/health.ts`, `apps/api/src/routes/matches.ts` y `apps/api/src/routes/ranking.ts`).
+* **Validación local**: 57 archivos de prueba pasados (961 tests), `pnpm lint`, `pnpm typecheck` y `pnpm build` finalizados con éxito (código 0).
+
+### 5. Problema runtime de empaquetado en `@rautfall/contracts` (Diagnóstico y Solución Aplicada)
+* **Síntomas**: El error previo se resolvió, pero surgió un nuevo error runtime HTTP 500 al invocar `/api/health`:
+  `ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/apps/api/node_modules/@rautfall/contracts/src/index.ts' imported from /var/task/apps/api/src/routes/health.js`.
+* **Causa diagnosticada**:
+  * `packages/contracts/package.json` exponía su runtime mediante `"import": "./src/index.ts"`.
+  * El paquete `@rautfall/contracts` no generaba un directorio de salida compilado `dist/`.
+  * En tiempo de ejecución en Vercel, Node.js intentaba resolver y ejecutar código TypeScript fuente desde `node_modules`, lo cual falla nativamente en Node ESM.
+* **Solución aplicada e integrada**:
+  * Configurado `packages/contracts/tsconfig.json` con `outDir: "./dist"`, `noEmit: false`, `declaration: true`, `declarationMap: true` y `exclude: ["src/**/*.test.ts"]` para omitir artefactos de prueba en la distribución.
+  * Actualizado `packages/contracts/package.json` con script `"build": "tsc"`, `"main": "./dist/index.js"`, `"module": "./dist/index.js"`, `"types": "./dist/index.d.ts"` y `"exports"` resolviendo `"import"` a `./dist/index.js` y `"types"` a `./dist/index.d.ts`.
+  * Actualizado `vercel.json` configurando `buildCommand`: `"pnpm --filter @rautfall/contracts build && pnpm --filter @rautfall/web build"`.
+* **Estado de la solución**: Implementada y validada localmente al 100% (verificada generación limpia de `dist/` sin archivos `*.test.*`). Pendiente únicamente de `git commit`, `git push` y despliegue/validación final en Vercel.
+
+
