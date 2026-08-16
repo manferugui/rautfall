@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { createDatabaseConnection } from './index';
-import { runMigrations } from './migrate';
+import { createDatabaseConnection } from './index.js';
+import { runMigrations } from './migrate.js';
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/rautfall';

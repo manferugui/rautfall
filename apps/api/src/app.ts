@@ -1,12 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCors from '@fastify/cors';
-import { getAppEnv, type ApiEnv } from './config/env';
-import { createDatabaseConnection, type AppDatabase } from './db';
-import { createMatchesRepository, type MatchesRepository } from './repositories/matches-repository';
-import { registerHealthRoutes } from './routes/health';
-import { registerMatchesRoutes } from './routes/matches';
-import { registerRankingRoutes } from './routes/ranking';
-import { handleAppError } from './errors/app-error';
+import { getAppEnv, type ApiEnv } from './config/env.js';
+import { createDatabaseConnection, type AppDatabase } from './db/index.js';
+import { createMatchesRepository, type MatchesRepository } from './repositories/matches-repository.js';
+import { registerHealthRoutes } from './routes/health.js';
+import { registerMatchesRoutes } from './routes/matches.js';
+import { registerRankingRoutes } from './routes/ranking.js';
+import { handleAppError } from './errors/app-error.js';
 
 export interface AppOptions {
   env?: ApiEnv;

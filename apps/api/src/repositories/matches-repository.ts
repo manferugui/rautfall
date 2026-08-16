@@ -1,8 +1,8 @@
 import { eq, desc, sql } from 'drizzle-orm';
 import type { CreateMatchInput, MatchRecord, RankingEntry } from '@rautfall/contracts';
-import { matches, type DbMatch } from '../db/schema';
-import type { AppDatabase } from '../db';
-import { AppError } from '../errors/app-error';
+import { matches, type DbMatch } from '../db/schema.js';
+import type { AppDatabase } from '../db/index.js';
+import { AppError } from '../errors/app-error.js';
 
 export interface MatchesRepository {
   /**

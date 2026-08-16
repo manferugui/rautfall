@@ -4,8 +4,8 @@ import {
   CreateMatchInputSchema,
   GetMatchesQuerySchema,
 } from '@rautfall/contracts';
-import type { MatchesRepository } from '../repositories/matches-repository';
-import { AppError } from '../errors/app-error';
+import type { MatchesRepository } from '../repositories/matches-repository.js';
+import { AppError } from '../errors/app-error.js';
 
 export function registerMatchesRoutes(
   fastify: FastifyInstance,
