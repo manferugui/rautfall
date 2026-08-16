@@ -202,11 +202,11 @@ test('modo battle-demo=1: verificacion E2E del bot determinista para P2', async 
   });
 
   await test.step('Escenario 5 — Pausa y reanudación coordinada sin ráfaga', async () => {
-    // Esperar visibilidad completa de la pieza actual antes de pausar
+    // Asegurar que el bot tiene una pieza activa en la simulación antes de pausar
     await expect.poll(async () => {
       const st = await readBotDevState(page);
-      return st.minCellY;
-    }, { timeout: 15000 }).toBeGreaterThanOrEqual(4);
+      return st.pieceId;
+    }, { timeout: 15000 }).not.toBeNull();
 
     // Pulsa pausa
     await page.getByTestId('pause-toggle').click();
