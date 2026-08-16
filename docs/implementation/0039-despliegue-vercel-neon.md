@@ -11,8 +11,8 @@ Esta decisión sustituye a Azure Container Apps como opción principal, la cual 
 ## Archivos Creados y Modificados
 
 ### Creados
-- [`api/index.ts`](file:///home/manuel/dev/rautfall/api/index.ts): Adaptador Serverless oficial para Fastify 5 en Vercel, instanciando `buildApp()` en module scope y emitiendo peticiones mediante `fastify.server.emit('request', req, res)`.
-- [`vercel.json`](file:///home/manuel/dev/rautfall/vercel.json): Configuración del monorepo en Vercel para compilación de `apps/web/dist` y reescritura de rutas (`/api/(.*)` a la Serverless Function y fallback a `/index.html`).
+- [`api/[...path].ts`](file:///home/manuel/dev/rautfall/api/%5B...path%5D.ts): Adaptador Serverless oficial para Fastify 5 en Vercel (catch-all route nativo), instanciando `buildApp()` en module scope y emitiendo peticiones mediante `fastify.server.emit('request', req, res)`.
+- [`vercel.json`](file:///home/manuel/dev/rautfall/vercel.json): Configuración del monorepo en Vercel definiendo `functions` para `api/[...path].ts`, compilación de `apps/web/dist` y fallback SPA a `/index.html`.
 - [`.github/workflows/cd.yml`](file:///home/manuel/dev/rautfall/.github/workflows/cd.yml): Workflow de Entrega Continua en GitHub Actions para ejecutar migraciones en Neon (`NEON_DIRECT_URL`) y desplegar en Vercel de forma secuencial.
 - [`docs/tasks/0039-despliegue-vercel-neon.md`](file:///home/manuel/dev/rautfall/docs/tasks/0039-despliegue-vercel-neon.md): Especificación inmutable de la Tarea 0039.
 - [`docs/implementation/0039-despliegue-vercel-neon.md`](file:///home/manuel/dev/rautfall/docs/implementation/0039-despliegue-vercel-neon.md): Este informe técnico de implementación.
@@ -25,7 +25,7 @@ Esta decisión sustituye a Azure Container Apps como opción principal, la cual 
 
 ## Decisión Arquitectónica y Diseño Técnico
 
-### 1. Fastify 5 en Serverless (`api/index.ts`)
+### 1. Fastify 5 en Serverless (`api/[...path].ts`)
 * Se reutiliza la función `buildApp()` de `apps/api/src/app.ts` sin alterar una sola línea de código del backend existente.
 * `apps/api/src/server.ts` se mantiene 100% intacto para desarrollo local y pruebas convencionales con `fastify.listen({ port, host })`.
 * La instancia de Fastify se inicializa en el ámbito del módulo (*module scope*), reutilizando el caché de peticiones en ejecuciones *warm* y acelerando la respuesta del backend.
@@ -56,7 +56,7 @@ Todas las comprobaciones de calidad han finalizado con éxito desde la raíz del
 3. `pnpm test`: **Éxito (Código 0)**. 57 test files pasados / 961 tests unitarios e integración pasados.
 4. `pnpm build`: **Éxito (Código 0)**. SPA compilada en `apps/web/dist` con empaquetado optimizado de Vite.
 5. **Verificación de Enrutado Vercel (`vercel.json`)**:
-   * Peticiones API `/api/health`, `/api/matches`, `/api/ranking` son redirigidas por `/api/(.*)` a la Serverless Function `api/index.ts`, la cual inicializa Fastify y atiende la ruta de forma nativa.
+   * Peticiones API `/api/health`, `/api/matches`, `/api/ranking` son capturadas nativamente por la ruta catch-all del sistema de archivos `api/[...path].ts`, la cual inicializa Fastify y atiende la ruta de forma nativa como Serverless Function.
    * Rutas profundas de la SPA (`/training`, `/battle`, `/settings`, `/history`, `/ranking`, `/results`) son capturadas por `/((?!api/).*)` y derivadas a `/index.html`, donde Vue Router asume la navegación cliente sin producir errores 404.
 
 

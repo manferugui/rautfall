@@ -2,11 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm --filter @rautfall/web build",
   "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/[...path].ts": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index.ts"
-    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
