@@ -1,10 +1,12 @@
-name: CD
+name: Deploy Production
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Continuous Integration"]
+    types:
+      - completed
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,11 +15,16 @@ jobs:
   migrate:
     name: db-migrate
     runs-on: ubuntu-24.04
-    if: github.repository == 'manferugui/rautfall'
+    if: >-
+      github.repository == 'manferugui/rautfall' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -27,7 +34,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22.22.3
+          node-version: 22.x
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -35,7 +42,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run database migrations on Neon (Direct URL)
-        if: secrets.NEON_DIRECT_URL != ''
         run: pnpm --filter @rautfall/api db:migrate
         env:
           DATABASE_URL: ${{ secrets.NEON_DIRECT_URL }}
@@ -44,11 +50,16 @@ jobs:
     name: vercel-deploy
     needs: migrate
     runs-on: ubuntu-24.04
-    if: github.repository == 'manferugui/rautfall'
+    if: >-
+      github.repository == 'manferugui/rautfall' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -58,7 +69,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22.22.3
+          node-version: 22.x
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -66,11 +77,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Vercel Production
-        if: secrets.VERCEL_TOKEN != ''
         run: npx vercel deploy --prod --token="${{ secrets.VERCEL_TOKEN }}"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-
