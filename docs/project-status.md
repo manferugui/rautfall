@@ -924,7 +924,7 @@ Ver [Informe de implementación](implementation/0038-integracion-continua-github
 |-------|-------|
 | **Estado** | ✅ Completada |
 | **Fecha de actualización** | 2026-08-16 |
-| **Resultado** | Arquitectura de despliegue cloud para Rautfall en **Vercel** (SPA Vue 3 / Vite y Serverless Functions de Fastify 5 via `api/[...path].ts`) y **Neon PostgreSQL** (base de datos serverless administrada). Correcciones de empaquetado runtime de `@rautfall/contracts` (`dist/index.js` sin tests), enrutado, compilación TypeScript y resoluciones ESM relativas completadas y verificadas. 961 tests Vitest pasados, lint, typecheck y build exitosos. |
+| **Resultado** | Arquitectura de despliegue cloud para Rautfall en **Vercel** (SPA Vue 3 / Vite y Serverless Functions de Fastify 5 via `api/[...path].ts`) y **Neon PostgreSQL** (base de datos serverless administrada). Validación final completada con CI remoto `quality` y `e2e` en verde, `/api/health` respondiendo 200 `{"status":"ok","database":"connected"}`, acceso directo/F5 en SPA funcional, warning de `memory` eliminado, runtime Node alineado en `22.x` y regresión de CI por ausencia de `packages/contracts/dist` resuelta. 961 tests Vitest pasados, lint, typecheck y build exitosos. |
 
 ### Resumen
 
@@ -932,13 +932,23 @@ Ver [Informe de implementación](implementation/0038-integracion-continua-github
 - Configuración de monorepo Vercel en `vercel.json` sirviendo `apps/web/dist`, declarando la Function `api/[...path].ts`, build de `@rautfall/contracts` previo y fallback SPA a `/index.html`.
 - `api/tsconfig.json` para compilar la Serverless Function con `module: ESNext` y `moduleResolution: Bundler`.
 - Corrección de resoluciones relativas ESM en 11 archivos de la API añadiendo extensiones `.js` y `/index.js`.
-- Corrección de empaquetado runtime en `@rautfall/contracts`: compilación TypeScript a `dist/` (`index.js` y `index.d.ts`), exclusión de archivos `*.test.ts` de la distribución, y exportación de runtime desde `./dist/index.js`.
-- Ajustes finales de configuración de Vercel: flexibilizado `engines.node` a `"22.x"` en `package.json` raíz y eliminada la propiedad obsoleta `memory` en `vercel.json` para evitar advertencias no bloqueantes.
+- Corrección de empaquetado runtime en `@rautfall/contracts`: compilación TypeScript a `dist/` (`index.js` y `index.d.ts`), exclusión de archivos `*.test.ts` de la distribución, y exportación de runtime desde `./dist/index.js` antes de los consumidores runtime. Resuelta la regresión de CI por ausencia de `packages/contracts/dist`.
+- Ajustes finales de configuración de Vercel: flexibilizado `engines.node` a `"22.x"` en `package.json` raíz y eliminada la propiedad obsoleta `memory` en `vercel.json` (warning de memory eliminado).
 - Estrategia Neon: `DATABASE_URL` Pooled para runtime y `NEON_DIRECT_URL` Directa para migraciones en CD (cero migraciones en cold start).
 - Pipeline `.github/workflows/cd.yml` en GitHub Actions garantizando el flujo determinista.
-- **Estado actual**: Despliegue en Vercel + Neon completado y verificado.
+- **Validación final**:
+  - CI remoto quality y e2e en verde.
+  - Vercel despliega correctamente la SPA y la Serverless Function.
+  - `@rautfall/contracts` se compila a `dist/` antes de los consumidores runtime.
+  - `/api/health` responde 200 con `{"status":"ok","database":"connected"}`.
+  - Acceso directo y F5 en rutas SPA como `/settings` y `/training` funcionan correctamente.
+  - Warning de memory eliminado.
+  - Runtime Node alineado en 22.x.
+  - La regresión de CI por ausencia de `packages/contracts/dist` está resuelta.
+- **Estado final de la Tarea 0039**: ✅ Completada.
 
 Ver [Informe de implementación](implementation/0039-despliegue-vercel-neon.md).
+
 
 
 

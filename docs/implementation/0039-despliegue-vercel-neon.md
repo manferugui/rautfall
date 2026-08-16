@@ -72,9 +72,9 @@ Todas las comprobaciones de calidad han finalizado con éxito desde la raíz del
 
 ---
 
-## Registro de Incidencias de Despliegue en Vercel y Diagnóstico (En Validación)
+## Registro de Incidencias de Despliegue en Vercel, CI y Diagnóstico
 
-Actualmente la Tarea 0039 se encuentra **en fase de validación de despliegue en producción**. A continuación se detalla el bloque de correcciones aplicadas y el diagnóstico actual en estricto orden cronológico:
+A continuación se detalla el bloque de correcciones aplicadas, el diagnóstico y las validaciones en estricto orden cronológico:
 
 ### 1. Problema inicial de routing en Vercel
 * **Síntomas**: Accesos directos o recarga (F5) en rutas de la SPA (ej. `/settings`) devolvían error `404 Not Found`. Peticiones a `/api/health` devolvían `404 Not Found`. El *Deployment Summary* de Vercel indicaba únicamente *Static Assets* y `0 Functions`.
@@ -102,7 +102,7 @@ Actualmente la Tarea 0039 se encuentra **en fase de validación de despliegue en
   * Se añadieron extensiones `.js` y `/index.js` a todas las importaciones y reexportaciones relativas del grafo runtime de la API (11 archivos modificados: `api/[...path].ts`, `packages/contracts/src/index.ts`, `apps/api/src/server.ts`, `apps/api/src/app.ts`, `apps/api/src/db/index.ts`, `apps/api/src/db/migrate.ts`, `apps/api/src/db/cli-migrate.ts`, `apps/api/src/repositories/matches-repository.ts`, `apps/api/src/routes/health.ts`, `apps/api/src/routes/matches.ts` y `apps/api/src/routes/ranking.ts`).
 * **Validación local**: 57 archivos de prueba pasados (961 tests), `pnpm lint`, `pnpm typecheck` y `pnpm build` finalizados con éxito (código 0).
 
-### 5. Problema runtime de empaquetado en `@rautfall/contracts` (Diagnóstico y Solución Aplicada)
+### 5. Problema runtime de empaquetado en `@rautfall/contracts`
 * **Síntomas**: El error previo se resolvió, pero surgió un nuevo error runtime HTTP 500 al invocar `/api/health`:
   `ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/apps/api/node_modules/@rautfall/contracts/src/index.ts' imported from /var/task/apps/api/src/routes/health.js`.
 * **Causa diagnosticada**:
@@ -113,13 +113,34 @@ Actualmente la Tarea 0039 se encuentra **en fase de validación de despliegue en
   * Configurado `packages/contracts/tsconfig.json` con `outDir: "./dist"`, `noEmit: false`, `declaration: true`, `declarationMap: true` y `exclude: ["src/**/*.test.ts"]` para omitir artefactos de prueba en la distribución.
   * Actualizado `packages/contracts/package.json` con script `"build": "tsc"`, `"main": "./dist/index.js"`, `"module": "./dist/index.js"`, `"types": "./dist/index.d.ts"` y `"exports"` resolviendo `"import"` a `./dist/index.js` y `"types"` a `./dist/index.d.ts`.
   * Actualizado `vercel.json` configurando `buildCommand`: `"pnpm --filter @rautfall/contracts build && pnpm --filter @rautfall/web build"`.
-* **Estado de la solución**: Implementada, validada localmente y confirmada en el despliegue de Vercel.
+  * `@rautfall/contracts` se compila a `dist/` antes de los consumidores runtime.
+  * Resuelta la regresión de CI por ausencia de `packages/contracts/dist`.
 
-### 6. Ajustes de Configuración de Vercel (Eliminación de Advertencias No Bloqueantes)
+### 6. Ajustes de Configuración de Vercel
 * **Acciones aplicadas**:
-  * En `package.json` raíz: se flexibilizó la versión de Node.js a `"engines": { "node": "22.x" }` (en lugar de `22.22.3`), eliminando las advertencias no bloqueantes del runtime de Vercel relativas a parches específicos.
-  * En `vercel.json`: se eliminó la clave de configuración obsoleta/redundante `"memory": 1024` de la Serverless Function `api/[...path].ts`, conservando únicamente `"maxDuration": 10`.
-* **Resultado**: Configuración de Vercel limpia y libre de advertencias de plataforma durante el despliegue.
+  * En `package.json` raíz: se flexibilizó la versión de Node.js a `"engines": { "node": "22.x" }` (runtime Node alineado en 22.x), eliminando las advertencias no bloqueantes del runtime de Vercel relativas a parches específicos.
+  * En `vercel.json`: se eliminó la clave de configuración obsoleta/redundante `"memory": 1024` (warning de memory eliminado) de la Serverless Function `api/[...path].ts`, conservando únicamente `"maxDuration": 10`.
+
+---
+
+## Validación Final y Cierre
+
+Queda registrada la validación final del despliegue:
+
+- **CI Remoto**: Workflows remotos de `quality` y `e2e` en verde.
+- **Despliegue Vercel**: Vercel despliega correctamente la SPA y la Serverless Function.
+- **Compilación de `@rautfall/contracts`**: `@rautfall/contracts` se compila a `dist/` antes de los consumidores runtime.
+- **Endpoint de Salud**: `/api/health` responde 200 con:
+  ```json
+  {"status":"ok","database":"connected"}
+  ```
+- **Rutas SPA**: Acceso directo y F5 en rutas SPA como `/settings` y `/training` funcionan correctamente.
+- **Advertencias Vercel**: Warning de memory eliminado.
+- **Runtime Node.js**: Runtime Node alineado en 22.x.
+- **Regresión CI**: La regresión de CI por ausencia de `packages/contracts/dist` está resuelta.
+
+**Estado final de la Tarea 0039**: ✅ Completada.
+
 
 
 
