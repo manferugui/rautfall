@@ -35,7 +35,6 @@ import type { BotProfileId } from '@rautfall/battle-engine';
 
 import { isSfxLabActive } from './game/sfx-lab-demo';
 import { generateMatchSeed } from './game/seed';
-import { clearDevDemoQueryParams } from './dev/dev-demos';
 import { defineAsyncComponent, type Component } from 'vue';
 
 const SfxLabComponent: Component | null = import.meta.env.DEV
@@ -81,7 +80,7 @@ const currentRouteName = computed<string>(() => {
   return fallbackRoute.value.name;
 });
 
-function pushRoute(name: string, query: LocationQueryRaw = routeFromVue?.query ?? {}): void {
+function pushRoute(name: string, query: LocationQueryRaw = {}): void {
   if (routerFromVue) {
     void routerFromVue.push({ name, query });
   } else {
@@ -89,7 +88,7 @@ function pushRoute(name: string, query: LocationQueryRaw = routeFromVue?.query ?
   }
 }
 
-function replaceRoute(name: string, query: LocationQueryRaw = routeFromVue?.query ?? {}): void {
+function replaceRoute(name: string, query: LocationQueryRaw = {}): void {
   if (routerFromVue) {
     void routerFromVue.replace({ name, query });
   } else {
@@ -654,12 +653,13 @@ function goToMenu(): void {
   gameResult.value = null;
   pendingMatchResult.value = null;
 
-  pushRoute('home');
+  replaceRoute('home', {});
+}
 
-  if (typeof window !== 'undefined' && window.location && window.history) {
-    const cleanUrl = clearDevDemoQueryParams(window.location.href);
-    window.history.replaceState({}, '', cleanUrl);
-  }
+function returnToMenu(): void {
+  audioManager.playSfx('uiClick');
+  audioManager.playMusic('menu');
+  pushRoute('home');
 }
 
 function openSettings(): void {
@@ -718,18 +718,18 @@ function openDevTools(): void {
       <!-- Pantalla de Configuración -->
       <SettingsScreen
         v-else-if="currentRouteName === 'settings'"
-        @back="goToMenu"
+        @back="returnToMenu"
         @change-tag="openTagModalFromSettings"
       />
 
       <!-- Pantalla de Historial -->
-      <HistoryScreen v-else-if="currentRouteName === 'history'" @back-to-menu="goToMenu" />
+      <HistoryScreen v-else-if="currentRouteName === 'history'" @back-to-menu="returnToMenu" />
 
       <!-- Pantalla de Ranking -->
       <RankingScreen
         v-else-if="currentRouteName === 'ranking'"
         :initial-mode="rankingInitialMode"
-        @back-to-menu="goToMenu"
+        @back-to-menu="returnToMenu"
       />
 
       <!-- Pantalla de Juego ('playing' o 'results') -->
@@ -1099,6 +1099,10 @@ function openDevTools(): void {
                 <span class="session-label">Ganador</span>
                 <span class="session-value" data-testid="battle-winner">{{ gameState.battleState.winner ?? 'NINGUNO'
                   }}</span>
+              </div>
+              <div class="session-item">
+                <span class="session-label">Sudden Death</span>
+                <span class="session-value" data-testid="sudden-death-phase">{{ gameState.battleState.suddenDeathPhase ?? 'none' }}</span>
               </div>
               <div class="session-item">
                 <span class="session-label">P2 Status</span>

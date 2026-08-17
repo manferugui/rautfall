@@ -126,7 +126,7 @@ export function createBattleDemoSession(
     config: options?.config ?? prototypeConfig,
     ...(playerOneInitialState ? { playerOneInitialState } : {}),
     ...(playerTwoInitialState ? { playerTwoInitialState } : {}),
-    ...(isSuddenDeathDemo ? { initialElapsedMs: 280_000 } : {}),
+    ...(isSuddenDeathDemo ? { initialElapsedMs: 293_000 } : {}),
   };
 
   return createBattleSession(sessionOptions);

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouterHistory, type RouteRecordRaw } from 'vue-router';
+import { hasAnyDevDemoQueryParam } from '../dev/dev-demos';
 
 export type RouteName =
   | 'home'
@@ -87,21 +88,16 @@ export function createAppRouter(options: AppRouterOptions = {}) {
   });
 
   router.beforeEach((to) => {
-    // 1. Redirección DEV automática cuando se accede a '/' con query params de demo (ej. ?battle-demo=1)
-    if (import.meta.env.DEV && to.name === 'home') {
+    // 1. Redirección DEV automática cuando se accede a '/' o '/dev-tools' con query params de demo (ej. ?battle-demo=1)
+    if (import.meta.env.DEV && (to.name === 'home' || to.name === 'dev-tools')) {
       const q = to.query;
+      const isSfxLab = q['sfx-lab'] !== undefined;
       const isBattle = q['battle-demo'] !== undefined || q['warning-demo'] === '1';
-      const isDevDemo =
-        q['battle-demo'] !== undefined ||
-        q['garbage-demo'] !== undefined ||
-        q['polarity-demo'] !== undefined ||
-        q['warning-demo'] !== undefined ||
-        q['overload-demo'] !== undefined ||
-        q['tspin-demo'] !== undefined ||
-        q['sabotage-demo'] !== undefined ||
-        q['level-demo'] !== undefined;
 
-      if (isDevDemo) {
+      if (hasAnyDevDemoQueryParam(q as Record<string, unknown>)) {
+        if (isSfxLab) {
+          return { name: 'sfx-lab', query: to.query, replace: true };
+        }
         return { name: isBattle ? 'battle' : 'training', query: to.query, replace: true };
       }
     }

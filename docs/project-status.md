@@ -591,14 +591,14 @@ Ver [Informe de implementación](implementation/0023-bot-sabotajes-deterministas
 |-------|-------|
 | **Estado** | ✅ Completada |
 | **Fecha de finalización** | 2026-08-03 |
-| **Resultado** | Extensión genérica de modificadores externos (`EngineModifiers`) en `@rautfall/game-engine` y modelo determinista de Muerte Súbita en `@rautfall/battle-engine` ajustado a `docs/rautfall.md` (aviso a 04:45, inicio a 05:00, Fases 1, 2 y 3 con aceleración de gravedad hasta 1.50× y multiplicador de energía 1.20×). Conservación estricta de `BattleStatus` (`'running' | 'playerOneWon' | 'playerTwoWon' | 'draw'`), emisión única de hechos transitorios, simetría P1/P2, resolución síncrona de victorias/empates, escenario DEV `?battle-demo=1&sudden-death-demo=1` y suite E2E de Playwright. 698 tests Vitest y 6 tests E2E Playwright en verde. Lint, typecheck, build y git diff --check limpios. |
+| **Resultado** | Extensión genérica de modificadores externos (`EngineModifiers`) en `@rautfall/game-engine` y modelo determinista de Muerte Súbita en `@rautfall/battle-engine` ajustado a `docs/rautfall.md` (aviso a 04:55, inicio a 05:00, Fases 1, 2 y 3 con aceleración de gravedad hasta 1.50× y multiplicador de energía 1.20×). Conservación estricta de `BattleStatus` (`'running' | 'playerOneWon' | 'playerTwoWon' | 'draw'`), emisión única de hechos transitorios, simetría P1/P2, resolución síncrona de victorias/empates, escenario DEV `?battle-demo=1&sudden-death-demo=1` y suite E2E de Playwright. 698 tests Vitest y 6 tests E2E Playwright en verde. Lint, typecheck, build y git diff --check limpios. |
 
 ### Resumen
 
 - Extensión contractual `EngineModifiers` (`gravityMultiplier`, `energyMultiplier`) en `@rautfall/game-engine` y parámetro opcional `modifiers` en `StepInput`.
 - Aplicación determinista de gravedad compuesta (`baseLevelGravity * (hasSobrecarga ? 3 : 1) * externalGravityMultiplier`) y energía multiplicada (`generatedEnergy * externalEnergyMultiplier`).
 - Contrato separado `SuddenDeathPhase` (`'inactive' | 'warning' | 'phase1' | 'phase2' | 'phase3'`) y `SuddenDeathSnapshot` expuesto en `BattleSnapshot.suddenDeath`.
-- Fronteras temporales exactas: aviso a 04:45 (285.000 ms), Phase 1 a 05:00 (300.000 ms, grav 1.15×, energ 1.20×), Phase 2 a 05:30 (330.000 ms, grav 1.30×), Phase 3 a 06:00 (360.000 ms, grav 1.50×).
+- Fronteras temporales exactas: aviso a 04:55 (295.000 ms), Phase 1 a 05:00 (300.000 ms, grav 1.15×, energ 1.20×), Phase 2 a 05:30 (330.000 ms, grav 1.30×), Phase 3 a 06:00 (360.000 ms, grav 1.50×).
 - Emisión única de eventos transitorios (`suddenDeathWarning`, `suddenDeathStarted`, `suddenDeathPhaseChanged`) al cruzar cada umbral.
 - Condición de victoria y empate intactos, procesados tras ejecutar ambos motores en el paso global.
 - Avance bloqueado en estado terminal con `BattleStepError('BATTLE_NOT_RUNNING')`.

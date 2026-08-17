@@ -2,7 +2,7 @@
 
 ## Resumen
 
-Se ha diseñado e implementado el modelo determinista de temporización y fases de Muerte Súbita para el modo de Batalla Local en `@rautfall/battle-engine`, respaldado por una extensión general desacoplada de modificadores externos (`EngineModifiers`) en `@rautfall/game-engine`. La Muerte Súbita transiciona por las fronteras temporales exactas acordadas en `docs/rautfall.md` (aviso desde 04:45, inicio a 05:00 con Fases 1, 2 y 3 de aceleración de gravedad y ganancia de energía $\times 1.20$), emitiendo eventos de hecho transitorio una sola vez por transición, aplicando la misma presión sobre ambos participantes y conservando intacta la condición de victoria por eliminación o empate simultáneo.
+Se ha diseñado e implementado el modelo determinista de temporización y fases de Muerte Súbita para el modo de Batalla Local en `@rautfall/battle-engine`, respaldado por una extensión general desacoplada de modificadores externos (`EngineModifiers`) en `@rautfall/game-engine`. La Muerte Súbita transiciona por las fronteras temporales exactas acordadas en `docs/rautfall.md` (aviso desde 04:55, inicio a 05:00 con Fases 1, 2 y 3 de aceleración de gravedad y ganancia de energía $\times 1.20$), emitiendo eventos de hecho transitorio una sola vez por transición, aplicando la misma presión sobre ambos participantes y conservando intacta la condición de victoria por eliminación o empate simultáneo.
 
 ## Archivos Creados y Modificados
 
@@ -11,7 +11,7 @@ Se ha diseñado e implementado el modelo determinista de temporización y fases 
 - **[MODIFY]** `packages/game-engine/src/index.ts`: Definición e integración del tipo exportado `EngineModifiers` y ampliación opcional de `StepInput` (`modifiers?: EngineModifiers`).
 - **[MODIFY]** `packages/game-engine/src/game-engine.test.ts`: Pruebas unitarias para la aplicación determinista de `EngineModifiers` sobre gravedad y ganancia de energía.
 - **[MODIFY]** `packages/battle-engine/src/index.ts`: Definición de `SuddenDeathPhase`, `SuddenDeathSnapshot`, función `computeSuddenDeath`, integración en `BattleSnapshot.suddenDeath`, emisión única de eventos transitorios e inyección simétrica de modificadores en `BattleSession.step()`.
-- **[MODIFY]** `packages/battle-engine/src/battle-engine.test.ts`: Pruebas unitarias e integración de Muerte Súbita (fronteras exactas 04:45, 05:00, 05:30 y 06:00, eventos únicos, simetría P1/P2, composición con Sobrecarga, energía $\times 1.20$, victorias y empate simultáneo).
+- **[MODIFY]** `packages/battle-engine/src/battle-engine.test.ts`: Pruebas unitarias e integración de Muerte Súbita (fronteras exactas 04:55, 05:00, 05:30 y 06:00, eventos únicos, simetría P1/P2, composición con Sobrecarga, energía $\times 1.20$, victorias y empate simultáneo).
 - **[MODIFY]** `apps/web/src/game/battle-demo.ts`: Incorporación de `isSuddenDeathDemoActive` y avance inicial del tiempo en DEV para `?battle-demo=1&sudden-death-demo=1`.
 - **[MODIFY]** `apps/web/src/game/battle-demo.test.ts`: Pruebas unitarias de `isSuddenDeathDemoActive`.
 - **[MODIFY]** `docs/project-status.md`: Actualización del estado del proyecto al completar la Tarea 0024.
@@ -29,15 +29,15 @@ Se ha diseñado e implementado el modelo determinista de temporización y fases 
    `BattleStatus` mantiene sus cuatro valores originales (`'running' | 'playerOneWon' | 'playerTwoWon' | 'draw'`). El estado de Muerte Súbita se expone separadamente en `BattleSnapshot.suddenDeath: SuddenDeathSnapshot`.
 
 4. **Transiciones temporales exactas**:
-   - `00:00.000` a `04:44.990` ($0 \le t < 285.000$ ms): `'inactive'`, multiplicadores 1.0 / 1.0.
-   - `04:45.000` a `04:59.990` ($285.000 \le t < 300.000$ ms): `'warning'`, `warningRemainingMs = 300_000 - t`, multiplicadores 1.0 / 1.0. Emisión única de `suddenDeathWarning`.
+   - `00:00.000` a `04:54.990` ($0 \le t < 295.000$ ms): `'inactive'`, multiplicadores 1.0 / 1.0.
+   - `04:55.000` a `04:59.990` ($295.000 \le t < 300.000$ ms): `'warning'`, `warningRemainingMs = 300_000 - t`, multiplicadores 1.0 / 1.0. Emisión única de `suddenDeathWarning`.
    - `05:00.000` a `05:29.990` ($300.000 \le t < 330.000$ ms): `'phase1'`, gravedad $\times 1.15$, energía $\times 1.20$. Emisión única de `suddenDeathStarted`.
    - `05:30.000` a `05:59.990` ($330.000 \le t < 360.000$ ms): `'phase2'`, gravedad $\times 1.30$, energía $\times 1.20$. Emisión única de `suddenDeathPhaseChanged`.
    - $\ge 06:00.000$ ($t \ge 360.000$ ms): `'phase3'`, gravedad $\times 1.50$, energía $\times 1.20$. Emisión única de `suddenDeathPhaseChanged`.
 
 5. **Alineación con pausa y guardas DEV**:
    - La pausa permanece en `apps/web`, que detiene las llamadas a `step()`, congelando `elapsedMs`.
-   - Flag DEV `?battle-demo=1&sudden-death-demo=1` protegido por `import.meta.env.DEV` avanza `elapsedMs` a 04:40 para pruebas inmediatas.
+   - Flag DEV `?battle-demo=1&sudden-death-demo=1` protegido por `import.meta.env.DEV` avanza `elapsedMs` a 04:53 para pruebas inmediatas.
 
 ## API Pública Producida
 
@@ -55,7 +55,7 @@ Exportaciones producidas en `@rautfall/battle-engine`:
 ## Pruebas y Validación Realizadas
 
 - **Pruebas unitarias de modificadores en motor individual**: Verificación de inyección de multiplicadores de gravedad y energía en `game-engine.test.ts`.
-- **Pruebas unitarias de Muerte Súbita**: Verificación de fronteras exactas (04:45, 05:00, 05:30, 06:00), emisión única de eventos, simetría P1/P2, composición con Sobrecarga, victorias individuales, empate simultáneo y reset en `battle-engine.test.ts`.
+- **Pruebas unitarias de Muerte Súbita**: Verificación de fronteras exactas (04:55, 05:00, 05:30, 06:00), emisión única de eventos, simetría P1/P2, composición con Sobrecarga, victorias individuales, empate simultáneo y reset en `battle-engine.test.ts`.
 - **Suite completa Vitest**: Todos los 698 tests pasando en verde.
 - **Pruebas E2E de Playwright**: Pruebas pasando en Chromium (`sudden-death.spec.ts`).
 - **Validaciones globales**: `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test:e2e`, `git diff --check` y `git status --short` finalizan limpiamente.

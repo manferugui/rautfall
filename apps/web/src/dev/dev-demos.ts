@@ -32,7 +32,7 @@ export const DEV_DEMOS: readonly DevDemoDefinition[] = [
   {
     id: 'sudden-death-2p',
     label: 'Muerte Súbita 2P',
-    description: 'Batalla 2P iniciada a los 04:40 min con aviso de Muerte Súbita',
+    description: 'Batalla 2P iniciada a los 04:53 min con aviso de Muerte Súbita',
     category: 'battle',
     query: { 'battle-demo': '1', 'sudden-death-demo': '1' },
   },
@@ -130,8 +130,9 @@ export function buildDemoTargetUrl(
   query: Readonly<Record<string, string>>,
   currentPathname?: string,
 ): string {
-  const pathname =
+  const rawPathname =
     currentPathname ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+  const pathname = rawPathname === '/dev-tools' ? '/' : rawPathname;
   const params = new URLSearchParams(query);
   const searchString = params.toString();
   return searchString ? `${pathname}?${searchString}` : pathname;
@@ -152,6 +153,15 @@ export const DEV_QUERY_PARAMS: readonly string[] = [
   'level-demo',
   'sfx-lab',
 ] as const;
+
+/**
+ * Comprueba si un objeto de parámetros de consulta contiene alguna bandera de demo DEV.
+ */
+export function hasAnyDevDemoQueryParam(query: Record<string, unknown>): boolean {
+  return DEV_QUERY_PARAMS.some(
+    (param) => query[param] !== undefined && query[param] !== null && query[param] !== '',
+  );
+}
 
 /**
  * Elimina todos los parámetros de consulta DEV conocidos de una URL.

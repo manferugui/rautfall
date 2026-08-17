@@ -1609,7 +1609,7 @@ Los siguientes valores se consideran una configuración inicial conservadora y d
 Se utilizará presión progresiva por fases:
 
 - Inicio a los 5 minutos.
-- Aviso visible 15 segundos antes.
+- Aviso visible 5 segundos antes (04:55).
 - Fase 1: +15 % de velocidad.
 - Fase 2, tras 30 segundos: +30 %.
 - Fase 3, tras otros 30 segundos: +50 %.

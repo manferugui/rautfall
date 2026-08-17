@@ -84,7 +84,7 @@ export type SuddenDeathSnapshot = Readonly<{
 }>;
 
 export function computeSuddenDeath(elapsedMs: number): SuddenDeathSnapshot {
-  if (elapsedMs < 285_000) {
+  if (elapsedMs < 295_000) {
     return Object.freeze({
       phase: 'inactive',
       warningRemainingMs: 0,

@@ -635,5 +635,93 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
       wrapper.unmount();
     });
+
+    it('en entorno de producción la ruta /dev-tools está protegida y redirige a home', async () => {
+      const { wrapper, router } = mountApp('/dev-tools');
+      await router.isReady();
+      await wrapper.vm.$nextTick();
+
+      expect(router.currentRoute.value.name).toBe('home');
+      wrapper.unmount();
+    });
+
+    describe('Navegación VOLVER AL MENÚ desde demos DEV y partidas normales', () => {
+      it('Caso 1 — desde demo Battle DEV (/battle?battle-demo=1&sudden-death-demo=1), al pulsar Menú llega a home sin query params y muestra el menú principal', async () => {
+        const { wrapper, router } = mountApp('/');
+        await router.isReady();
+        await router.push('/battle?battle-demo=1&sudden-death-demo=1');
+        await wrapper.vm.$nextTick();
+
+        const exitBtn = wrapper.find('[data-testid="exit-to-menu-button"]');
+        expect(exitBtn.exists()).toBe(true);
+        await exitBtn.trigger('click');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await wrapper.vm.$nextTick();
+
+        expect(router.currentRoute.value.name).toBe('home');
+        expect(router.currentRoute.value.query).toEqual({});
+        expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
+        wrapper.unmount();
+      });
+
+      it('Caso 2 — desde otra demo DEV (/training?sabotage-demo=1), al pulsar Menú llega a home sin query params y muestra el menú principal', async () => {
+        const { wrapper, router } = mountApp('/');
+        await router.isReady();
+        await router.push('/training?sabotage-demo=1');
+        await wrapper.vm.$nextTick();
+
+        const exitBtn = wrapper.find('[data-testid="exit-to-menu-button"]');
+        expect(exitBtn.exists()).toBe(true);
+        await exitBtn.trigger('click');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await wrapper.vm.$nextTick();
+
+        expect(router.currentRoute.value.name).toBe('home');
+        expect(router.currentRoute.value.query).toEqual({});
+        expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
+        wrapper.unmount();
+      });
+
+      it('Caso 3 — flujo normal no DEV (/battle), pulsar Menú redirige a home sin regresiones', async () => {
+        const { wrapper, router } = mountApp('/');
+        await router.isReady();
+        await router.push('/battle');
+        await wrapper.vm.$nextTick();
+
+        const exitBtn = wrapper.find('[data-testid="exit-to-menu-button"]');
+        expect(exitBtn.exists()).toBe(true);
+        await exitBtn.trigger('click');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await wrapper.vm.$nextTick();
+
+        expect(router.currentRoute.value.name).toBe('home');
+        expect(router.currentRoute.value.query).toEqual({});
+        expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
+        wrapper.unmount();
+      });
+
+      it('Caso 4 — no reactivación: permanece en home tras avanzar ticks sin redirigir de nuevo a battle', async () => {
+        const { wrapper, router } = mountApp('/');
+        await router.isReady();
+        await router.push('/battle?battle-demo=1&sudden-death-demo=1');
+        await wrapper.vm.$nextTick();
+
+        const exitBtn = wrapper.find('[data-testid="exit-to-menu-button"]');
+        expect(exitBtn.exists()).toBe(true);
+        await exitBtn.trigger('click');
+        await router.isReady();
+        await wrapper.vm.$nextTick();
+
+        // Espera de ticks adicionales para asegurar estabilidad en home
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await wrapper.vm.$nextTick();
+
+        expect(router.currentRoute.value.name).toBe('home');
+        expect(router.currentRoute.value.query).toEqual({});
+        expect(wrapper.find('[data-testid="mode-selector"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="game-canvas"]').exists()).toBe(false);
+        wrapper.unmount();
+      });
+    });
   });
 });

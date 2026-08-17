@@ -327,13 +327,13 @@ describe('@rautfall/battle-engine', () => {
   });
 
   describe('Tarea 0024 — Muerte súbita determinista', () => {
-    it('transiciona correctamente por las fronteras temporales exactas de 04:45, 05:00, 05:30 y 06:00', () => {
-      // 1. Frontera de aviso 04:45 (285.000 ms)
-      const battleWarning = createBattleSession(makeValidOptions({ initialElapsedMs: 284_990 }));
+    it('transiciona correctamente por las fronteras temporales exactas de 04:55, 05:00, 05:30 y 06:00', () => {
+      // 1. Frontera de aviso 04:55 (295.000 ms)
+      const battleWarning = createBattleSession(makeValidOptions({ initialElapsedMs: 294_990 }));
       expect(battleWarning.getSnapshot().suddenDeath.phase).toBe('inactive');
       const snapWarning = battleWarning.step(emptyBattleInput());
       expect(snapWarning.suddenDeath.phase).toBe('warning');
-      expect(snapWarning.suddenDeath.warningRemainingMs).toBe(15000);
+      expect(snapWarning.suddenDeath.warningRemainingMs).toBe(5000);
       expect(battleWarning.drainEvents().filter((e) => e.type === 'suddenDeathWarning')).toHaveLength(1);
 
       // 2. Frontera de phase1 05:00 (300.000 ms)

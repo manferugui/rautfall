@@ -30,6 +30,9 @@ describe('dev-demos (Registro Centralizado de Demos DEV)', () => {
     const battleQuery = { 'battle-demo': '1', 'sudden-death-demo': '1' };
     const battleUrl = buildDemoTargetUrl(battleQuery, '/app');
     expect(battleUrl).toBe('/app?battle-demo=1&sudden-death-demo=1');
+
+    const launcherUrl = buildDemoTargetUrl(battleQuery, '/dev-tools');
+    expect(launcherUrl).toBe('/?battle-demo=1&sudden-death-demo=1');
   });
 
   it('devuelve únicamente el pathname si la query está vacía', () => {
