@@ -187,4 +187,50 @@ test.describe('Navegación web real, sincronización de URL, Back/Forward y deep
     expect(consoleErrors, `Errores de consola detectados: ${consoleErrors.join(' | ')}`).toEqual([]);
     expect(pageErrors, `Excepciones de página detectadas: ${pageErrors.join(' | ')}`).toEqual([]);
   });
+
+  test('transición desde DEV Battle Demo al menú desmantela el contexto DEV y permite ResultsModal en Training posterior', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (error) => {
+      pageErrors.push(error.message);
+    });
+
+    await test.step('entrar en DEV Battle Demo directamente por URL', async () => {
+      await page.goto('/?battle-demo=1');
+      await initializeAudioIfPrompted(page);
+      await expect(page).toHaveURL('/battle?battle-demo=1');
+      await expect(page.getByTestId('own-board-column')).toBeVisible();
+      await expect(page.getByTestId('opponent-monitor')).toBeVisible();
+    });
+
+    await test.step('volver al menú principal mediante el botón de la interfaz limpia la URL y abandona DEV demo', async () => {
+      await page.getByTestId('exit-to-menu-button').click();
+      await expect(page).toHaveURL('/');
+      await expect(page.getByTestId('mode-selector')).toBeVisible();
+      expect(page.url()).not.toContain('battle-demo');
+    });
+
+    await test.step('entrar en Entrenamiento normal desde el menú y provocar top-out', async () => {
+      await page.getByTestId('start-training-button').click();
+      await expect(page).toHaveURL('/training');
+      await expect(page.getByTestId('own-board-column')).toBeVisible();
+
+      for (let i = 0; i < 80; i++) {
+        await page.keyboard.press('Space');
+        await page.waitForTimeout(70);
+        if (await page.getByTestId('results-modal').isVisible()) break;
+      }
+
+      await expect(page.getByTestId('results-modal')).toBeVisible();
+      await expect(page.getByTestId('results-title')).toHaveText('ENTRENAMIENTO FINALIZADO');
+    });
+
+    expect(consoleErrors, `Errores de consola detectados: ${consoleErrors.join(' | ')}`).toEqual([]);
+    expect(pageErrors, `Excepciones de página detectadas: ${pageErrors.join(' | ')}`).toEqual([]);
+  });
 });
+

@@ -19,13 +19,6 @@ import AudioActivationModal from './components/AudioActivationModal.vue';
 import PauseShutter from './components/PauseShutter.vue';
 import type { GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive, isDebugPanelActive } from './game/battle-demo';
-import { isTSpinDemoActive } from './game/tspin-demo';
-import { isSabotageDemoActive } from './game/sabotage-demo';
-import { isOverloadDemoActive } from './game/overload-demo';
-import { isGarbageDemoActive } from './game/garbage-demo';
-import { isPolarityDemoActive } from './game/polarity-demo';
-import { isWarningDemoActive } from './game/warning-demo';
-import { getLevelDemoTarget } from './game/level-demo';
 import { getAudioManager } from './audio';
 import { getOrCreatePlayerId, getPlayerTag, setPlayerTag, hasPlayerTag } from './api/identity';
 import { submitMatch } from './api/client';
@@ -33,8 +26,8 @@ import type { CreateMatchInput } from '@rautfall/contracts';
 import type { ActiveEffectSnapshot, SabotageType } from '@rautfall/game-engine';
 import type { BotProfileId } from '@rautfall/battle-engine';
 
-import { isSfxLabActive } from './game/sfx-lab-demo';
 import { generateMatchSeed } from './game/seed';
+import { hasAnyDevDemoQueryParam } from './dev/dev-demos';
 import { defineAsyncComponent, type Component } from 'vue';
 
 const SfxLabComponent: Component | null = import.meta.env.DEV
@@ -48,28 +41,11 @@ const DevLauncherScreenComponent: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./components/DevLauncherScreen.vue'))
   : null;
 
-const isSfxLab = isSfxLabActive();
-const isWarningDemo = isWarningDemoActive();
-
-function hasDevDemoFlag(): boolean {
-  return (
-    isBattleDemoActive() ||
-    isTSpinDemoActive() ||
-    isSabotageDemoActive() ||
-    isOverloadDemoActive() ||
-    isGarbageDemoActive() ||
-    isPolarityDemoActive() ||
-    isWarningDemoActive() ||
-    getLevelDemoTarget() !== null
-  );
-}
-
-const isDevDemo = hasDevDemoFlag();
 const routeFromVue = useRoute();
 const routerFromVue = useRouter();
 
 const fallbackRoute = ref<{ name: string; query: LocationQueryRaw }>({
-  name: isDevDemo ? (isBattleDemoActive() || isWarningDemo ? 'battle' : 'training') : 'home',
+  name: 'home',
   query: {},
 });
 
@@ -98,6 +74,21 @@ function replaceRoute(name: string, query: LocationQueryRaw = {}): void {
 
 const activeRouteQuery = computed(() => routeFromVue?.query ?? fallbackRoute.value.query);
 
+const isDevDemo = computed<boolean>(() => {
+  if (!import.meta.env.DEV) return false;
+  return hasAnyDevDemoQueryParam(activeRouteQuery.value as Record<string, unknown>);
+});
+
+const isWarningDemo = computed<boolean>(() => {
+  if (!import.meta.env.DEV) return false;
+  return activeRouteQuery.value['warning-demo'] === '1';
+});
+
+const isSfxLab = computed<boolean>(() => {
+  if (!import.meta.env.DEV) return false;
+  return activeRouteQuery.value['sfx-lab'] !== undefined;
+});
+
 const isDevDebugPanel = computed(
   () => import.meta.env.DEV && (isDebugPanelActive() || activeRouteQuery.value['debug-panel'] === '1'),
 );
@@ -107,7 +98,7 @@ const gameMode = computed<GameMode>(() => {
   if (name === 'battle') return 'battle';
   if (name === 'training') return 'training';
   if (name === 'results' && gameResult.value) return gameResult.value.mode;
-  if (isBattleDemoActive() || isWarningDemo) return 'battle';
+  if (isBattleDemoActive() || isWarningDemo.value) return 'battle';
   return 'training';
 });
 
@@ -115,7 +106,7 @@ const selectedBotProfile = ref<BotProfileId>('battleOperator');
 const matchSeed = ref<number>(generateMatchSeed());
 
 const isCanvasMounted = computed(() => {
-  if (isSfxLab) return false;
+  if (isSfxLab.value) return false;
   const name = currentRouteName.value;
   return name === 'training' || name === 'battle' || name === 'results';
 });
@@ -516,7 +507,7 @@ function onStateUpdate(state: GamePresentationState): void {
   const isEngineGameOver = state.status === 'gameOver';
   const isBattleEnded = Boolean(state.battleState && state.battleState.status !== 'running');
 
-  if (!isDevDemo && (isEngineGameOver || isBattleEnded) && (currentRouteName.value === 'training' || currentRouteName.value === 'battle')) {
+  if (!isDevDemo.value && (isEngineGameOver || isBattleEnded) && (currentRouteName.value === 'training' || currentRouteName.value === 'battle')) {
     let title = 'ENTRENAMIENTO FINALIZADO';
     let subtitle: string | undefined = undefined;
     let matchResultType: 'finished' | 'victory' | 'defeat' | 'draw' = 'finished';
