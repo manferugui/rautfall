@@ -38,7 +38,7 @@ test.describe('sudden-death E2E', () => {
     await expect(page.getByTestId('dev-demo-launcher')).toBeVisible();
     await page.getByTestId('launch-sudden-death-2p').click();
 
-    await expect(page).toHaveURL(/\/\?battle-demo=1&sudden-death-demo=1/);
+    await expect(page).toHaveURL(/\/battle\?battle-demo=1&sudden-death-demo=1/);
     await expect(page.locator('[data-testid="game-canvas"] canvas')).toBeVisible();
     await expect(page.getByTestId('session-status')).toHaveText('running');
   });
