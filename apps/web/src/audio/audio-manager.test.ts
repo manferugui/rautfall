@@ -1092,4 +1092,177 @@ describe('AudioManager', () => {
       expect(manager.isUnlocked()).toBe(true);
     });
   });
+
+  describe('Regresión tras F5: recarga con categorías OFF, unlock y posterior reactivación a ON', () => {
+    it('A: preferencia Audio/Música OFF -> recarga equivalente a F5 -> unlock -> cambiar a ON -> música operativa', async () => {
+      // 1. Simular preferencia OFF persistida para Música tras F5
+      localStorage.setItem('rautfall_audio_music_enabled', 'false');
+      localStorage.setItem('rautfall_audio_sfx_enabled', 'true');
+      AudioManager.resetInstance();
+
+      const manager = AudioManager.getInstance();
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(true);
+
+      // Registrar track deseado al montar la pantalla antes del unlock
+      manager.playMusic('menu');
+
+      // 2. Unlock tras interacción
+      await manager.unlock();
+      expect(manager.isUnlocked()).toBe(true);
+      expect(manager.getCurrentMusicTrack()).toBe('menu');
+      // No suena aún porque la música sigue deshabilitada en sus preferencias
+      expect(manager.getMusicGainNode()).not.toBeNull();
+
+      // 3. Cambiar preferencia a ON desde la interfaz
+      manager.setMusicEnabled(true);
+      expect(manager.isMusicEnabled()).toBe(true);
+
+      // 4. La música debe quedar operativa
+      expect(manager.getCurrentMusicTrack()).toBe('menu');
+      expect(manager.getMasterGainNode()?.gain.value).toBe(1);
+    });
+
+    it('B: preferencia SFX OFF -> recarga equivalente a F5 -> unlock -> cambiar a ON -> SFX operativo', async () => {
+      // 1. Simular preferencia OFF persistida para SFX tras F5 (con o sin música OFF)
+      localStorage.setItem('rautfall_audio_music_enabled', 'false');
+      localStorage.setItem('rautfall_audio_sfx_enabled', 'false');
+      AudioManager.resetInstance();
+
+      const manager = AudioManager.getInstance();
+      expect(manager.isSfxEnabled()).toBe(false);
+      expect(manager.isMuted()).toBe(true);
+
+      // 2. Unlock tras interacción
+      await manager.unlock();
+      expect(manager.isUnlocked()).toBe(true);
+      expect(manager.getMasterGainNode()?.gain.value).toBe(0);
+
+      // 3. Cambiar preferencia de SFX a ON
+      manager.setSfxEnabled(true);
+      expect(manager.isSfxEnabled()).toBe(true);
+      expect(manager.isMuted()).toBe(false);
+
+      // 4. SFX operativo y ganancia maestra des-silenciada
+      expect(manager.getMasterGainNode()?.gain.value).toBe(1);
+      vi.spyOn(performance, 'now').mockReturnValue(5000);
+      expect(() => manager.playSfx('uiClick')).not.toThrow();
+      expect(mockAudioContext.createOscillator).toHaveBeenCalled();
+    });
+
+    it('C: preferencia OFF sigue silenciada tras F5/unlock mientras el usuario no la reactive', async () => {
+      // 1. Simular ambas categorías desactivadas tras F5
+      localStorage.setItem('rautfall_audio_music_enabled', 'false');
+      localStorage.setItem('rautfall_audio_sfx_enabled', 'false');
+      AudioManager.resetInstance();
+
+      const manager = AudioManager.getInstance();
+      expect(manager.isMuted()).toBe(true);
+
+      manager.playMusic('menu');
+
+      // 2. Unlock tras interacción del usuario
+      await manager.unlock();
+      expect(manager.isUnlocked()).toBe(true);
+
+      // 3. Mientras el usuario no las reactive, nada debe sonar
+      expect(manager.getMasterGainNode()?.gain.value).toBe(0);
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(false);
+
+      mockAudioContext.createOscillator.mockClear();
+      manager.playSfx('uiClick');
+      expect(mockAudioContext.createOscillator).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Regresión tras pausa y reanudación (pause -> resume)', () => {
+    it('Music OFF -> pause -> resume conserva la música efectivamente silenciada (sin crear fuentes de audio)', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      // Desactivar música
+      manager.setMusicEnabled(false);
+      expect(manager.isMusicEnabled()).toBe(false);
+
+      // Simular intento de reproducir gameplay y posterior pausa/reanudación
+      manager.playMusic('gameplay');
+      manager.pauseMusic();
+      expect(manager.isMusicPaused()).toBe(true);
+
+      mockAudioContext.createBufferSource.mockClear();
+
+      // Reanudar la música tras pausa
+      manager.resumeMusic();
+
+      // Invariante: no debe crear fuentes de audio ni sonar mientras Music esté OFF
+      expect(mockAudioContext.createBufferSource).not.toHaveBeenCalled();
+      expect(manager.isMusicEnabled()).toBe(false);
+    });
+
+    it('Music ON -> pause -> resume restablece la música adecuadamente', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      manager.setMusicEnabled(true);
+      const mockBuffer = {
+        numberOfChannels: 1,
+        length: 48000,
+        sampleRate: 48000,
+        duration: 1.0,
+        getChannelData: () => new Float32Array(48000),
+      } as unknown as AudioBuffer;
+      manager.registerMusicBuffer('gameplay', mockBuffer);
+
+      manager.playMusic('gameplay');
+      manager.pauseMusic();
+      expect(manager.isMusicPaused()).toBe(true);
+
+      mockAudioContext.createBufferSource.mockClear();
+      manager.resumeMusic();
+
+      expect(mockAudioContext.createBufferSource).toHaveBeenCalledTimes(1);
+      expect(manager.isMusicPaused()).toBe(false);
+      expect(manager.isMusicEnabled()).toBe(true);
+    });
+
+    it('Music OFF + SFX ON -> pause -> resume deja SFX operativo y música silenciada', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      manager.setMusicEnabled(false);
+      manager.setSfxEnabled(true);
+
+      manager.playMusic('gameplay');
+      manager.pauseMusic();
+      manager.resumeMusic();
+
+      expect(manager.isMusicEnabled()).toBe(false);
+      expect(manager.isSfxEnabled()).toBe(true);
+
+      mockAudioContext.createOscillator.mockClear();
+      vi.spyOn(performance, 'now').mockReturnValue(10000);
+      manager.playSfx('uiClick');
+      expect(mockAudioContext.createOscillator).toHaveBeenCalled();
+    });
+
+    it('ambos OFF -> pause -> resume mantiene silencio total en masterGain', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      manager.setMusicEnabled(false);
+      manager.setSfxEnabled(false);
+
+      expect(manager.getMasterGainNode()?.gain.value).toBe(0);
+
+      manager.playMusic('gameplay');
+      manager.pauseMusic();
+      manager.resumeMusic();
+
+      expect(manager.getMasterGainNode()?.gain.value).toBe(0);
+      mockAudioContext.createOscillator.mockClear();
+      manager.playSfx('uiClick');
+      expect(mockAudioContext.createOscillator).not.toHaveBeenCalled();
+    });
+  });
 });

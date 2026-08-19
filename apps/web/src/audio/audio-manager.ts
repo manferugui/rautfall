@@ -155,6 +155,18 @@ export class AudioManager implements AudioService {
     }
   }
 
+  private updateMasterGain(): void {
+    if (this.masterGain && this.ctx) {
+      try {
+        const targetGain = this.isMuted() ? 0 : 1;
+        this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(targetGain, this.ctx.currentTime);
+      } catch {
+        // Ignorar defensivamente
+      }
+    }
+  }
+
   private initAudioContext(): void {
     const AudioCtxClass =
       (typeof globalThis !== 'undefined' && (globalThis as unknown as { AudioContext?: typeof AudioContext }).AudioContext) ||
@@ -181,6 +193,7 @@ export class AudioManager implements AudioService {
       this.masterGain = masterGain;
       this.musicGain = musicGain;
       this.sfxGain = sfxGain;
+      this.updateMasterGain();
     } catch {
       this.ctx = null;
       this.masterGain = null;
@@ -205,6 +218,8 @@ export class AudioManager implements AudioService {
       throw new Error(`AudioContext en estado no activo: ${this.ctx.state}`);
     }
 
+    this.updateMasterGain();
+
     if (this.musicEnabled && (this.desiredMusicTrack || this.currentMusicTrack) && !this.currentMusicSource) {
       const trackToPlay = this.desiredMusicTrack || this.currentMusicTrack;
       if (trackToPlay) {
@@ -227,6 +242,7 @@ export class AudioManager implements AudioService {
   public setMusicEnabled(enabled: boolean): void {
     this.musicEnabled = enabled;
     this.writePreferencesToStorage();
+    this.updateMasterGain();
 
     if (!this.musicEnabled) {
       this.stopActiveMusicSource({ fadeOutDurationMs: 0 });
@@ -247,6 +263,7 @@ export class AudioManager implements AudioService {
   public setSfxEnabled(enabled: boolean): void {
     this.sfxEnabled = enabled;
     this.writePreferencesToStorage();
+    this.updateMasterGain();
   }
 
   public toggleSfx(): boolean {
@@ -832,6 +849,10 @@ export class AudioManager implements AudioService {
   }
 
   public resumeMusic(options?: { fadeInDurationMs?: number }): void {
+    if (!this.musicEnabled) {
+      return;
+    }
+
     if (!this.isMusicPausedState && this.currentMusicSource) {
       return; // Ya está sonando activamente
     }
