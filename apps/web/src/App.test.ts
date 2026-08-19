@@ -331,6 +331,64 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
     wrapper.unmount();
   });
 
+  it('flujo completo de replay en Training: Game Over -> Volver a jugar -> nueva sesión jugable con nueva seed', async () => {
+    const { wrapper, router } = mountApp();
+    await router.isReady();
+
+    // 1. Iniciar partida de Training desde el menú principal
+    await wrapper.find('[data-testid="start-training-button"]').trigger('click');
+    await flushRouter(wrapper);
+
+    expect(mockCreatePhaserGame).toHaveBeenCalledTimes(1);
+    const initialSeed = mockCreatePhaserGame.mock.calls[0]![0].seed;
+    expect(typeof initialSeed).toBe('number');
+
+    // 2. Simular alcanzado el Game Over en Training
+    const stateUpdate1 = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
+    stateUpdate1({
+      status: 'gameOver',
+      step: 250,
+      elapsedMs: 15000,
+      nextPieces: ['I', 'J', 'L'],
+      heldPiece: 'T',
+      score: 1200,
+      clearedLines: 12,
+      combo: 1,
+      backToBack: 0,
+      combatEnergy: 0,
+      storedSabotages: [],
+      pendingGarbage: 0,
+      activeEffects: [],
+      level: 2,
+      baseGravityCellsPerSecond: 1.25,
+      activeGravityCellsPerSecond: 1.25,
+    });
+    await flushRouter(wrapper);
+
+    expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="session-status"]').text()).toBe('gameOver');
+
+    // 3. Pulsar "Volver a jugar" desde ResultsModal
+    await wrapper.find('[data-testid="replay-button"]').trigger('click');
+    await flushRouter(wrapper);
+
+    // 4. Verificaciones
+    // 4.1. Desaparece el estado de resultados/gameOver
+    expect(wrapper.find('[data-testid="results-modal"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="session-status"]').text()).toBe('running');
+
+    // 4.2. Se crea/restablece una partida válida en Phaser con una NUEVA seed
+    expect(mockCreatePhaserGame).toHaveBeenCalledTimes(2);
+    const replaySeed = mockCreatePhaserGame.mock.calls[1]![0].seed;
+    expect(typeof replaySeed).toBe('number');
+    expect(replaySeed).not.toBe(initialSeed);
+
+    // 4.3. El flujo queda preparado para aceptar input/jugar (pantalla de juego activa)
+    expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
   describe('Flujo de Activación de Audio e Integración del Modal Industrial en App.vue', () => {
     it('1. el modal aparece al arrancar si audioManager.isUnlocked() es false', () => {
       const manager = AudioManager.getInstance();

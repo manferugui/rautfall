@@ -631,6 +631,24 @@ async function doReplay(): Promise<void> {
   controller = null;
   gameResult.value = null;
   matchSeed.value = generateMatchSeed();
+  gameState.value = {
+    status: 'running',
+    step: 0,
+    elapsedMs: 0,
+    nextPieces: [],
+    heldPiece: null,
+    score: 0,
+    clearedLines: 0,
+    combo: 0,
+    backToBack: 0,
+    combatEnergy: 0,
+    storedSabotages: [],
+    pendingGarbage: 0,
+    activeEffects: [],
+    level: 1,
+    baseGravityCellsPerSecond: 1.0,
+    activeGravityCellsPerSecond: 1.0,
+  };
 
   const targetMode = gameMode.value;
   await nextTick();
@@ -965,6 +983,7 @@ function openDevTools(): void {
                 <div class="canvas-wrapper">
                   <GameCanvas
                     v-if="isCanvasMounted"
+                    :key="`${gameMode}-${matchSeed}`"
                     :mode="gameMode"
                     :bot-profile="selectedBotProfile"
                     :seed="matchSeed"

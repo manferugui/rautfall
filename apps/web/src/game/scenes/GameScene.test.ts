@@ -250,14 +250,17 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
     expect(onStateUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'running' }));
   });
 
-  it('KeyR actúa como hotkey fija reseteando la partida y reiniciando la música de gameplay', () => {
+  it('KeyR actúa como hotkey fija reseteando la partida con la misma semilla (seed) y reiniciando la música de gameplay', () => {
     const audioManager = getAudioManager();
     const restartSpy = vi.spyOn(audioManager, 'restartMusic').mockImplementation(() => {});
 
-    const { dispatchKeyDown } = setupSceneWithListeners();
+    const { scene, dispatchKeyDown } = setupSceneWithListeners();
+    const initialSeed = (scene as unknown as { getMatchSeed: () => number }).getMatchSeed();
 
     dispatchKeyDown('KeyR');
     expect(restartSpy).toHaveBeenCalledWith('gameplay');
+    const newSeed = (scene as unknown as { getMatchSeed: () => number }).getMatchSeed();
+    expect(newSeed).toBe(initialSeed);
 
     restartSpy.mockRestore();
   });
