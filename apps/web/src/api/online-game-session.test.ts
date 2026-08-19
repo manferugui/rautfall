@@ -189,4 +189,65 @@ describe('OnlineGameSession (online-game-session.ts)', () => {
     // Múltiples destrucciones no causan excepciones
     expect(() => session.destroy()).not.toThrow();
   });
+
+  it('al fallar la conexión WebSocket en createRoom(), establece el estado en error y notifica lastError', async () => {
+    class FailingWebSocket {
+      public static OPEN = 1;
+      public static CLOSED = 3;
+      public static CONNECTING = 0;
+      public readyState = FailingWebSocket.CONNECTING;
+      public url: string;
+      private listeners: Record<string, Array<(event: unknown) => void>> = {};
+
+      constructor(url: string) {
+        this.url = url;
+        setTimeout(() => {
+          this.readyState = FailingWebSocket.CLOSED;
+          this.dispatchEvent('error', new Event('error'));
+        }, 0);
+      }
+
+      public addEventListener(type: string, listener: (event: unknown) => void): void {
+        if (!this.listeners[type]) {
+          this.listeners[type] = [];
+        }
+        this.listeners[type].push(listener);
+      }
+
+      public removeEventListener(type: string, listener: (event: unknown) => void): void {
+        if (this.listeners[type]) {
+          this.listeners[type] = this.listeners[type].filter((l) => l !== listener);
+        }
+      }
+
+      public send(): void {}
+      public close(): void {}
+
+      public dispatchEvent(type: string, event: unknown): void {
+        if (this.listeners[type]) {
+          this.listeners[type].forEach((cb) => cb(event));
+        }
+      }
+    }
+
+    const session = new OnlineGameSession({
+      url: 'ws://localhost:3000/ws/rooms',
+      WebSocketClass: FailingWebSocket as unknown as typeof WebSocket,
+    });
+
+    const statusHistory: string[] = [];
+    session.onStatusChange((status: string) => statusHistory.push(status));
+
+    const createPromise = session.createRoom();
+    vi.runAllTimers();
+    await createPromise;
+
+    expect(session.status).toBe('error');
+    expect(session.lastError).toEqual(
+      expect.objectContaining({
+        code: 'CONNECTION_FAILED',
+      })
+    );
+    expect(statusHistory).toEqual(['connecting', 'error']);
+  });
 });

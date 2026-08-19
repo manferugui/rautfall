@@ -144,4 +144,32 @@ describe('OnlineRoomModal.vue', () => {
 
     wrapper.unmount();
   });
+
+  it('en caso de error de conexión en la vista de creación, muestra el aviso de error sin quedar bloqueado en GENERANDO...', async () => {
+    const mockSession = {
+      status: 'error',
+      roomCode: null,
+      lastError: {
+        code: 'CONNECTION_FAILED',
+        message: 'Fallo al conectar con el servidor WebSocket PvP',
+      },
+      onStatusChange: vi.fn(),
+      onError: vi.fn(),
+    };
+
+    const wrapper = mount(OnlineRoomModal, {
+      props: {
+        isOpen: true,
+        session: mockSession as unknown as OnlineGameSession,
+      },
+    });
+
+    await wrapper.find('[data-testid="create-room-button"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="room-code-display"]').text()).toBe('ERROR AL CONECTAR');
+    expect(wrapper.find('[data-testid="waiting-opponent-status"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="room-error-message"]').text()).toContain('Fallo al conectar con el servidor WebSocket PvP');
+
+    wrapper.unmount();
+  });
 });

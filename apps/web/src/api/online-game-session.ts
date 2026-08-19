@@ -150,15 +150,37 @@ export class OnlineGameSession {
   public async createRoom(): Promise<void> {
     this.setStatus('connecting');
     this._lastError = null;
-    await this.client.connect();
-    this.client.createRoom();
+    try {
+      await this.client.connect();
+      this.client.createRoom();
+    } catch (err) {
+      const errorMsg: ErrorServerMessage = {
+        type: 'error',
+        code: 'CONNECTION_FAILED',
+        message: err instanceof Error ? err.message : 'Fallo al conectar con el servidor WebSocket PvP',
+      };
+      this._lastError = errorMsg;
+      this.setStatus('error');
+      this.errorListeners.forEach((cb) => cb(errorMsg));
+    }
   }
 
   public async joinRoom(code: string): Promise<void> {
     this.setStatus('connecting');
     this._lastError = null;
-    await this.client.connect();
-    this.client.joinRoom(code);
+    try {
+      await this.client.connect();
+      this.client.joinRoom(code);
+    } catch (err) {
+      const errorMsg: ErrorServerMessage = {
+        type: 'error',
+        code: 'CONNECTION_FAILED',
+        message: err instanceof Error ? err.message : 'Fallo al conectar con el servidor WebSocket PvP',
+      };
+      this._lastError = errorMsg;
+      this.setStatus('error');
+      this.errorListeners.forEach((cb) => cb(errorMsg));
+    }
   }
 
   /**

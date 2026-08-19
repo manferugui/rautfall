@@ -41,7 +41,7 @@ export class OnlinePvPClient {
   }
 
   public connect(): Promise<void> {
-    if (this.socket) {
+    if (this.socket && this.socket.readyState === this.WebSocketClass.OPEN) {
       return Promise.resolve();
     }
 
@@ -56,23 +56,36 @@ export class OnlinePvPClient {
 
         let openHandler: (() => void) | null = null;
         let errorHandler: ((evt: Event) => void) | null = null;
+        let connectCloseHandler: ((evt: CloseEvent) => void) | null = null;
+
+        const cleanup = () => {
+          if (openHandler) ws.removeEventListener('open', openHandler);
+          if (errorHandler) ws.removeEventListener('error', errorHandler);
+          if (connectCloseHandler) ws.removeEventListener('close', connectCloseHandler);
+        };
 
         openHandler = () => {
           if (ws.readyState === this.WebSocketClass.OPEN) {
-            if (openHandler) ws.removeEventListener('open', openHandler);
-            if (errorHandler) ws.removeEventListener('error', errorHandler);
+            cleanup();
             resolve();
           }
         };
 
         errorHandler = () => {
-          if (openHandler) ws.removeEventListener('open', openHandler);
-          if (errorHandler) ws.removeEventListener('error', errorHandler);
+          cleanup();
+          this.socket = null;
           reject(new Error('Fallo al conectar con el servidor WebSocket PvP'));
+        };
+
+        connectCloseHandler = () => {
+          cleanup();
+          this.socket = null;
+          reject(new Error('Conexión cerrada antes de establecerse con el servidor PvP'));
         };
 
         ws.addEventListener('open', openHandler);
         ws.addEventListener('error', errorHandler);
+        ws.addEventListener('close', connectCloseHandler);
 
         ws.addEventListener('message', (event: MessageEvent) => {
           this.handleMessage(event.data);
@@ -83,7 +96,6 @@ export class OnlinePvPClient {
         });
 
         ws.addEventListener('error', () => {
-          // Si ya estaba abierto, notificar a los listeners de error
           if (ws.readyState !== this.WebSocketClass.CONNECTING) {
             this.notifyError({
               type: 'error',

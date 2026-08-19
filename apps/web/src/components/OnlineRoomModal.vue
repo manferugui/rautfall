@@ -55,6 +55,8 @@ watch(
         localErrorMessage.value = 'LA SALA YA ESTÁ COMPLETA O EN PARTIDA';
       } else if (err.code === 'ALREADY_IN_ROOM') {
         localErrorMessage.value = 'YA TIENES UNA SALA ACTIVA';
+      } else if (err.code === 'CONNECTION_FAILED' || err.code === 'WEBSOCKET_ERROR') {
+        localErrorMessage.value = err.message || 'NO SE PUDO CONECTAR CON EL SERVIDOR PVP';
       } else {
         localErrorMessage.value = err.message || 'ERROR DE CONEXIÓN CON LA SALA';
       }
@@ -68,7 +70,9 @@ watch(
 function handleSelectCreate(): void {
   audioManager.playSfx('uiClick');
   activeSubView.value = 'create';
-  localErrorMessage.value = null;
+  if (!props.session?.lastError) {
+    localErrorMessage.value = null;
+  }
   emit('startCreate');
 }
 
@@ -76,7 +80,9 @@ function handleSelectJoinView(): void {
   audioManager.playSfx('uiClick');
   activeSubView.value = 'join';
   inputCode.value = '';
-  localErrorMessage.value = null;
+  if (!props.session?.lastError) {
+    localErrorMessage.value = null;
+  }
 }
 
 function handleConfirmJoin(): void {
@@ -166,12 +172,15 @@ onUnmounted(() => {
             <span class="code-label">CÓDIGO DE SALA</span>
             <div class="code-box" data-testid="room-code-display">
               <span v-if="roomCode" class="code-text">{{ roomCode }}</span>
+              <span v-else-if="sessionStatus === 'error'" class="code-error">ERROR AL CONECTAR</span>
               <span v-else class="code-loading">GENERANDO...</span>
             </div>
-            <p class="code-instructions">Comparte este código de 5 caracteres con tu rival</p>
+            <p class="code-instructions">
+              {{ sessionStatus === 'error' ? 'No se pudo conectar con el servidor PvP' : 'Comparte este código de 5 caracteres con tu rival' }}
+            </p>
           </div>
 
-          <div class="waiting-indicator" data-testid="waiting-opponent-status">
+          <div v-if="sessionStatus !== 'error'" class="waiting-indicator" data-testid="waiting-opponent-status">
             <div class="pulse-beacon" aria-hidden="true"></div>
             <span>ESPERANDO AL RIVAL...</span>
           </div>
