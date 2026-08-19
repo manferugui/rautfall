@@ -46,6 +46,7 @@ const emit = defineEmits<{
   (e: 'openHistory'): void;
   (e: 'openRanking'): void;
   (e: 'openDevTools'): void;
+  (e: 'openOnlinePvP'): void;
 }>();
 
 const audioManager = getAudioManager();
@@ -79,6 +80,12 @@ function onSelectMode(mode: GameMode): void {
   } else {
     emit('selectMode', mode);
   }
+}
+
+function onOpenOnlinePvP(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  emit('openOnlinePvP');
 }
 
 function onOpenSettings(): void {
@@ -254,6 +261,21 @@ function onOpenDevTools(): void {
               </div>
             </button>
           </div>
+
+          <button
+            type="button"
+            class="mode-module mode-module--online"
+            data-testid="start-online-pvp-button"
+            @click="onOpenOnlinePvP"
+          >
+            <div class="mode-module-plate" aria-hidden="true"></div>
+            <div class="mode-module-bezel" aria-hidden="true"></div>
+            <div class="mode-module-face">
+              <span class="mode-module-title">CONTRA JUGADOR</span>
+              <span class="mode-module-desc">Combate 2P online autoritativo en tiempo real</span>
+              <span class="mode-module-tag">2P · ONLINE PVP</span>
+            </div>
+          </button>
         </div>
 
         <!-- Controles de teclado: módulo técnico secundario, mismo lenguaje de consola -->

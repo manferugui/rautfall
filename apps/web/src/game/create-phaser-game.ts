@@ -11,15 +11,19 @@ import { GameScene, type GameSceneCallbacks } from './scenes/GameScene';
 import type { GameMode, GamePresentationState, PhaserGameController } from './types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './coordinates';
 
+import type { OnlineGameSession } from '../api/online-game-session';
+
 export type CreatePhaserGameOptions = {
   /** Elemento DOM que contendrá el canvas de Phaser. */
   parent: HTMLElement;
-  /** Modo de juego seleccionado para la sesión ('training' | 'battle'). */
+  /** Modo de juego seleccionado para la sesión ('training' | 'battle' | 'online'). */
   mode?: GameMode;
   /** Perfil de dificultad del bot rival en modo batalla. */
   botProfile?: BotProfileId | undefined;
   /** Semilla opcional explícita para la partida (si no se indica, GameScene generará una nueva). */
   seed?: number | undefined;
+  /** Sesión multijugador online opcional. */
+  onlineSession?: OnlineGameSession | undefined;
   /** Callback para notificar cambios de estado a Vue. */
   onStateUpdate: (state: GamePresentationState) => void;
 };
@@ -57,6 +61,7 @@ export function createPhaserGame(options: CreatePhaserGameOptions): PhaserGameCo
     mode: options.mode ?? 'training',
     seed: options.seed,
     botProfile: options.botProfile,
+    onlineSession: options.onlineSession,
   });
 
   return {

@@ -1012,3 +1012,25 @@ Ver [Informe de implementación](implementation/0041-transporte-websocket-salas-
 - 9 nuevas pruebas unitarias y de integración en `apps/api/test/rooms/room-game-runtime.test.ts` y `apps/api/test/routes/rooms-ws-gameplay.test.ts`.
 - Validaciones raíz `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde (1025 pruebas pasadas).
 Ver [Informe de implementación](implementation/0042-runtime-autoritativo-gameplay-pvp-servidor.md).
+
+## Task [0043 — Cliente web PvP online](tasks/0043-cliente-web-pvp-online.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-19 |
+| **Resultado** | Cliente web PvP online implementado en `apps/web` integrando el runtime autoritativo del servidor (Tarea 0042) mediante protocolo WebSocket tipado. Capa de red desacoplada (`OnlinePvPClient`), capa de sesión y traducción de entrada event-driven (`OnlineGameSession`), interfaz gráfica modal Industrial Dramatic para crear y unirse a salas con código de 5 caracteres (`OnlineRoomModal.vue`), cero ejecución de motor/bot local en modo `'online'`, renderizado autoritativo continuo a 20 Hz con actualización de `OpponentMonitor.vue`, integración de resultados sin persistencia HTTP (`ResultsModal.vue` reutilizado) y desconexión limpia. 1032 tests en verde en el monorepo, lint, typecheck, build y `git diff --check` limpios. |
+
+### Resumen
+
+- `getWsApiUrl()` en `apps/web/src/api/client.ts` para resolución dinámica de WebSocket (`VITE_WS_BASE_URL` $\to$ derivación de `VITE_API_BASE_URL` $\to$ fallback de origen).
+- `OnlinePvPClient` (`apps/web/src/api/pvp-ws-client.ts`): capa pura de red sin Phaser ni DOM.
+- `OnlineGameSession` (`apps/web/src/api/online-game-session.ts`): capa de sesión/presentación que mantiene `heldState` y emite snapshots completos `WsStepInput` exclusivamente por eventos de teclado (`keydown`, `keyup`, `blur`). Cero polling de entrada desde `update()`.
+- `OnlineRoomModal.vue` (`apps/web/src/components/OnlineRoomModal.vue`): modal de UI Industrial Dramatic con pestañas CREAR / UNIRSE, visualización de código de 5 caracteres, estado de espera y banner de error contractual.
+- `GameScene.ts` en modo `'online'`: desactiva el motor local, bot local y acumulador temporal. Escucha teclado directo y renderiza a partir de `latestGameState` difundido a 20 Hz por el servidor.
+- `OpponentMonitor.vue`: visualización en tiempo real del tablero del oponente a partir del snapshot autoritativo recibido del servidor.
+- `ResultsModal.vue`: reutilizado en partidas online para mostrar el resultado (Victoria / Derrota / Empate) ocultando la firma de operador y omitiendo la llamada a `POST /api/matches`.
+- Pruebas unitarias de red, sesión, componente modal y escena Phaser en `apps/web/src/api/` y `apps/web/src/components/`.
+- Validaciones raíz `pnpm test` (1032 tests), `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
+
+Ver [Informe de implementación](implementation/0043-cliente-web-pvp-online.md).

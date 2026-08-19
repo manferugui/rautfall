@@ -62,10 +62,11 @@ const formattedTime = computed(() => {
   return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
 });
 
-const isBattle = computed(() => props.result.mode === 'battle');
+const isBattle = computed(() => props.result.mode === 'battle' || props.result.mode === 'online');
+const isOnline = computed(() => props.result.mode === 'online');
 
 const outcomeState = computed(() => {
-  if (!isBattle.value) return 'training';
+  if (props.result.mode === 'training') return 'training';
   const winner = props.result.battleResult?.winner;
   if (winner === 'playerOne') return 'victory';
   if (winner === 'playerTwo') return 'defeat';
@@ -210,8 +211,8 @@ onUnmounted(() => {
 
         <div class="results-divider"></div>
 
-        <!-- 3. Módulo de Firma de Operador Integrado (Celdas Arcade) -->
-        <div class="operator-signature-block rf-panel-inset" data-testid="operator-signature-block" @click="focusTagZone">
+        <!-- 3. Módulo de Firma de Operador Integrado (Celdas Arcade, solo en modo local) -->
+        <div v-if="!isOnline" class="operator-signature-block rf-panel-inset" data-testid="operator-signature-block" @click="focusTagZone">
           <div class="signature-header">
             <span class="signature-title">FIRMA DE OPERADOR</span>
             <span class="signature-subtext">3 CARACTERES · A-Z / 0-9</span>
@@ -249,10 +250,10 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="results-divider"></div>
+        <div v-if="!isOnline" class="results-divider"></div>
 
-        <!-- 4. Acción Primaria (Confirmar Resultado) -->
-        <div class="primary-action-block">
+        <!-- 4. Acción Primaria (Confirmar Resultado, solo en modo local) -->
+        <div v-if="!isOnline" class="primary-action-block">
           <button
             type="button"
             class="rf-btn-tactical rf-btn-primary confirm-save-btn"

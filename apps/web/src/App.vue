@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, shallowRef, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import { setActiveResultHandler } from './router';
 import GameCanvas from './components/GameCanvas.vue';
@@ -29,6 +29,8 @@ import type { BotProfileId } from '@rautfall/battle-engine';
 import { generateMatchSeed } from './game/seed';
 import { hasAnyDevDemoQueryParam } from './dev/dev-demos';
 import { defineAsyncComponent, type Component } from 'vue';
+import OnlineRoomModal from './components/OnlineRoomModal.vue';
+import { OnlineGameSession } from './api/online-game-session';
 
 const SfxLabComponent: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./components/SfxLab.vue'))
@@ -93,7 +95,10 @@ const isDevDebugPanel = computed(
   () => import.meta.env.DEV && (isDebugPanelActive() || activeRouteQuery.value['debug-panel'] === '1'),
 );
 
+const isOnlineActive = ref(false);
+
 const gameMode = computed<GameMode>(() => {
+  if (isOnlineActive.value || activeRouteQuery.value['online'] === '1') return 'online';
   const name = currentRouteName.value;
   if (name === 'battle') return 'battle';
   if (name === 'training') return 'training';
@@ -429,7 +434,54 @@ function updateOperatorTagState(): void {
 let currentClientMatchId = crypto.randomUUID();
 const submittedMatchIdsSet = new Set<string>();
 
-const rankingInitialMode = ref<GameMode>('battle');
+const onlineSession = shallowRef<OnlineGameSession | null>(null);
+const isOnlineModalOpen = ref(false);
+
+function destroyOnlineSession(): void {
+  if (onlineSession.value) {
+    onlineSession.value.destroy();
+    onlineSession.value = null;
+  }
+  isOnlineActive.value = false;
+}
+
+function openOnlinePvPModal(): void {
+  void audioManager.unlock();
+  audioManager.playSfx('uiClick');
+  destroyOnlineSession();
+  const session = new OnlineGameSession();
+  onlineSession.value = session;
+
+  session.onStatusChange((status) => {
+    if (status === 'playing') {
+      isOnlineActive.value = true;
+      isOnlineModalOpen.value = false;
+      audioManager.playMusic('gameplay');
+      pushRoute('battle', { online: '1' });
+    }
+  });
+
+  isOnlineModalOpen.value = true;
+}
+
+function handleStartCreateOnline(): void {
+  if (onlineSession.value) {
+    void onlineSession.value.createRoom().catch(() => {});
+  }
+}
+
+function handleStartJoinOnline(code: string): void {
+  if (onlineSession.value) {
+    void onlineSession.value.joinRoom(code).catch(() => {});
+  }
+}
+
+function handleCancelOnlineModal(): void {
+  isOnlineModalOpen.value = false;
+  destroyOnlineSession();
+}
+
+const rankingInitialMode = ref<'training' | 'battle'>('battle');
 
 async function confirmAndSaveMatchResult(rawTag: string): Promise<void> {
   const normalizedTag = rawTag ? rawTag.trim().toUpperCase() : '';
@@ -493,7 +545,9 @@ async function confirmAndSaveMatchResult(rawTag: string): Promise<void> {
     // REQUISITO 9 & 20: Capturar modo y navegar a Ranking de ese modo
     const completedMode = matchData.mode;
     pendingMatchResult.value = null;
-    rankingInitialMode.value = completedMode;
+    if (completedMode === 'training' || completedMode === 'battle') {
+      rankingInitialMode.value = completedMode;
+    }
     replaceRoute('ranking');
   } catch {
     submittedMatchIdsSet.delete(matchData.clientMatchId);
@@ -506,6 +560,50 @@ function onStateUpdate(state: GamePresentationState): void {
 
   const isEngineGameOver = state.status === 'gameOver';
   const isBattleEnded = Boolean(state.battleState && state.battleState.status !== 'running');
+
+  if (gameMode.value === 'online') {
+    if (isEngineGameOver || isBattleEnded || onlineSession.value?.status === 'ended') {
+      if (currentRouteName.value !== 'results') {
+        const winner = state.battleState?.winner ?? onlineSession.value?.latestGameState?.winner ?? null;
+        const role = onlineSession.value?.role;
+        let title = 'PARTIDA FINALIZADA';
+        let subtitle: string | undefined = undefined;
+
+        if (winner === role) {
+          title = 'VICTORIA';
+          subtitle = 'Has dominado el combate online';
+        } else if (winner === 'draw') {
+          title = 'EMPATE';
+          subtitle = 'Ambos tableros colapsaron simultáneamente';
+        } else if (winner !== null) {
+          title = 'DERROTA';
+          subtitle = 'El rival ha dominado el combate online';
+        }
+
+        gameResult.value = {
+          mode: 'online',
+          title,
+          subtitle,
+          score: state.score,
+          linesCleared: state.clearedLines,
+          level: state.level,
+          elapsedMs: state.elapsedMs,
+          battleResult: state.battleState
+            ? {
+                status: state.battleState.status,
+                winner: state.battleState.winner,
+                step: state.battleState.step,
+              }
+            : undefined,
+        };
+
+        pendingMatchResult.value = null;
+        saveStatus.value = 'idle';
+        pushRoute('results');
+      }
+    }
+    return;
+  }
 
   if (!isDevDemo.value && (isEngineGameOver || isBattleEnded) && (currentRouteName.value === 'training' || currentRouteName.value === 'battle')) {
     let title = 'ENTRENAMIENTO FINALIZADO';
@@ -656,6 +754,7 @@ async function doReplay(): Promise<void> {
 }
 
 function goToMenu(): void {
+  destroyOnlineSession();
   audioManager.playSfx('uiClick');
   audioManager.playMusic('menu');
   controller = null;
@@ -666,6 +765,7 @@ function goToMenu(): void {
 }
 
 function returnToMenu(): void {
+  destroyOnlineSession();
   audioManager.playSfx('uiClick');
   audioManager.playMusic('menu');
   pushRoute('home');
@@ -711,6 +811,7 @@ function openDevTools(): void {
       <ModeSelector
         v-if="currentRouteName === 'home'"
         @select-mode="selectMode"
+        @open-online-pvp="openOnlinePvPModal"
         @open-settings="openSettings"
         @open-history="openHistory"
         @open-ranking="openRanking"
@@ -987,6 +1088,7 @@ function openDevTools(): void {
                     :mode="gameMode"
                     :bot-profile="selectedBotProfile"
                     :seed="matchSeed"
+                    :online-session="onlineSession"
                     :on-state-update="onStateUpdate"
                     @controller-ready="onControllerReady"
                   />
@@ -1054,7 +1156,7 @@ function openDevTools(): void {
           </div>
 
           <!-- COLUMNA 5: OPPONENT MONITOR -->
-          <div v-if="gameMode === 'battle'" class="column-opponent" data-testid="opponent-column">
+          <div v-if="gameMode === 'battle' || gameMode === 'online'" class="column-opponent" data-testid="opponent-column">
             <OpponentMonitor
               :mode="gameMode"
               :player-two="gameState.battleState?.playerTwo ?? null"
@@ -1231,6 +1333,15 @@ function openDevTools(): void {
         :initial-tag="currentOperatorTag || ''"
         @confirm="handleTagConfirmed"
         @cancel="handleTagCancelled"
+      />
+
+      <!-- Modal de Sala PvP Online -->
+      <OnlineRoomModal
+        :is-open="isOnlineModalOpen"
+        :session="onlineSession"
+        @start-create="handleStartCreateOnline"
+        @start-join="handleStartJoinOnline"
+        @cancel="handleCancelOnlineModal"
       />
 
       <!-- Popup Industrial de Activación de Audio -->

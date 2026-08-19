@@ -15,9 +15,9 @@
  */
 
 import Phaser from 'phaser';
-import { createGameEngine, type GameEngine, type PieceType } from '@rautfall/game-engine';
+import { createGameEngine, type GameEngine, type PieceType, type EngineSnapshot, type SabotageType, type ActiveEffectSnapshot } from '@rautfall/game-engine';
 import { prototypeConfig } from '@rautfall/game-config';
-import type { GameMode, GamePresentationState, BotDevDiagnostic, SabotageBlockedDetails, SabotageLaunchedDetails } from '../types';
+import type { GameMode, GamePresentationState, SessionStatus, BotDevDiagnostic, SabotageBlockedDetails, SabotageLaunchedDetails } from '../types';
 import { computeSteps } from '../time-adapter';
 import { buildStepInput, type KeyState } from '../input-buffer';
 import { logDebug, snapshotResult, snapshotFrameEvents, isAdapterRelevant, shouldLogEngineResult, hasImportantEngineEvent } from '../input-debug';
@@ -38,13 +38,18 @@ import {
   type BattleSession,
   type BotProfileId,
   type DeterministicBot,
+  type BattleEvent,
+  type BattleStatus,
+  type BattleParticipantStateSnapshot,
 } from '@rautfall/battle-engine';
+import type { OnlineGameSession } from '../../api/online-game-session';
 
 export type GameSceneData = {
   callbacks: GameSceneCallbacks;
   mode?: GameMode;
   seed?: number | undefined;
   botProfile?: BotProfileId | undefined;
+  onlineSession?: OnlineGameSession | undefined;
 };
 import { getLevelDemoTarget, createLevelDemoEngine } from '../level-demo';
 import { armReleaseGuard, clearReleaseGuardKey, resolveHeld, NO_RELEASE_GUARD, type ReleaseGuard } from '../input-release-guard';
@@ -92,6 +97,9 @@ export type GameSceneCallbacks = {
 export class GameScene extends Phaser.Scene {
   private mode: GameMode = 'training';
   private botProfile?: BotProfileId | undefined;
+  private onlineSession: OnlineGameSession | null = null;
+  private unbindOnlineSessionFns: Array<() => void> = [];
+  private windowBlurCleaner: (() => void) | null = null;
   private engine!: GameEngine;
   private battleSession: BattleSession | null = null;
   private playerTwoBot: DeterministicBot | null = null;
@@ -207,6 +215,7 @@ export class GameScene extends Phaser.Scene {
     this.mode = data.mode ?? 'training';
     this.matchSeed = data.seed ?? generateMatchSeed();
     this.botProfile = data.botProfile;
+    this.onlineSession = data.onlineSession ?? null;
   }
 
   getMatchSeed(): number {
@@ -219,7 +228,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingPressedActions.clear();
     this.pendingHorizontal = null;
 
-    this.resetEngine();
+    if (this.mode !== 'online') {
+      this.resetEngine();
+    }
 
     this.graphics = this.add.graphics();
     this.graphics.setPosition(0, 0);
@@ -231,6 +242,81 @@ export class GameScene extends Phaser.Scene {
     // Suscribir shutdown() una sola vez a los eventos de ciclo de vida
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
     this.events.once(Phaser.Scenes.Events.DESTROY, this.shutdown, this);
+
+    if (this.mode === 'online') {
+      const onKeyDown = (event: KeyboardEvent): void => {
+        void getAudioManager().unlock();
+
+        if (event.code === 'Escape' || event.code === 'KeyR') return;
+
+        const action = getActionByCode(this.controlBindings, event.code);
+        if (action !== null && (event.code === 'Space' || event.code.startsWith('Arrow') || event.code.startsWith('Alt'))) {
+          event.preventDefault();
+        }
+
+        if (event.repeat) return;
+
+        if (action !== null && this.onlineSession) {
+          this.onlineSession.handleKeyDown(action);
+        }
+      };
+
+      const onKeyUp = (event: KeyboardEvent): void => {
+        const action = getActionByCode(this.controlBindings, event.code);
+        if (action !== null && this.onlineSession) {
+          this.onlineSession.handleKeyUp(action);
+        }
+      };
+
+      const onWindowBlur = (): void => {
+        if (this.onlineSession) {
+          this.onlineSession.handleBlur();
+        }
+      };
+
+      this.input.keyboard!.on('keydown', onKeyDown);
+      this.input.keyboard!.on('keyup', onKeyUp);
+      window.addEventListener('blur', onWindowBlur);
+
+      this.horizontalListeners = () => {
+        this.input.keyboard!.off('keydown', onKeyDown);
+        this.input.keyboard!.off('keyup', onKeyUp);
+      };
+
+      this.windowBlurCleaner = () => {
+        window.removeEventListener('blur', onWindowBlur);
+      };
+
+      if (this.onlineSession) {
+        const unbindState = this.onlineSession.onGameState((msg) => {
+          for (const event of msg.events) {
+            getAudioManager().handleBattleEvent(event as unknown as BattleEvent);
+            if (
+              event.type === 'participantEvent' &&
+              event.participant === this.onlineSession?.role &&
+              event.event.type === 'garbageApplied'
+            ) {
+              this.triggerGarbageImpact(event.event.linesCount);
+            }
+          }
+          this.renderFrame();
+          this.notifyState();
+        });
+
+        const unbindEnded = this.onlineSession.onBattleEnded(() => {
+          this.notifyState();
+        });
+
+        const unbindDisc = this.onlineSession.onPlayerDisconnected(() => {
+          this.notifyState();
+        });
+
+        this.unbindOnlineSessionFns = [unbindState, unbindEnded, unbindDisc];
+      }
+
+      this.notifyState();
+      return;
+    }
 
     // Registrar listener de keydown para el orden real de pulsaciones horizontales y acciones discretas.
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -323,6 +409,13 @@ export class GameScene extends Phaser.Scene {
       this.horizontalListeners();
       this.horizontalListeners = null;
     }
+    if (this.windowBlurCleaner) {
+      this.windowBlurCleaner();
+      this.windowBlurCleaner = null;
+    }
+    this.unbindOnlineSessionFns.forEach((fn) => fn());
+    this.unbindOnlineSessionFns = [];
+
     this.physicallyHeldCodes.clear();
     this.pendingPressedActions.clear();
     this.pendingHorizontal = null;
@@ -344,6 +437,11 @@ export class GameScene extends Phaser.Scene {
     // Actualizar temporizador de FX de residuos
     if (this.garbageImpactRemainingMs > 0) {
       this.garbageImpactRemainingMs = Math.max(0, this.garbageImpactRemainingMs - delta);
+    }
+
+    if (this.mode === 'online') {
+      this.renderFrame();
+      return;
     }
 
     // Reiniciar banderas de consumo al empezar el frame
@@ -560,6 +658,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   resetGame(): void {
+    if (this.mode === 'online') return;
     getAudioManager().restartMusic('gameplay');
     this.resetEngine();
     this.accumulator = 0;
@@ -574,6 +673,7 @@ export class GameScene extends Phaser.Scene {
    * botón Vue llaman exactamente a este método.
    */
   togglePause(): void {
+    if (this.mode === 'online') return;
     const engineStatus = this.engine.getSnapshot().status;
     if (!canTogglePause(engineStatus)) return;
 
@@ -808,7 +908,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderFrame(): void {
-      const snap = this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot();
+      const snap = this.mode === 'online'
+        ? (this.onlineSession?.latestGameState?.self ?? null)
+        : (this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot());
+
+      if (!snap) return;
 
       const fxState = this.getGarbageImpactFXState();
       if (fxState.active) {
@@ -920,6 +1024,58 @@ export class GameScene extends Phaser.Scene {
     }
 
   private notifyState(): void {
+    if (this.mode === 'online') {
+      const msg = this.onlineSession?.latestGameState;
+      if (!msg) return;
+
+      const selfSnap = msg.self;
+      let sessionStatus: SessionStatus = 'running';
+      if (msg.status !== 'running' || this.onlineSession?.status === 'ended') {
+        sessionStatus = 'gameOver';
+      }
+
+      const battleWinner = msg.winner ?? (msg.status === 'running' ? null : 'draw');
+      const bStatus: BattleStatus = msg.status === 'running' ? 'running' : (msg.status as BattleStatus);
+
+      const newState: GamePresentationState = {
+        status: sessionStatus,
+        step: msg.step,
+        elapsedMs: msg.elapsedMs,
+        nextPieces: [...selfSnap.nextPieces] as PieceType[],
+        heldPiece: selfSnap.heldPiece as PieceType | null,
+        score: selfSnap.score,
+        clearedLines: selfSnap.clearedLines,
+        combo: selfSnap.combo,
+        backToBack: selfSnap.backToBack,
+        combatEnergy: selfSnap.combatEnergy,
+        storedSabotages: [...selfSnap.storedSabotages] as SabotageType[],
+        pendingGarbage: selfSnap.pendingGarbage,
+        activeEffects: [...selfSnap.activeEffects] as ActiveEffectSnapshot[],
+        level: selfSnap.level,
+        baseGravityCellsPerSecond: 1.0,
+        activeGravityCellsPerSecond: 1.0,
+        lastSabotageLaunchedDetails: this.lastSabotageLaunchedDetails,
+        battleState: {
+          status: bStatus,
+          winner: battleWinner,
+          step: msg.step,
+          lastSabotageRouted: this.lastSabotageRouted,
+          lastSabotageBlocked: this.lastSabotageBlocked,
+          lastSabotageBlockedDetails: this.lastSabotageBlockedDetails,
+          suddenDeathPhase: msg.suddenDeath?.phase ?? null,
+          playerOneState: msg.selfState as BattleParticipantStateSnapshot,
+          playerTwo: mapEngineToOpponentPresentation(
+            msg.opponent as unknown as EngineSnapshot,
+            msg.opponentState as BattleParticipantStateSnapshot,
+          ),
+        },
+      };
+
+      this.lastState = newState;
+      this.callbacks.onStateUpdate(newState);
+      return;
+    }
+
     const snap = this.battleSession ? this.battleSession.getSnapshot().playerOne : this.engine.getSnapshot();
     let newState: GamePresentationState = {
       status: computeSessionStatus(snap.status, this.isPaused),

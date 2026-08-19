@@ -31,6 +31,26 @@ export function getApiBaseUrl(): string {
   return 'http://localhost:3000';
 }
 
+export function getWsApiUrl(): string {
+  const envWsUrl = import.meta.env.VITE_WS_BASE_URL as string | undefined;
+  if (envWsUrl && envWsUrl.trim().length > 0) {
+    const clean = envWsUrl.trim().replace(/\/+$/, '');
+    return clean.endsWith('/ws/rooms') ? clean : `${clean}/ws/rooms`;
+  }
+
+  const httpBaseUrl = getApiBaseUrl();
+  if (httpBaseUrl.length > 0) {
+    const wsProtoUrl = httpBaseUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+    const clean = wsProtoUrl.replace(/\/+$/, '');
+    return clean.endsWith('/ws/rooms') ? clean : `${clean}/ws/rooms`;
+  }
+
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+  return `${protocol}//${host}/ws/rooms`;
+}
+
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path}`;

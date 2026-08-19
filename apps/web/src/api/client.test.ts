@@ -1,5 +1,5 @@
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
-import { submitMatch, getMatchHistory, getRanking, getHealth, getApiBaseUrl, ApiClientError } from './client';
+import { submitMatch, getMatchHistory, getRanking, getHealth, getApiBaseUrl, getWsApiUrl, ApiClientError } from './client';
 import type { CreateMatchInput } from '@rautfall/contracts';
 
 describe('Cliente API HTTP (client.ts)', () => {
@@ -10,6 +10,7 @@ describe('Cliente API HTTP (client.ts)', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   const validMatchInput: CreateMatchInput = {
@@ -29,6 +30,39 @@ describe('Cliente API HTTP (client.ts)', () => {
     const url = getApiBaseUrl();
     expect(url).toBe('http://localhost:3000');
   });
+
+  it('resuelve correctamente la URL base de WebSocket con getWsApiUrl()', () => {
+    const wsUrl = getWsApiUrl();
+    expect(wsUrl).toBe('ws://localhost:3000/ws/rooms');
+  });
+
+  it('getWsApiUrl maneja VITE_WS_BASE_URL con o sin slash final y con o sin /ws/rooms', () => {
+    vi.stubEnv('VITE_WS_BASE_URL', 'ws://api.rautfall.com');
+    expect(getWsApiUrl()).toBe('ws://api.rautfall.com/ws/rooms');
+
+    vi.stubEnv('VITE_WS_BASE_URL', 'ws://api.rautfall.com/');
+    expect(getWsApiUrl()).toBe('ws://api.rautfall.com/ws/rooms');
+
+    vi.stubEnv('VITE_WS_BASE_URL', 'wss://api.rautfall.com/ws/rooms');
+    expect(getWsApiUrl()).toBe('wss://api.rautfall.com/ws/rooms');
+
+    vi.stubEnv('VITE_WS_BASE_URL', 'wss://api.rautfall.com/ws/rooms/');
+    expect(getWsApiUrl()).toBe('wss://api.rautfall.com/ws/rooms');
+  });
+
+  it('getWsApiUrl deriva la URL de WebSocket a partir de VITE_API_BASE_URL (HTTP/HTTPS y slashes)', () => {
+    vi.stubEnv('VITE_WS_BASE_URL', '');
+
+    vi.stubEnv('VITE_API_BASE_URL', 'http://api.rautfall.com');
+    expect(getWsApiUrl()).toBe('ws://api.rautfall.com/ws/rooms');
+
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.rautfall.com/');
+    expect(getWsApiUrl()).toBe('wss://api.rautfall.com/ws/rooms');
+
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.rautfall.com/ws/rooms');
+    expect(getWsApiUrl()).toBe('wss://api.rautfall.com/ws/rooms');
+  });
+
 
   it('submitMatch envía POST a /api/matches y devuelve el registro', async () => {
     const mockRecord = { ...validMatchInput, id: '22222222-2222-4222-8222-222222222222', createdAt: new Date().toISOString() };

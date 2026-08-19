@@ -42,6 +42,7 @@ import { GameScene } from './GameScene';
 import { saveUserSettings } from '../../settings/settings-storage';
 import { DEFAULT_CONTROL_BINDINGS } from '../../settings/control-bindings';
 import type { BattleSession } from '@rautfall/battle-engine';
+import type { OnlineGameSession } from '../../api/online-game-session';
 
 describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/ARR y hotkeys fijas', () => {
   beforeEach(() => {
@@ -617,6 +618,94 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       expect(diag!.maxActionsInSingleStep).toBe(1);
 
       window.history.pushState({}, '', '/');
+    });
+  });
+
+  describe('Modo Online PvP (mode === "online")', () => {
+    it('no crea ni avanza GameEngine local y delega las pulsaciones físicas a onlineSession', () => {
+      const onStateUpdate = vi.fn();
+      const mockOnlineSession = {
+        status: 'playing',
+        role: 'playerOne',
+        latestGameState: {
+          step: 42,
+          elapsedMs: 420,
+          status: 'running',
+          winner: null,
+          events: [],
+          self: {
+            board: Array.from({ length: 24 }, () => Array.from({ length: 10 }, () => null)),
+            activePiece: null,
+            nextPieces: ['I', 'J', 'L'],
+            heldPiece: null,
+            score: 100,
+            clearedLines: 2,
+            combo: 0,
+            backToBack: 0,
+            combatEnergy: 20,
+            storedSabotages: [],
+            pendingGarbage: 0,
+            activeEffects: [],
+            level: 1,
+          },
+          selfState: {},
+          opponent: {
+            board: Array.from({ length: 24 }, () => Array.from({ length: 10 }, () => null)),
+            activePiece: null,
+            nextPieces: ['S', 'Z'],
+            heldPiece: null,
+            score: 50,
+            clearedLines: 0,
+            combo: 0,
+            backToBack: 0,
+            combatEnergy: 0,
+            storedSabotages: [],
+            pendingGarbage: 0,
+            activeEffects: [],
+            level: 1,
+            status: 'running',
+          },
+          opponentState: {},
+        },
+        handleKeyDown: vi.fn(),
+        handleKeyUp: vi.fn(),
+        handleBlur: vi.fn(),
+        onGameState: vi.fn().mockReturnValue(() => {}),
+        onBattleEnded: vi.fn().mockReturnValue(() => {}),
+        onPlayerDisconnected: vi.fn().mockReturnValue(() => {}),
+      };
+
+      const scene = new GameScene();
+      scene.init({
+        callbacks: { onStateUpdate },
+        mode: 'online',
+        onlineSession: mockOnlineSession as unknown as OnlineGameSession,
+      });
+
+      scene.create();
+
+      // Simular tecla presionada (ArrowLeft -> moveLeft)
+      const keyDownHandler = (scene.input.keyboard!.on as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call: unknown[]) => call[0] === 'keydown',
+      )?.[1] as ((e: KeyboardEvent) => void) | undefined;
+
+      expect(keyDownHandler).toBeDefined();
+
+      keyDownHandler!({ code: 'ArrowLeft', repeat: false, preventDefault: vi.fn() } as unknown as KeyboardEvent);
+      expect(mockOnlineSession.handleKeyDown).toHaveBeenCalledWith('moveLeft');
+
+      // Simular tecla Escape (no debe pausar ni fallar en online)
+      keyDownHandler!({ code: 'Escape', repeat: false, preventDefault: vi.fn() } as unknown as KeyboardEvent);
+
+      // update() no debe ejecutar accumulator/step del motor
+      scene.update(1000, 16);
+
+      // Ver que notifyState fue invocado con los datos del servidor
+      const stateCall = onStateUpdate.mock.calls[onStateUpdate.mock.calls.length - 1]?.[0] as import('../types').GamePresentationState;
+      expect(stateCall).toBeDefined();
+      expect(stateCall.step).toBe(42);
+      expect(stateCall.score).toBe(100);
+      expect(stateCall.battleState?.playerTwo).toBeDefined();
     });
   });
 });

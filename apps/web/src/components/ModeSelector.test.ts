@@ -27,6 +27,18 @@ describe('ModeSelector.vue', () => {
     expect(battleBtn.exists()).toBe(true);
     expect(battleBtn.text()).toContain('BATALLA TÁCTICA');
 
+    const onlineBtn = wrapper.find('[data-testid="start-online-pvp-button"]');
+    expect(onlineBtn.exists()).toBe(true);
+    expect(onlineBtn.text()).toContain('CONTRA JUGADOR');
+
+    wrapper.unmount();
+  });
+
+  it('emite el evento openOnlinePvP al pulsar el botón CONTRA JUGADOR', async () => {
+    const wrapper = mount(ModeSelector);
+    await wrapper.find('[data-testid="start-online-pvp-button"]').trigger('click');
+
+    expect(wrapper.emitted('openOnlinePvP')).toBeTruthy();
     wrapper.unmount();
   });
 

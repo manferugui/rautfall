@@ -15,11 +15,14 @@ import type { BotProfileId } from '@rautfall/battle-engine';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import type { GameMode, GamePresentationState, PhaserGameController } from '../game/types';
 
+import type { OnlineGameSession } from '../api/online-game-session';
+
 const props = defineProps<{
   onStateUpdate: (state: GamePresentationState) => void;
   mode?: GameMode;
   botProfile?: BotProfileId;
   seed?: number;
+  onlineSession?: OnlineGameSession | null;
 }>();
 
 const emit = defineEmits<{
@@ -41,6 +44,7 @@ onMounted(async () => {
     mode: props.mode ?? 'training',
     botProfile: props.botProfile,
     seed: props.seed,
+    onlineSession: props.onlineSession ?? undefined,
     onStateUpdate: (state: GamePresentationState) => {
       props.onStateUpdate(state);
     },

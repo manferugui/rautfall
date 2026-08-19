@@ -78,7 +78,7 @@ export type BattlePresentationState = Readonly<{
 /**
  * Modos de juego soportados por la aplicación web.
  */
-export type GameMode = 'training' | 'battle';
+export type GameMode = 'training' | 'battle' | 'online';
 
 /**
  * Pantallas principales de la aplicación web.
