@@ -4,6 +4,12 @@
 
 Rautfall es un juego web de puzle por bloques competitivo contra una inteligencia artificial heurística. El jugador completa líneas y obtiene ataques tácticos que puede almacenar y utilizar para interferir en el tablero del rival.
 
+## Enlaces del proyecto
+
+- **Aplicación desplegada:** [https://www.rautfall.com/](https://www.rautfall.com/)
+- **Presentación del TFM:** [Slides de Rautfall](docs/presentation/rautfall-tfm-slides.pdf)
+- **Vídeo de presentación:** [Demo y explicación de Rautfall](https://youtu.be/pGifKUU3Yb8)
+
 ## Arquitectura y tecnologías
 
 - **Cliente SPA:** Vue 3, Vite y Phaser 3 para la presentación y renderizado visual.
@@ -58,4 +64,4 @@ Los paquetes internos se importan bajo el ámbito `@rautfall/*` mediante sus nom
 
 ## Licencia
 
-Privado — Trabajo de Fin de Máster.
+Proyecto académico desarrollado como Trabajo de Fin de Máster. No se concede licencia de reutilización, modificación o distribución salvo indicación expresa.
