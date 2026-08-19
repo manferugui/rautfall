@@ -968,3 +968,25 @@ Ver [Informe de implementación](implementation/0039-despliegue-vercel-neon.md).
 - `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
 
 Ver [Informe de implementación](implementation/0040-modelo-base-salas-privadas-pvp.md).
+
+## Task [0041 — Transporte WebSocket para salas privadas PvP](tasks/0041-transporte-websocket-salas-privadas-pvp.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-19 |
+| **Resultado** | Transporte WebSocket integrado en `apps/api` sobre Fastify 5 (`/ws/rooms`) conectando clientes con el modelo `RoomManager`. Protocolo cliente-servidor tipado con TypeBox en `@rautfall/contracts`, generación de identidad efímera interna por conexión socket, estado explícito de roles (`playerOne`/`playerTwo`), notificación simplificada `room_ready`, restricción de una sola sala por conexión (`ALREADY_IN_ROOM`), manejo de errores contractuales (`INVALID_JSON`, `BAD_REQUEST`, `ROOM_NOT_FOUND`, etc.) y limpieza idempotente de salas ante desconexiones con aviso al oponente (`player_disconnected`). 10 nuevas pruebas de integración reales en Vitest (1016 pruebas pasadas en total en el monorepo), lint, typecheck, build y git diff --check limpios. |
+
+### Resumen
+
+- Integración de `@fastify/websocket` v11 en `apps/api/src/routes/rooms-ws.ts`.
+- Contratos TypeBox exportados en `packages/contracts/src/pvp-ws.ts` para ser compartidos con `apps/web` en tareas futuras.
+- Protocolo simplificado sin `playerId` expuesto desde el cliente (`create_room`, `join_room`).
+- Generación de UUID efímero por conexión WebSocket para interactuar de forma segura con `RoomManager`.
+- Notificación de estado simplificada: `room_ready` envía `{ type: 'room_ready', code }`.
+- Restricción de una sola sala por socket emitiendo el código de error `ALREADY_IN_ROOM`.
+- Limpieza idempotente en eventos `close`/`error`: elimina la sala en `RoomManager`, limpia mapeos y envía `player_disconnected` al oponente.
+- 12 pruebas de integración reales en `apps/api/test/routes/rooms-ws.test.ts`.
+- `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
+
+Ver [Informe de implementación](implementation/0041-transporte-websocket-salas-privadas-pvp.md).

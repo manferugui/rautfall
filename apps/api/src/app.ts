@@ -1,17 +1,21 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyCors from '@fastify/cors';
+import fastifyWebsocket from '@fastify/websocket';
 import { getAppEnv, type ApiEnv } from './config/env.js';
 import { createDatabaseConnection, type AppDatabase } from './db/index.js';
 import { createMatchesRepository, type MatchesRepository } from './repositories/matches-repository.js';
+import { createRoomManager, type RoomManager } from './rooms/index.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMatchesRoutes } from './routes/matches.js';
 import { registerRankingRoutes } from './routes/ranking.js';
+import { registerRoomsWsRoutes } from './routes/rooms-ws.js';
 import { handleAppError } from './errors/app-error.js';
 
 export interface AppOptions {
   env?: ApiEnv;
   db?: AppDatabase;
   matchesRepository?: MatchesRepository;
+  roomManager?: RoomManager;
 }
 
 export function buildApp(options: AppOptions = {}): {
@@ -19,6 +23,7 @@ export function buildApp(options: AppOptions = {}): {
   env: ApiEnv;
   db: AppDatabase;
   matchesRepository: MatchesRepository;
+  roomManager: RoomManager;
   close: () => Promise<void>;
 } {
   const env = options.env || getAppEnv();
@@ -33,6 +38,7 @@ export function buildApp(options: AppOptions = {}): {
   }
 
   const matchesRepository = options.matchesRepository || createMatchesRepository(db);
+  const roomManager = options.roomManager || createRoomManager();
 
   const fastify = Fastify({
     logger: env.NODE_ENV === 'test' ? false : { level: 'info' },
@@ -48,6 +54,9 @@ export function buildApp(options: AppOptions = {}): {
     methods: ['GET', 'POST', 'OPTIONS'],
   });
 
+  // Registro de plugin WebSocket
+  void fastify.register(fastifyWebsocket);
+
   // Error Handler global
   fastify.setErrorHandler(handleAppError);
 
@@ -55,6 +64,10 @@ export function buildApp(options: AppOptions = {}): {
   registerHealthRoutes(fastify, db);
   registerMatchesRoutes(fastify, matchesRepository);
   registerRankingRoutes(fastify, matchesRepository);
+
+  void fastify.register(async (wsScope) => {
+    registerRoomsWsRoutes(wsScope, roomManager);
+  });
 
   async function close(): Promise<void> {
     await fastify.close();
@@ -68,6 +81,7 @@ export function buildApp(options: AppOptions = {}): {
     env,
     db,
     matchesRepository,
+    roomManager,
     close,
   };
 }
