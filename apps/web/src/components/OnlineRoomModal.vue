@@ -10,7 +10,7 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import type { OnlineGameSession } from '../api/online-game-session';
+import type { OnlineGameSession, OnlineSessionStatus } from '../api/online-game-session';
 import { getAudioManager } from '../audio';
 
 const props = defineProps<{
@@ -29,8 +29,41 @@ const activeSubView = ref<'choice' | 'create' | 'join'>('choice');
 const inputCode = ref('');
 const localErrorMessage = ref<string | null>(null);
 
-const sessionStatus = computed(() => props.session?.status ?? 'idle');
-const roomCode = computed(() => props.session?.roomCode ?? '');
+const currentSessionStatus = ref<OnlineSessionStatus>(props.session?.status ?? 'idle');
+const currentRoomCode = ref<string>(props.session?.roomCode ?? '');
+
+watch(
+  () => props.session,
+  (session, _oldSession, onCleanup) => {
+    if (!session) {
+      currentSessionStatus.value = 'idle';
+      currentRoomCode.value = '';
+      return;
+    }
+
+    const updateFromSession = () => {
+      currentSessionStatus.value = session.status;
+      currentRoomCode.value = session.roomCode ?? '';
+    };
+
+    updateFromSession();
+
+    if (typeof session.onStatusChange === 'function') {
+      const unbind = session.onStatusChange(() => {
+        updateFromSession();
+      });
+      onCleanup(() => {
+        if (typeof unbind === 'function') {
+          unbind();
+        }
+      });
+    }
+  },
+  { immediate: true }
+);
+
+const sessionStatus = computed(() => currentSessionStatus.value);
+const roomCode = computed(() => currentRoomCode.value);
 
 const isJoinValid = computed(() => inputCode.value.trim().length === 5);
 
@@ -314,7 +347,7 @@ onUnmounted(() => {
   font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: var(--rf-color-cyan, #00d4ff);
+  color: var(--rf-color-pvp-green, #a6ff00);
 }
 
 .modal-title {
@@ -336,35 +369,62 @@ onUnmounted(() => {
 .choice-view {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.85rem;
 }
 
 .mode-choice-btn {
   width: 100%;
-  height: 64px;
+  max-width: 400px;
+  height: 68px;
+}
+
+.mode-choice-btn .rf-btn-console-face {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.2rem;
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 8px), 0 8px);
 }
 
 .btn-primary-title {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: var(--rf-color-cyan, #00d4ff);
+  color: var(--rf-color-pvp-green, #a6ff00);
+  white-space: nowrap;
 }
 
 .btn-subtext {
   font-size: 0.72rem;
   color: rgba(232, 232, 236, 0.65);
+  white-space: nowrap;
 }
 
-.code-display-module {
+.mode-choice-btn:focus-visible .rf-btn-console-face::before {
+  border-top: 2px solid var(--rf-color-pvp-green, #a6ff00);
+  border-left: 2px solid var(--rf-color-pvp-green, #a6ff00);
+}
+
+.mode-choice-btn:focus-visible .rf-btn-console-face::after {
+  border-bottom: 2px solid var(--rf-color-pvp-green, #a6ff00);
+  border-right: 2px solid var(--rf-color-pvp-green, #a6ff00);
+}
+
+.room-code-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
   padding: 1rem;
-  background: rgba(15, 16, 18, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+  background: linear-gradient(160deg, rgba(32, 35, 40, 0.95) 0%, rgba(18, 19, 22, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
 .code-label {
@@ -373,14 +433,20 @@ onUnmounted(() => {
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #a0a4a9;
+  text-align: center;
 }
 
 .code-box {
-  background: #090a0c;
-  border: 2px solid var(--rf-color-cyan, #00d4ff);
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, rgba(6, 7, 9, 0.98) 0%, rgba(12, 13, 15, 0.98) 100%);
+  border: 1.5px solid var(--rf-color-pvp-green, #a6ff00);
   padding: 0.5rem 1.5rem;
   border-radius: 4px;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.9);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.95);
 }
 
 .code-text {
@@ -388,19 +454,23 @@ onUnmounted(() => {
   font-size: 2.2rem;
   font-weight: 900;
   letter-spacing: 0.25em;
-  color: var(--rf-color-cyan, #00d4ff);
+  padding-left: 0.25em;
+  color: var(--rf-color-pvp-green, #a6ff00);
+  text-align: center;
 }
 
 .code-loading {
   font-family: monospace;
   font-size: 1.2rem;
   color: #888;
+  text-align: center;
 }
 
 .code-instructions {
   font-size: 0.78rem;
   color: rgba(232, 232, 236, 0.7);
   margin: 0;
+  text-align: center;
 }
 
 .waiting-indicator {
@@ -408,16 +478,17 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
+  margin-top: 1.75rem;
   font-family: monospace;
   font-size: 0.85rem;
   font-weight: 800;
-  color: var(--rf-color-cyan, #00d4ff);
+  color: var(--rf-color-pvp-green, #a6ff00);
 }
 
 .pulse-beacon {
   width: 10px;
   height: 10px;
-  background-color: var(--rf-color-cyan, #00d4ff);
+  background-color: var(--rf-color-pvp-green, #a6ff00);
   border-radius: 50%;
   animation: pulse 1.2s infinite ease-in-out;
 }
@@ -458,12 +529,19 @@ onUnmounted(() => {
 }
 
 .join-code-input:focus {
-  border-color: var(--rf-color-cyan, #00d4ff);
+  border-color: var(--rf-color-pvp-green, #a6ff00);
 }
 
 .join-submit-btn {
   width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
   height: 48px;
+}
+
+.join-submit-btn .rf-btn-console-face {
+  color: var(--rf-color-pvp-green, #a6ff00);
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 6px), 0 6px);
 }
 
 .error-banner {
@@ -482,11 +560,23 @@ onUnmounted(() => {
 
 .online-modal-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  width: 100%;
 }
 
 .footer-cancel-btn {
   width: 100%;
+  max-width: 240px;
   height: 40px;
+}
+
+.footer-cancel-btn .rf-btn-console-face {
+  font-size: 0.75rem;
+  color: rgba(232, 232, 236, 0.7);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 6px), 0 6px);
+}
+
+.footer-cancel-btn:hover:not(:disabled) .rf-btn-console-face {
+  color: #ffffff;
 }
 </style>

@@ -32,6 +32,7 @@ export type BroadcastCallback = (
 export type BattleEndedCallback = (roomCode: string) => void;
 
 export const MAX_PENDING_ONESHOTS = 32;
+export const STATE_BROADCAST_INTERVAL_MS = 16;
 
 export function consumeNextStepInput(held: HeldState, queue: OneshotAction[]): StepInput {
   const input: StepInput = {
@@ -140,6 +141,7 @@ export class RoomGameRuntime {
   private broadcastTimer: NodeJS.Timeout | null = null;
 
   private isRunning = false;
+  private pausedBy: 'playerOne' | 'playerTwo' | null = null;
   private lastTime = 0;
   private accumulator = 0;
 
@@ -156,6 +158,8 @@ export class RoomGameRuntime {
   }
 
   enqueueInput(participant: 'playerOne' | 'playerTwo', input: WsStepInput): void {
+    if (this.getIsPaused()) return;
+
     const heldState = participant === 'playerOne' ? this.p1Held : this.p2Held;
     const queue = participant === 'playerOne' ? this.p1PendingQueue : this.p2PendingQueue;
 
@@ -178,9 +182,45 @@ export class RoomGameRuntime {
     if (input.triggerSabotage) pushIfSpace('triggerSabotage');
   }
 
+  togglePause(participant: 'playerOne' | 'playerTwo'): boolean {
+    if (!this.isRunning) return false;
+
+    const snapshot = this.battleSession.getSnapshot();
+    if (snapshot.status !== 'running') return false;
+
+    if (this.pausedBy === null) {
+      this.pausedBy = participant;
+      this.p1Held = { leftHeld: false, rightHeld: false, softDropHeld: false };
+      this.p2Held = { leftHeld: false, rightHeld: false, softDropHeld: false };
+      this.p1PendingQueue = [];
+      this.p2PendingQueue = [];
+      this.broadcastState();
+      return true;
+    }
+
+    if (this.pausedBy === participant) {
+      this.pausedBy = null;
+      this.lastTime = performance.now();
+      this.accumulator = 0;
+      this.broadcastState();
+      return false;
+    }
+
+    return false;
+  }
+
+  getIsPaused(): boolean {
+    return this.pausedBy !== null;
+  }
+
+  getPausedBy(): 'playerOne' | 'playerTwo' | null {
+    return this.pausedBy;
+  }
+
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.pausedBy = null;
     this.lastTime = performance.now();
     this.accumulator = 0;
 
@@ -192,15 +232,16 @@ export class RoomGameRuntime {
       this.stepLoop();
     }, this.fixedStepMs);
 
-    // Broadcast periódico a 20 Hz (cada 50ms)
+    // Broadcast periódico a ~60 Hz (cada 16ms)
     this.broadcastTimer = setInterval(() => {
       this.broadcastState();
-    }, 50);
+    }, STATE_BROADCAST_INTERVAL_MS);
   }
 
   stop(): void {
     if (!this.isRunning) return;
     this.isRunning = false;
+    this.pausedBy = null;
     if (this.tickTimer !== null) {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
@@ -212,7 +253,7 @@ export class RoomGameRuntime {
   }
 
   stepLoop(): void {
-    if (!this.isRunning) return;
+    if (!this.isRunning || this.getIsPaused()) return;
 
     const now = performance.now();
     let delta = now - this.lastTime;
@@ -289,11 +330,14 @@ export class RoomGameRuntime {
       snapshot.playerTwoState.isInterfered,
     );
 
+    const effectiveStatus = this.getIsPaused() ? 'paused' : snapshot.status;
+
     const p1Msg: ServerWsMessage = {
       type: 'game_state',
       step: snapshot.step,
       elapsedMs: snapshot.elapsedMs,
-      status: snapshot.status,
+      status: effectiveStatus,
+      pausedBy: this.pausedBy,
       winner: snapshot.winner,
       suddenDeath: snapshot.suddenDeath,
       self: snapshot.playerOne as unknown as WsEngineSnapshot,
@@ -307,7 +351,8 @@ export class RoomGameRuntime {
       type: 'game_state',
       step: snapshot.step,
       elapsedMs: snapshot.elapsedMs,
-      status: snapshot.status,
+      status: effectiveStatus,
+      pausedBy: this.pausedBy,
       winner: snapshot.winner,
       suddenDeath: snapshot.suddenDeath,
       self: snapshot.playerTwo as unknown as WsEngineSnapshot,

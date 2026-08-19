@@ -131,6 +131,8 @@ export type GamePresentationState = Readonly<{
   level: number;
   baseGravityCellsPerSecond: number;
   activeGravityCellsPerSecond: number;
+  pausedBy?: 'playerOne' | 'playerTwo' | null;
+  canResume?: boolean;
   battleState?: BattlePresentationState;
   lastSabotageLaunchedDetails?: SabotageLaunchedDetails | null;
 }>;

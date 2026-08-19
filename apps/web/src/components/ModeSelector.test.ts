@@ -16,10 +16,11 @@ describe('ModeSelector.vue', () => {
     wrapper.unmount();
   });
 
-  it('renderiza los botones de modo Entrenamiento y Batalla', () => {
+  it('renderiza los botones de modo Entrenamiento, Batalla y Contra Jugador', () => {
     const wrapper = mount(ModeSelector);
     const trainingBtn = wrapper.find('[data-testid="start-training-button"]');
     const battleBtn = wrapper.find('[data-testid="start-battle-button"]');
+    const onlineBtn = wrapper.find('[data-testid="start-online-pvp-button"]');
 
     expect(trainingBtn.exists()).toBe(true);
     expect(trainingBtn.text()).toContain('ENTRENAMIENTO');
@@ -27,7 +28,6 @@ describe('ModeSelector.vue', () => {
     expect(battleBtn.exists()).toBe(true);
     expect(battleBtn.text()).toContain('BATALLA TÁCTICA');
 
-    const onlineBtn = wrapper.find('[data-testid="start-online-pvp-button"]');
     expect(onlineBtn.exists()).toBe(true);
     expect(onlineBtn.text()).toContain('CONTRA JUGADOR');
 
@@ -52,60 +52,64 @@ describe('ModeSelector.vue', () => {
     wrapper.unmount();
   });
 
-  it('emite el evento selectMode con "battle" y el perfil por defecto ("battleOperator") al pulsar el botón de Batalla', async () => {
+  it('abre la modal de selección de dificultad al pulsar el botón de Batalla Táctica', async () => {
     const wrapper = mount(ModeSelector);
-    await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="bot-difficulty-modal"]').exists()).toBe(false);
 
-    const emitted = wrapper.emitted('selectMode');
-    expect(emitted).toBeTruthy();
-    expect(emitted![0]).toEqual(['battle', 'battleOperator']);
+    await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="bot-difficulty-modal"]').exists()).toBe(true);
+
     wrapper.unmount();
   });
 
-  it('mantiene OPERATOR por defecto y ubica el selector BOT PROFILE fuera de la superficie interactiva de Batalla', async () => {
+  it('permite seleccionar dificultad en la modal emitidendo selectMode con la opción elegida y cerrando la modal', async () => {
     const wrapper = mount(ModeSelector);
     const battleBtn = wrapper.find('[data-testid="start-battle-button"]');
-    const profileSelector = wrapper.find('[data-testid="bot-profile-selector"]');
 
-    expect(battleBtn.exists()).toBe(true);
-    expect(profileSelector.exists()).toBe(true);
-
-    // Regresión: el selector no debe estar dentro del elemento del botón de Batalla
-    expect(battleBtn.element.contains(profileSelector.element)).toBe(false);
-
-    const cadetBtn = wrapper.find('[data-testid="bot-profile-cadet"]');
-    const operatorBtn = wrapper.find('[data-testid="bot-profile-operator"]');
-    const eliteBtn = wrapper.find('[data-testid="bot-profile-elite"]');
-
-    // OPERATOR seleccionado por defecto
-    expect(operatorBtn.classes()).toContain('bot-profile-btn--selected');
-
-    // Pulsar sobre CADET altera el perfil seleccionado sin emitir selectMode
-    await cadetBtn.trigger('click');
-    expect(cadetBtn.classes()).toContain('bot-profile-btn--selected');
-    expect(operatorBtn.classes()).not.toContain('bot-profile-btn--selected');
-    expect(wrapper.emitted('selectMode')).toBeFalsy();
-
-    // Al pulsar el botón de Batalla se emite el perfil actualmente elegido (battleCadet)
+    // Abrir modal
     await battleBtn.trigger('click');
+    expect(wrapper.find('[data-testid="bot-difficulty-modal"]').exists()).toBe(true);
+
+    // Seleccionar CADET
+    const cadetBtn = wrapper.find('[data-testid="bot-profile-cadet"]');
+    await cadetBtn.trigger('click');
+
     const emitted = wrapper.emitted('selectMode');
     expect(emitted).toBeTruthy();
     expect(emitted![0]).toEqual(['battle', 'battleCadet']);
 
-    // Cambiar a ELITE
-    await eliteBtn.trigger('click');
-    expect(eliteBtn.classes()).toContain('bot-profile-btn--selected');
+    // La modal debe haberse cerrado
+    expect(wrapper.find('[data-testid="bot-difficulty-modal"]').exists()).toBe(false);
 
     wrapper.unmount();
   });
 
-  it('muestra la sección resumida de controles de teclado', () => {
+  it('permite cancelar la modal de dificultad sin emitir selectMode', async () => {
     const wrapper = mount(ModeSelector);
-    const controlsModule = wrapper.find('.controls-module');
-    expect(controlsModule.exists()).toBe(true);
-    expect(controlsModule.text()).toContain('Controles de teclado');
-    expect(controlsModule.text()).toContain('Rotación horaria');
-    expect(controlsModule.text()).toContain('Caída instantánea');
+    await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="bot-difficulty-modal"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="cancel-bot-difficulty-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="bot-difficulty-modal"]').exists()).toBe(false);
+    expect(wrapper.emitted('selectMode')).toBeFalsy();
+
+    wrapper.unmount();
+  });
+
+  it('abre la modal de controles al pulsar el botón CONTROLES de la barra de utilidades', async () => {
+    const wrapper = mount(ModeSelector);
+    expect(wrapper.find('[data-testid="controls-modal"]').exists()).toBe(false);
+
+    const controlsBtn = wrapper.find('[data-testid="open-controls-button"]');
+    expect(controlsBtn.exists()).toBe(true);
+
+    await controlsBtn.trigger('click');
+    expect(wrapper.find('[data-testid="controls-modal"]').exists()).toBe(true);
+
+    // Cerrar la modal
+    await wrapper.find('[data-testid="close-controls-modal-button"]').trigger('click');
+    expect(wrapper.find('[data-testid="controls-modal"]').exists()).toBe(false);
+
     wrapper.unmount();
   });
 
@@ -123,10 +127,6 @@ describe('ModeSelector.vue', () => {
     wrapper.unmount();
   });
 
-  // El lanzador DEV ya no se monta inline dentro de ModeSelector.vue: ahora
-  // es un botón discreto que emite `openDevTools`, y la pantalla real
-  // (DevLauncherScreen.vue con DevDemoLauncher.vue dentro) la monta App.vue
-  // por separado. Ver DevLauncherScreen.test.ts para esa pantalla.
   it('renderiza el acceso a DEV Tools en entorno de desarrollo y emite openDevTools al pulsarlo', async () => {
     const wrapper = mount(ModeSelector);
 

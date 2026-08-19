@@ -48,12 +48,32 @@ export const PlayerInputClientMessageSchema = Type.Object({
 export type PlayerInputClientMessage = Static<typeof PlayerInputClientMessageSchema>;
 
 /**
+ * Esquema de mensaje enviado por el cliente para solicitar alternar la pausa en partida online.
+ */
+export const TogglePauseClientMessageSchema = Type.Object({
+  type: Type.Literal('toggle_pause'),
+});
+
+export type TogglePauseClientMessage = Static<typeof TogglePauseClientMessageSchema>;
+
+/**
+ * Esquema de mensaje enviado por el cliente para solicitar revancha en la misma sala.
+ */
+export const RequestRematchClientMessageSchema = Type.Object({
+  type: Type.Literal('request_rematch'),
+});
+
+export type RequestRematchClientMessage = Static<typeof RequestRematchClientMessageSchema>;
+
+/**
  * Unión discriminada para mensajes de entrada (Cliente -> Servidor).
  */
 export const ClientWsMessageSchema = Type.Union([
   CreateRoomClientMessageSchema,
   JoinRoomClientMessageSchema,
   PlayerInputClientMessageSchema,
+  TogglePauseClientMessageSchema,
+  RequestRematchClientMessageSchema,
 ]);
 
 export type ClientWsMessage = Static<typeof ClientWsMessageSchema>;
@@ -299,8 +319,11 @@ export const GameStateServerMessageSchema = Type.Object({
   step: Type.Integer(),
   elapsedMs: Type.Integer(),
   status: Type.Union([
-    Type.Literal('running'), Type.Literal('playerOneWon'),
+    Type.Literal('running'), Type.Literal('paused'), Type.Literal('playerOneWon'),
     Type.Literal('playerTwoWon'), Type.Literal('draw')
+  ]),
+  pausedBy: Type.Union([
+    Type.Literal('playerOne'), Type.Literal('playerTwo'), Type.Null()
   ]),
   winner: Type.Union([
     Type.Literal('playerOne'), Type.Literal('playerTwo'),
@@ -334,6 +357,16 @@ export const BattleEndedServerMessageSchema = Type.Object({
 export type BattleEndedServerMessage = Static<typeof BattleEndedServerMessageSchema>;
 
 /**
+ * Notificación enviada cuando un jugador solicita revancha en la misma sala.
+ */
+export const RematchRequestedServerMessageSchema = Type.Object({
+  type: Type.Literal('rematch_requested'),
+  requestedBy: WsParticipantRoleSchema,
+});
+
+export type RematchRequestedServerMessage = Static<typeof RematchRequestedServerMessageSchema>;
+
+/**
  * Notificación enviada al oponente cuando la otra conexión se cierra.
  */
 export const PlayerDisconnectedServerMessageSchema = Type.Object({
@@ -364,6 +397,7 @@ export const ServerWsMessageSchema = Type.Union([
   BattleStartedServerMessageSchema,
   GameStateServerMessageSchema,
   BattleEndedServerMessageSchema,
+  RematchRequestedServerMessageSchema,
   PlayerDisconnectedServerMessageSchema,
   ErrorServerMessageSchema,
 ]);

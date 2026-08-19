@@ -670,6 +670,7 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
         handleKeyDown: vi.fn(),
         handleKeyUp: vi.fn(),
         handleBlur: vi.fn(),
+        togglePause: vi.fn(),
         onGameState: vi.fn().mockReturnValue(() => {}),
         onBattleEnded: vi.fn().mockReturnValue(() => {}),
         onPlayerDisconnected: vi.fn().mockReturnValue(() => {}),
@@ -694,8 +695,9 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       keyDownHandler!({ code: 'ArrowLeft', repeat: false, preventDefault: vi.fn() } as unknown as KeyboardEvent);
       expect(mockOnlineSession.handleKeyDown).toHaveBeenCalledWith('moveLeft');
 
-      // Simular tecla Escape (no debe pausar ni fallar en online)
+      // Simular tecla Escape (debe invocar togglePause en la sesión online)
       keyDownHandler!({ code: 'Escape', repeat: false, preventDefault: vi.fn() } as unknown as KeyboardEvent);
+      expect(mockOnlineSession.togglePause).toHaveBeenCalled();
 
       // update() no debe ejecutar accumulator/step del motor
       scene.update(1000, 16);

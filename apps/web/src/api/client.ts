@@ -27,17 +27,24 @@ export function getApiBaseUrl(): string {
   if (import.meta.env.PROD) {
     return '';
   }
-  // En desarrollo local o tests, fallback al servidor API local en puerto 3000
-  return 'http://localhost:3000';
+  // En desarrollo local o tests, fallback al servidor API local en puerto 3000 con IP IPv4 explícita
+  return 'http://127.0.0.1:3000';
 }
 
 export function getWsApiUrl(): string {
+  // 1. Si existe VITE_WS_BASE_URL explícita, usarla normalmente
   const envWsUrl = import.meta.env.VITE_WS_BASE_URL as string | undefined;
   if (envWsUrl && envWsUrl.trim().length > 0) {
     const clean = envWsUrl.trim().replace(/\/+$/, '');
     return clean.endsWith('/ws/rooms') ? clean : `${clean}/ws/rooms`;
   }
 
+  // 2. En desarrollo local (DEV) sin VITE_WS_BASE_URL, devolver directamente la IP fija local
+  if (import.meta.env.DEV) {
+    return 'ws://127.0.0.1:3000/ws/rooms';
+  }
+
+  // 3. En el resto de entornos (PROD/remoto), conservar la derivación desde VITE_API_BASE_URL o window.location
   const httpBaseUrl = getApiBaseUrl();
   if (httpBaseUrl.length > 0) {
     const wsProtoUrl = httpBaseUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
@@ -46,7 +53,7 @@ export function getWsApiUrl(): string {
   }
 
   const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
+  const host = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:3000';
   return `${protocol}//${host}/ws/rooms`;
 }
 

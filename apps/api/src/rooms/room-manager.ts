@@ -19,6 +19,7 @@ export interface RoomManager {
   createRoom(playerOneId: string): PvPRoom;
   getRoom(code: string): PvPRoom | undefined;
   joinRoom(code: string, playerTwoId: string): PvPRoom;
+  resetRoomBattleSession(code: string): PvPRoom;
   closeRoom(code: string): void;
 }
 
@@ -101,6 +102,34 @@ export function createRoomManager(options: RoomManagerOptions = {}): RoomManager
         status: 'ready',
         playerOne: existingRoom.playerOne,
         playerTwo: Object.freeze({ id: validPlayerTwoId }),
+        battleSession,
+      });
+
+      rooms.set(normalizedCode, updatedRoom);
+      return updatedRoom;
+    },
+
+    resetRoomBattleSession(code: string): PvPRoom {
+      const normalizedCode = normalizeCode(code);
+      const existingRoom = rooms.get(normalizedCode);
+      if (!existingRoom) {
+        throw new RoomError('ROOM_NOT_FOUND', `Room with code '${normalizedCode}' was not found.`);
+      }
+
+      if (existingRoom.status !== 'ready' || !existingRoom.playerTwo) {
+        throw new RoomError(
+          'ROOM_NOT_READY',
+          `Cannot reset battle session for room '${normalizedCode}' because it is not ready with two players.`,
+        );
+      }
+
+      const battleSession = battleSessionFactory();
+
+      const updatedRoom: PvPRoom = Object.freeze({
+        code: existingRoom.code,
+        status: 'ready',
+        playerOne: existingRoom.playerOne,
+        playerTwo: existingRoom.playerTwo,
         battleSession,
       });
 

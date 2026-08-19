@@ -23,6 +23,7 @@
 
   /* Acentos tácticos semánticos */
   --rf-color-cyan: #00d4ff;
+  --rf-color-pvp-green: #a6ff00;
   --rf-color-amber: #f39c12;
   --rf-color-red: #e74c3c;
   --rf-color-purple: #a060d0;
@@ -170,31 +171,25 @@
 
 /* Franjas de advertencia semánticas */
 .rf-hazard-strip {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--rf-color-amber) 0 8px,
-    var(--rf-color-graphite-900) 8px 16px
-  );
+  background: repeating-linear-gradient(135deg,
+      var(--rf-color-amber) 0 8px,
+      var(--rf-color-graphite-900) 8px 16px);
   opacity: 0.75;
   border: 1px solid rgba(0, 0, 0, 0.5);
 }
 
 .rf-hazard-strip--danger {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--rf-color-red) 0 8px,
-    var(--rf-color-graphite-900) 8px 16px
-  );
+  background: repeating-linear-gradient(135deg,
+      var(--rf-color-red) 0 8px,
+      var(--rf-color-graphite-900) 8px 16px);
   opacity: 0.85;
   border: 1px solid rgba(0, 0, 0, 0.5);
 }
 
 .rf-hazard-strip--cyan {
-  background: repeating-linear-gradient(
-    135deg,
-    var(--rf-color-cyan) 0 8px,
-    var(--rf-color-graphite-900) 8px 16px
-  );
+  background: repeating-linear-gradient(135deg,
+      var(--rf-color-cyan) 0 8px,
+      var(--rf-color-graphite-900) 8px 16px);
   opacity: 0.7;
 }
 
@@ -344,11 +339,12 @@
   cursor: pointer;
   border: none;
   border-radius: 0;
+  background-color: transparent;
   background-image: url('/assets/industrial-kit/control-button-bezel.svg');
   background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+  box-shadow: none;
 }
 
 .rf-btn-console-face {
@@ -375,6 +371,14 @@
     inset 0 -2px 5px rgba(0, 0, 0, 0.7),
     inset 0 0 10px rgba(0, 0, 0, 0.35);
   transition: background 0.1s, border-color 0.1s, color 0.1s, box-shadow 0.1s, transform 0.08s;
+}
+
+.rf-btn-console:hover:not(:disabled) {
+  background-color: transparent;
+  background-image: url('/assets/industrial-kit/control-button-bezel.svg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 /* HOVER: mismo material (grafito), incremento contenido de luminosidad
@@ -450,26 +454,66 @@
 
 /* Animaciones Keyframes */
 @keyframes rf-jitter {
-  0% { transform: translate(0, 0); }
-  25% { transform: translate(-2px, 1px); }
-  50% { transform: translate(1px, -1px); }
-  75% { transform: translate(-1px, -1px); }
-  100% { transform: translate(0, 0); }
+  0% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(-2px, 1px);
+  }
+
+  50% {
+    transform: translate(1px, -1px);
+  }
+
+  75% {
+    transform: translate(-1px, -1px);
+  }
+
+  100% {
+    transform: translate(0, 0);
+  }
 }
 
 @keyframes rf-pulse-amber {
-  0%, 100% { border-color: var(--rf-color-amber); box-shadow: 0 0 4px rgba(243, 156, 18, 0.3); }
-  50% { border-color: rgba(243, 156, 18, 0.4); box-shadow: 0 0 12px rgba(243, 156, 18, 0.7); }
+
+  0%,
+  100% {
+    border-color: var(--rf-color-amber);
+    box-shadow: 0 0 4px rgba(243, 156, 18, 0.3);
+  }
+
+  50% {
+    border-color: rgba(243, 156, 18, 0.4);
+    box-shadow: 0 0 12px rgba(243, 156, 18, 0.7);
+  }
 }
 
 @keyframes rf-pulse-red {
-  0%, 100% { border-color: var(--rf-color-red); box-shadow: 0 0 4px rgba(231, 76, 60, 0.4); }
-  50% { border-color: rgba(231, 76, 60, 0.4); box-shadow: 0 0 16px rgba(231, 76, 60, 0.8); }
+
+  0%,
+  100% {
+    border-color: var(--rf-color-red);
+    box-shadow: 0 0 4px rgba(231, 76, 60, 0.4);
+  }
+
+  50% {
+    border-color: rgba(231, 76, 60, 0.4);
+    box-shadow: 0 0 16px rgba(231, 76, 60, 0.8);
+  }
 }
 
 @keyframes rf-emergency-alert {
-  0%, 100% { border-color: var(--rf-color-metal-600); }
-  50% { border-color: var(--rf-color-red); box-shadow: inset 0 0 12px rgba(231, 76, 60, 0.3), 0 0 24px rgba(231, 76, 60, 0.4); }
+
+  0%,
+  100% {
+    border-color: var(--rf-color-metal-600);
+  }
+
+  50% {
+    border-color: var(--rf-color-red);
+    box-shadow: inset 0 0 12px rgba(231, 76, 60, 0.3), 0 0 24px rgba(231, 76, 60, 0.4);
+  }
 }
 
 /* ===================================================================
@@ -536,6 +580,7 @@
       inset 0 0 10px rgba(211, 84, 0, 0.4),
       0 0 8px rgba(211, 84, 0, 0.3) !important;
   }
+
   100% {
     border-color: #ff5722 !important;
     box-shadow:
@@ -556,8 +601,13 @@
 }
 
 @keyframes rf-warning-lateral-pulse {
-  0% { opacity: 0.8; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 0.8;
+  }
+
+  100% {
+    opacity: 1;
+  }
 }
 
 /* MICROPLACA UNIFICADA DE PRE-AVISO DE SABOTAJE (DENTRO DEL BEZEL) */
@@ -644,10 +694,12 @@
     border-color: rgba(230, 126, 34, 0.4) !important;
     opacity: 0.85;
   }
+
   50% {
     border-color: rgba(230, 126, 34, 0.7) !important;
     opacity: 1;
   }
+
   100% {
     border-color: rgba(211, 84, 0, 0.45) !important;
     opacity: 0.9;
@@ -655,10 +707,23 @@
 }
 
 @keyframes rf-warning-sync-sweep {
-  0% { top: 0%; opacity: 0; }
-  15% { opacity: 0.85; }
-  85% { opacity: 0.85; }
-  100% { top: 100%; opacity: 0; }
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 0.85;
+  }
+
+  85% {
+    opacity: 0.85;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
 }
 
 /* ===================================================================
@@ -679,11 +744,25 @@
 
 /* Microvibración mecánica mínima (0.5px) simulando régimen de sobrepresión/turbina */
 @keyframes rf-active-sobrecarga-vibrate {
-  0% { transform: translate(0, 0); }
-  25% { transform: translate(0.5px, -0.5px); }
-  50% { transform: translate(-0.5px, 0.5px); }
-  75% { transform: translate(0.5px, 0.5px); }
-  100% { transform: translate(-0.5px, -0.5px); }
+  0% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(0.5px, -0.5px);
+  }
+
+  50% {
+    transform: translate(-0.5px, 0.5px);
+  }
+
+  75% {
+    transform: translate(0.5px, 0.5px);
+  }
+
+  100% {
+    transform: translate(-0.5px, -0.5px);
+  }
 }
 
 /* Respiración térmica lenta de presión (variación sutil de borde/inset sin parpadeo neón) */
@@ -695,6 +774,7 @@
       0 0 6px rgba(92, 50, 24, 0.25),
       inset 0 6px 18px rgba(0, 0, 0, 0.98) !important;
   }
+
   100% {
     border-color: #8c4620 !important;
     box-shadow:
@@ -851,10 +931,23 @@
 }
 
 @keyframes rf-active-interferencia-sweep {
-  0% { top: 0%; opacity: 0; }
-  10% { opacity: 0.7; }
-  90% { opacity: 0.7; }
-  100% { top: 100%; opacity: 0; }
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 0.7;
+  }
+
+  90% {
+    opacity: 0.7;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
 }
 
 /* MICROPLACA DE INTERFERENCIA ACTIVA */
@@ -917,10 +1010,23 @@
 }
 
 @keyframes rf-blocked-plate-flash {
-  0% { transform: scale(1.03); opacity: 0.8; }
-  20% { transform: scale(1); opacity: 1; }
-  80% { opacity: 1; }
-  100% { opacity: 0.9; }
+  0% {
+    transform: scale(1.03);
+    opacity: 0.8;
+  }
+
+  20% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.9;
+  }
 }
 
 /* ===================================================================
@@ -1013,6 +1119,7 @@
 
 /* Regla estricta para usuario con preferencia reduced-motion */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

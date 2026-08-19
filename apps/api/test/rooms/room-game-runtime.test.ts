@@ -228,6 +228,64 @@ describe('RoomGameRuntime', () => {
       expect(endedMsg).toBeDefined();
       expect(runtime.getIsRunning()).toBe(false);
     });
+
+    it('solo permite reanudar la partida al jugador que la pausó originalmente (P1 y P2)', () => {
+      const battle = createTestSession();
+      const broadcastMessages: { recipient: string; msg: ServerWsMessage }[] = [];
+
+      const runtime = new RoomGameRuntime('TEST_PAUSE', battle, (recipient, msg) => {
+        broadcastMessages.push({ recipient, msg });
+      });
+
+      runtime.start();
+      expect(runtime.getIsPaused()).toBe(false);
+      expect(runtime.getPausedBy()).toBeNull();
+
+      // P1 encola input y pausa la partida
+      runtime.enqueueInput('playerOne', {
+        leftHeld: true, rightHeld: false, softDropHeld: false,
+        leftPressed: true, rightPressed: false, hardDrop: false,
+      });
+      expect(runtime.getPendingQueue('playerOne').length).toBe(1);
+
+      const pauseResult = runtime.togglePause('playerOne');
+      expect(pauseResult).toBe(true);
+      expect(runtime.getIsPaused()).toBe(true);
+      expect(runtime.getPausedBy()).toBe('playerOne');
+      expect(runtime.getPendingQueue('playerOne').length).toBe(0);
+
+      // P2 intenta reanudar -> DEBE SER IGNORADO
+      const p2ResumeAttempt = runtime.togglePause('playerTwo');
+      expect(p2ResumeAttempt).toBe(false);
+      expect(runtime.getIsPaused()).toBe(true);
+      expect(runtime.getPausedBy()).toBe('playerOne');
+
+      // P1 reanuda -> EXITO
+      const p1ResumeResult = runtime.togglePause('playerOne');
+      expect(p1ResumeResult).toBe(false);
+      expect(runtime.getIsPaused()).toBe(false);
+      expect(runtime.getPausedBy()).toBeNull();
+
+      // Ahora P2 pausa la partida -> EXITO
+      const p2PauseResult = runtime.togglePause('playerTwo');
+      expect(p2PauseResult).toBe(true);
+      expect(runtime.getIsPaused()).toBe(true);
+      expect(runtime.getPausedBy()).toBe('playerTwo');
+
+      // P1 intenta reanudar -> DEBE SER IGNORADO
+      const p1ResumeAttempt = runtime.togglePause('playerOne');
+      expect(p1ResumeAttempt).toBe(false);
+      expect(runtime.getIsPaused()).toBe(true);
+      expect(runtime.getPausedBy()).toBe('playerTwo');
+
+      // P2 reanuda -> EXITO
+      const p2ResumeResult = runtime.togglePause('playerTwo');
+      expect(p2ResumeResult).toBe(false);
+      expect(runtime.getIsPaused()).toBe(false);
+      expect(runtime.getPausedBy()).toBeNull();
+
+      runtime.stop();
+    });
   });
 
   describe('GameRuntimeRegistry', () => {

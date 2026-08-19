@@ -2,9 +2,15 @@
 import { computed } from 'vue';
 import type { SessionStatus } from '../game/types';
 
-const props = defineProps<{
-  status: SessionStatus;
-}>();
+const props = withDefaults(
+  defineProps<{
+    status: SessionStatus;
+    canResume?: boolean;
+  }>(),
+  {
+    canResume: true,
+  }
+);
 
 const isPaused = computed(() => props.status === 'paused');
 const isGameOver = computed(() => props.status === 'gameOver');
@@ -49,15 +55,15 @@ const isGameOver = computed(() => props.status === 'gameOver');
       </div>
       <div class="shutter-slat shutter-slat--3">
         <!-- Placa de señalética industrial central en la lama principal -->
-        <div class="shutter-signage-plate">
+        <div class="shutter-signage-plate" :class="{ 'shutter-signage-plate--opponent-paused': props.canResume === false }">
           <div class="signage-hazard-stripes" aria-hidden="true"></div>
           <div class="signage-header">
             <span class="signage-dot"></span>
-            <span class="signage-system-tag">SYSTEM HOLD</span>
+            <span class="signage-system-tag">{{ props.canResume === false ? 'PAUSA REMOTA' : 'SYSTEM HOLD' }}</span>
             <span class="signage-dot"></span>
           </div>
-          <div class="signage-main-text">PAUSED</div>
-          <div class="signage-sub-text">ESC — RESUME</div>
+          <div class="signage-main-text">{{ props.canResume === false ? 'PAUSADA POR EL RIVAL' : 'PAUSED' }}</div>
+          <div class="signage-sub-text">{{ props.canResume === false ? 'ESPERANDO REANUDACIÓN...' : 'ESC — RESUME' }}</div>
           <div class="signage-hazard-stripes" aria-hidden="true"></div>
         </div>
         <div class="slat-rib"></div>
@@ -288,10 +294,11 @@ const isGameOver = computed(() => props.status === 'gameOver');
   font-family: var(--font-display, var(--font-mono, sans-serif));
   font-size: 24px;
   font-weight: 900;
-  letter-spacing: 6px;
+  letter-spacing: 4px;
   color: #e6edf3;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
   margin: 2px 0;
+  text-align: center;
 }
 
 .signage-sub-text {

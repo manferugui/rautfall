@@ -183,8 +183,10 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
     await flushRouter(wrapper);
     expect(router.currentRoute.value.name).toBe('home');
 
-    // 3. Iniciar Batalla sin tag
+    // 3. Iniciar Batalla sin tag (abre modal de dificultad y selecciona OPERATOR)
     await wrapper.find('[data-testid="start-battle-button"]').trigger('click');
+    await wrapper.vm.$nextTick();
+    await wrapper.find('[data-testid="bot-profile-operator"]').trigger('click');
     await flushRouter(wrapper);
     expect(router.currentRoute.value.name).toBe('battle');
     expect(wrapper.find('[data-testid="own-board-column"]').exists()).toBe(true);
@@ -816,6 +818,42 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
 
       const vm = wrapper.vm as unknown as { onlineSession: unknown };
       expect(vm.onlineSession).toBeNull();
+
+      wrapper.unmount();
+    });
+
+    it('el botón visual de pausa en modo offline ejecuta controller.togglePause() y en online ejecuta onlineSession.togglePause()', async () => {
+      const { wrapper, router } = mountApp('/');
+      await router.isReady();
+
+      // NAVEGAR A MODO ENTRENAMIENTO (OFFLINE)
+      await router.push('/training');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await wrapper.vm.$nextTick();
+
+      const pauseBtnOffline = wrapper.find('[data-testid="pause-toggle"]');
+      expect(pauseBtnOffline.exists()).toBe(true);
+
+      await pauseBtnOffline.trigger('click');
+      expect(mockController.togglePause).toHaveBeenCalledTimes(1);
+
+      // SIMULAR MODO ONLINE CON SESION ONLINE ACTIVA
+      const mockSession = {
+        togglePause: vi.fn(),
+        status: 'playing',
+        onStatusChange: vi.fn().mockReturnValue(() => {}),
+        destroy: vi.fn(),
+      };
+      (wrapper.vm as unknown as { isOnlineActive: boolean; onlineSession: unknown }).isOnlineActive = true;
+      (wrapper.vm as unknown as { onlineSession: unknown }).onlineSession = mockSession;
+      await router.push('/battle?online=1');
+      await wrapper.vm.$nextTick();
+
+      const pauseBtnOnline = wrapper.find('[data-testid="pause-toggle"]');
+      expect(pauseBtnOnline.exists()).toBe(true);
+
+      await pauseBtnOnline.trigger('click');
+      expect(mockSession.togglePause).toHaveBeenCalledTimes(1);
 
       wrapper.unmount();
     });

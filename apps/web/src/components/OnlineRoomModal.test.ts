@@ -172,4 +172,43 @@ describe('OnlineRoomModal.vue', () => {
 
     wrapper.unmount();
   });
+
+  it('actualiza reactivamente el código de sala cuando la sesión cambia asíncronamente de estado mediante onStatusChange', async () => {
+    let statusCallback: (() => void) | null = null;
+    const sessionState = {
+      status: 'connecting',
+      roomCode: null as string | null,
+      lastError: null,
+      onStatusChange: vi.fn((cb: () => void) => {
+        statusCallback = cb;
+        return () => {
+          statusCallback = null;
+        };
+      }),
+    };
+
+    const wrapper = mount(OnlineRoomModal, {
+      props: {
+        isOpen: true,
+        session: sessionState as unknown as OnlineGameSession,
+      },
+    });
+
+    await wrapper.find('[data-testid="create-room-button"]').trigger('click');
+
+    expect(wrapper.find('[data-testid="room-code-display"]').text()).toBe('GENERANDO...');
+
+    // Simulamos la llegada de room_created actualizando el objeto de sesión y notificando cambios
+    sessionState.status = 'waiting';
+    sessionState.roomCode = '7BS3S';
+    if (statusCallback) {
+      (statusCallback as () => void)();
+    }
+
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[data-testid="room-code-display"]').text()).toBe('7BS3S');
+
+    wrapper.unmount();
+  });
 });

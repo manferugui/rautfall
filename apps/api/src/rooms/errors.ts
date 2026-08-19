@@ -1,6 +1,7 @@
 export type RoomErrorCode =
   | 'ROOM_NOT_FOUND'
   | 'ROOM_NOT_WAITING'
+  | 'ROOM_NOT_READY'
   | 'INVALID_PLAYER'
   | 'ROOM_CODE_GENERATION_FAILED';
 

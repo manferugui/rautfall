@@ -250,4 +250,46 @@ describe('OnlineGameSession (online-game-session.ts)', () => {
     );
     expect(statusHistory).toEqual(['connecting', 'error']);
   });
+
+  it('envía toggle_pause al servidor y neutraliza heldState local únicamente al recibir game_state con status: paused', async () => {
+    const session = new OnlineGameSession({
+      url: 'ws://localhost:3000/ws/rooms',
+      WebSocketClass: MockWebSocket as unknown as typeof WebSocket,
+    });
+
+    const createPromise = session.createRoom();
+    vi.runAllTimers();
+    await createPromise;
+
+    const wsInstance = ((session as unknown as { client: { socket: MockWebSocket } }).client.socket);
+    wsInstance.receiveMessage({ type: 'room_created', code: 'AB12C', role: 'playerOne' });
+    wsInstance.receiveMessage({ type: 'battle_started', role: 'playerOne' });
+
+    // Simular input retenido (heldState)
+    session.handleKeyDown('moveLeft');
+    expect(session.getHeldState()).toEqual({ leftHeld: true, rightHeld: false, softDropHeld: false });
+
+    // Invocar togglePause: envía el mensaje pero NO neutraliza heldState local prematuramente
+    session.togglePause();
+    expect(wsInstance.sentData).toContain(JSON.stringify({ type: 'toggle_pause' }));
+    expect(session.getHeldState()).toEqual({ leftHeld: true, rightHeld: false, softDropHeld: false });
+
+    // Al recibir la confirmación autoritativa game_state con status: 'paused', neutraliza heldState
+    wsInstance.receiveMessage({
+      type: 'game_state',
+      step: 10,
+      elapsedMs: 100,
+      status: 'paused',
+      winner: null,
+      suddenDeath: { phase: 'none', warningRemainingMs: 0, activeElapsedMs: 0, gravityMultiplier: 1, energyMultiplier: 1 },
+      self: { step: 10, elapsedMs: 100, status: 'running', board: [], activePiece: null, nextPieces: [], clearedLines: 0, heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 1 },
+      opponent: { step: 10, elapsedMs: 100, status: 'running', board: [], activePiece: null, nextPieces: [], clearedLines: 0, heldPiece: null, score: 0, combo: 0, backToBack: 0, combatEnergy: 0, storedSabotages: [], pendingGarbage: 0, activeEffects: [], level: 1 },
+      selfState: { warnings: [], immunities: [], activeEffects: [], isInterfered: false, interferenciaRemainingMs: 0 },
+      opponentState: { warnings: [], immunities: [], activeEffects: [], isInterfered: false, interferenciaRemainingMs: 0 },
+      events: [],
+    });
+
+    expect(session.status).toBe('playing'); // Mantiene lifecycle de sesión en 'playing'
+    expect(session.getHeldState()).toEqual({ leftHeld: false, rightHeld: false, softDropHeld: false }); // Held state neutralizado
+  });
 });

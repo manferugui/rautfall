@@ -2,6 +2,7 @@ import type {
   WsStepInput,
   GameStateServerMessage,
   BattleEndedServerMessage,
+  RematchRequestedServerMessage,
   PlayerDisconnectedServerMessage,
   ErrorServerMessage,
   WsParticipantRole,
@@ -33,6 +34,7 @@ export class OnlineGameSession {
   private _status: OnlineSessionStatus = 'idle';
   private _latestGameState: GameStateServerMessage | null = null;
   private _lastError: ErrorServerMessage | null = null;
+  private _rematchRequests: Set<WsParticipantRole> = new Set();
 
   private heldState: HeldState = {
     leftHeld: false,
@@ -44,6 +46,7 @@ export class OnlineGameSession {
   private statusListeners: Set<(status: OnlineSessionStatus) => void> = new Set();
   private gameStateListeners: Set<(state: GameStateServerMessage) => void> = new Set();
   private battleEndedListeners: Set<(msg: BattleEndedServerMessage) => void> = new Set();
+  private rematchRequestedListeners: Set<(msg: RematchRequestedServerMessage) => void> = new Set();
   private disconnectedListeners: Set<(msg: PlayerDisconnectedServerMessage) => void> = new Set();
   private errorListeners: Set<(msg: ErrorServerMessage) => void> = new Set();
 
@@ -70,6 +73,14 @@ export class OnlineGameSession {
 
   public get lastError(): ErrorServerMessage | null {
     return this._lastError;
+  }
+
+  public get rematchRequests(): ReadonlySet<WsParticipantRole> {
+    return this._rematchRequests;
+  }
+
+  public get isRematchRequestedByMe(): boolean {
+    return this._role ? this._rematchRequests.has(this._role) : false;
   }
 
   public getHeldState(): Readonly<HeldState> {
@@ -110,6 +121,7 @@ export class OnlineGameSession {
     this.unbindFns.push(
       this.client.onBattleStarted((msg) => {
         this._role = msg.role;
+        this._rematchRequests.clear();
         this.setStatus('playing');
       })
     );
@@ -117,8 +129,15 @@ export class OnlineGameSession {
     this.unbindFns.push(
       this.client.onGameState((msg) => {
         this._latestGameState = msg;
-        if (this._status !== 'playing' && msg.status === 'running') {
+        if (this._status !== 'playing' && (msg.status === 'running' || msg.status === 'paused')) {
           this.setStatus('playing');
+        }
+        if (msg.status === 'paused') {
+          this.heldState = {
+            leftHeld: false,
+            rightHeld: false,
+            softDropHeld: false,
+          };
         }
         this.gameStateListeners.forEach((cb) => cb(msg));
       })
@@ -132,7 +151,15 @@ export class OnlineGameSession {
     );
 
     this.unbindFns.push(
+      this.client.onRematchRequested((msg) => {
+        this._rematchRequests.add(msg.requestedBy);
+        this.rematchRequestedListeners.forEach((cb) => cb(msg));
+      })
+    );
+
+    this.unbindFns.push(
       this.client.onPlayerDisconnected((msg) => {
+        this._rematchRequests.clear();
         this.setStatus('disconnected');
         this.disconnectedListeners.forEach((cb) => cb(msg));
       })
@@ -141,6 +168,7 @@ export class OnlineGameSession {
     this.unbindFns.push(
       this.client.onError((msg) => {
         this._lastError = msg;
+        this._rematchRequests.clear();
         this.setStatus('error');
         this.errorListeners.forEach((cb) => cb(msg));
       })
@@ -180,6 +208,22 @@ export class OnlineGameSession {
       this._lastError = errorMsg;
       this.setStatus('error');
       this.errorListeners.forEach((cb) => cb(errorMsg));
+    }
+  }
+
+  public get canResume(): boolean {
+    if (!this._latestGameState || this._latestGameState.status !== 'paused') {
+      return true;
+    }
+    return this._latestGameState.pausedBy === this._role;
+  }
+
+  public togglePause(): void {
+    if (this._status === 'playing') {
+      if (this._latestGameState?.status === 'paused' && this._latestGameState.pausedBy !== this._role) {
+        return;
+      }
+      this.client.togglePause();
     }
   }
 
@@ -290,6 +334,12 @@ export class OnlineGameSession {
     this.client.sendInput(inputSnapshot);
   }
 
+  public requestRematch(): void {
+    if (this._status === 'ended' || this._status === 'ready' || this._status === 'playing') {
+      this.client.requestRematch();
+    }
+  }
+
   public onStatusChange(cb: (status: OnlineSessionStatus) => void): () => void {
     this.statusListeners.add(cb);
     return () => this.statusListeners.delete(cb);
@@ -303,6 +353,11 @@ export class OnlineGameSession {
   public onBattleEnded(cb: (msg: BattleEndedServerMessage) => void): () => void {
     this.battleEndedListeners.add(cb);
     return () => this.battleEndedListeners.delete(cb);
+  }
+
+  public onRematchRequested(cb: (msg: RematchRequestedServerMessage) => void): () => void {
+    this.rematchRequestedListeners.add(cb);
+    return () => this.rematchRequestedListeners.delete(cb);
   }
 
   public onPlayerDisconnected(cb: (msg: PlayerDisconnectedServerMessage) => void): () => void {

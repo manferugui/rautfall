@@ -247,7 +247,14 @@ export class GameScene extends Phaser.Scene {
       const onKeyDown = (event: KeyboardEvent): void => {
         void getAudioManager().unlock();
 
-        if (event.code === 'Escape' || event.code === 'KeyR') return;
+        if (event.code === 'Escape') {
+          if (!event.repeat && this.onlineSession) {
+            this.onlineSession.togglePause();
+          }
+          return;
+        }
+
+        if (event.code === 'KeyR') return;
 
         const action = getActionByCode(this.controlBindings, event.code);
         if (action !== null && (event.code === 'Space' || event.code.startsWith('Arrow') || event.code.startsWith('Alt'))) {
@@ -673,7 +680,12 @@ export class GameScene extends Phaser.Scene {
    * botón Vue llaman exactamente a este método.
    */
   togglePause(): void {
-    if (this.mode === 'online') return;
+    if (this.mode === 'online') {
+      if (this.onlineSession) {
+        this.onlineSession.togglePause();
+      }
+      return;
+    }
     const engineStatus = this.engine.getSnapshot().status;
     if (!canTogglePause(engineStatus)) return;
 
@@ -1030,12 +1042,14 @@ export class GameScene extends Phaser.Scene {
 
       const selfSnap = msg.self;
       let sessionStatus: SessionStatus = 'running';
-      if (msg.status !== 'running' || this.onlineSession?.status === 'ended') {
+      if (msg.status === 'paused') {
+        sessionStatus = 'paused';
+      } else if (msg.status !== 'running' || this.onlineSession?.status === 'ended') {
         sessionStatus = 'gameOver';
       }
 
-      const battleWinner = msg.winner ?? (msg.status === 'running' ? null : 'draw');
-      const bStatus: BattleStatus = msg.status === 'running' ? 'running' : (msg.status as BattleStatus);
+      const battleWinner = msg.winner ?? (msg.status === 'running' || msg.status === 'paused' ? null : 'draw');
+      const bStatus: BattleStatus = msg.status === 'running' || msg.status === 'paused' ? 'running' : (msg.status as BattleStatus);
 
       const newState: GamePresentationState = {
         status: sessionStatus,
@@ -1054,6 +1068,8 @@ export class GameScene extends Phaser.Scene {
         level: selfSnap.level,
         baseGravityCellsPerSecond: 1.0,
         activeGravityCellsPerSecond: 1.0,
+        pausedBy: msg.pausedBy ?? null,
+        canResume: this.onlineSession ? this.onlineSession.canResume : true,
         lastSabotageLaunchedDetails: this.lastSabotageLaunchedDetails,
         battleState: {
           status: bStatus,

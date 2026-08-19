@@ -15,6 +15,7 @@ interface SessionState {
 interface RoomSessions {
   playerOneSession?: SessionState | undefined;
   playerTwoSession?: SessionState | undefined;
+  rematchRequests?: Set<'playerOne' | 'playerTwo'> | undefined;
 }
 
 /**
@@ -122,7 +123,7 @@ export function registerRoomsWsRoutes(
           const room = roomManager.createRoom(session.playerId);
           session.roomCode = room.code;
           session.role = 'playerOne';
-          roomSessionsMap.set(room.code, { playerOneSession: session });
+          roomSessionsMap.set(room.code, { playerOneSession: session, rematchRequests: new Set() });
 
           sendWsMessage(socket, {
             type: 'room_created',
@@ -164,6 +165,9 @@ export function registerRoomsWsRoutes(
 
           const existingSessions = roomSessionsMap.get(room.code) || {};
           existingSessions.playerTwoSession = session;
+          if (!existingSessions.rematchRequests) {
+            existingSessions.rematchRequests = new Set();
+          }
           roomSessionsMap.set(room.code, existingSessions);
 
           sendWsMessage(socket, {
@@ -238,6 +242,116 @@ export function registerRoomsWsRoutes(
         const runtime = runtimeRegistry.get(session.roomCode);
         if (runtime && runtime.getIsRunning()) {
           runtime.enqueueInput(session.role, msg.input);
+        }
+        return;
+      }
+
+      if (msg.type === 'toggle_pause') {
+        if (!session.roomCode || !session.role) {
+          sendWsMessage(socket, {
+            type: 'error',
+            code: 'NOT_IN_ROOM',
+            message: 'Cannot toggle pause because connection is not in an active room.',
+          });
+          return;
+        }
+
+        const runtime = runtimeRegistry.get(session.roomCode);
+        if (runtime && runtime.getIsRunning()) {
+          runtime.togglePause(session.role);
+        }
+        return;
+      }
+
+      if (msg.type === 'request_rematch') {
+        if (!session.roomCode || !session.role) {
+          sendWsMessage(socket, {
+            type: 'error',
+            code: 'NOT_IN_ROOM',
+            message: 'Cannot request rematch because connection is not in an active room.',
+          });
+          return;
+        }
+
+        const roomCode = session.roomCode;
+        const role = session.role;
+
+        // No permitir revancha si hay un runtime activo corriendo
+        const activeRuntime = runtimeRegistry.get(roomCode);
+        if (activeRuntime && activeRuntime.getIsRunning()) {
+          return;
+        }
+
+        const roomSessions = roomSessionsMap.get(roomCode);
+        if (!roomSessions) {
+          return;
+        }
+
+        if (!roomSessions.rematchRequests) {
+          roomSessions.rematchRequests = new Set();
+        }
+
+        // Añadir la solicitud del jugador de forma idempotente
+        roomSessions.rematchRequests.add(role);
+
+        // Confirmar la solicitud autoritativamente notificando rematch_requested
+        const rematchMsg: ServerWsMessage = {
+          type: 'rematch_requested',
+          requestedBy: role,
+        };
+        if (roomSessions.playerOneSession) {
+          sendWsMessage(roomSessions.playerOneSession.socket, rematchMsg);
+        }
+        if (roomSessions.playerTwoSession) {
+          sendWsMessage(roomSessions.playerTwoSession.socket, rematchMsg);
+        }
+
+        // Comprobar si ambos han solicitado revancha
+        if (
+          roomSessions.rematchRequests.has('playerOne') &&
+          roomSessions.rematchRequests.has('playerTwo')
+        ) {
+          roomSessions.rematchRequests.clear();
+
+          try {
+            const updatedRoom = roomManager.resetRoomBattleSession(roomCode);
+            if (updatedRoom.battleSession) {
+              const newRuntime = runtimeRegistry.create(
+                roomCode,
+                updatedRoom.battleSession,
+                (recipient, serverMsg) => {
+                  const sessions = roomSessionsMap.get(roomCode);
+                  const targetSession =
+                    recipient === 'playerOne' ? sessions?.playerOneSession : sessions?.playerTwoSession;
+                  if (targetSession) {
+                    sendWsMessage(targetSession.socket, serverMsg);
+                  }
+                },
+              );
+
+              if (roomSessions.playerOneSession) {
+                sendWsMessage(roomSessions.playerOneSession.socket, {
+                  type: 'battle_started',
+                  role: 'playerOne',
+                });
+              }
+
+              if (roomSessions.playerTwoSession) {
+                sendWsMessage(roomSessions.playerTwoSession.socket, {
+                  type: 'battle_started',
+                  role: 'playerTwo',
+                });
+              }
+
+              newRuntime.start();
+            }
+          } catch (err) {
+            sendWsMessage(socket, {
+              type: 'error',
+              code: 'REMATCH_FAILED',
+              message: err instanceof Error ? err.message : 'Failed to reset battle session for rematch.',
+            });
+          }
         }
         return;
       }

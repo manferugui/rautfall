@@ -24,6 +24,8 @@ test.describe('Navegación web real, sincronización de URL, Back/Forward y deep
 
     await test.step('inicio de Batalla contra la IA desde la interfaz actualiza la URL a /battle', async () => {
       await page.getByTestId('start-battle-button').click();
+      await expect(page.getByTestId('bot-difficulty-modal')).toBeVisible();
+      await page.getByTestId('bot-profile-operator').click();
       await expect(page).toHaveURL('/battle');
       await expect(page.getByTestId('own-board-column')).toBeVisible();
       await expect(page.getByTestId('opponent-monitor')).toBeVisible();

@@ -16,13 +16,14 @@ import RankingScreen from './components/RankingScreen.vue';
 import ResultsModal from './components/ResultsModal.vue';
 import OperatorTagModal from './components/OperatorTagModal.vue';
 import AudioActivationModal from './components/AudioActivationModal.vue';
+import OpponentDisconnectedModal from './components/OpponentDisconnectedModal.vue';
 import PauseShutter from './components/PauseShutter.vue';
 import type { GameMode, GamePresentationState, GameResultSummary, PhaserGameController } from './game/types';
 import { isBattleDemoActive, isDebugPanelActive } from './game/battle-demo';
 import { getAudioManager } from './audio';
 import { getOrCreatePlayerId, getPlayerTag, setPlayerTag, hasPlayerTag } from './api/identity';
 import { submitMatch } from './api/client';
-import type { CreateMatchInput } from '@rautfall/contracts';
+import type { CreateMatchInput, WsParticipantRole } from '@rautfall/contracts';
 import type { ActiveEffectSnapshot, SabotageType } from '@rautfall/game-engine';
 import type { BotProfileId } from '@rautfall/battle-engine';
 
@@ -30,7 +31,7 @@ import { generateMatchSeed } from './game/seed';
 import { hasAnyDevDemoQueryParam } from './dev/dev-demos';
 import { defineAsyncComponent, type Component } from 'vue';
 import OnlineRoomModal from './components/OnlineRoomModal.vue';
-import { OnlineGameSession } from './api/online-game-session';
+import { OnlineGameSession, type OnlineSessionStatus } from './api/online-game-session';
 
 const SfxLabComponent: Component | null = import.meta.env.DEV
   ? defineAsyncComponent(() => import('./components/SfxLab.vue'))
@@ -436,6 +437,31 @@ const submittedMatchIdsSet = new Set<string>();
 
 const onlineSession = shallowRef<OnlineGameSession | null>(null);
 const isOnlineModalOpen = ref(false);
+const onlineSessionStatus = ref<OnlineSessionStatus>('idle');
+const onlineRematchRequests = ref<Set<WsParticipantRole>>(new Set());
+
+const isOnlineRematchPending = computed(() => {
+  if (gameMode.value !== 'online' || !onlineSession.value) return false;
+  const myRole = onlineSession.value.role;
+  return myRole ? onlineRematchRequests.value.has(myRole) : false;
+});
+
+const isOnlineOpponentRematchRequested = computed(() => {
+  if (gameMode.value !== 'online' || !onlineSession.value) return false;
+  const myRole = onlineSession.value.role;
+  if (!myRole) return false;
+  const opponentRole = myRole === 'playerOne' ? 'playerTwo' : 'playerOne';
+  return onlineRematchRequests.value.has(opponentRole);
+});
+
+const isOnlineDisconnected = computed(() => {
+  if (gameMode.value !== 'online' || !onlineSession.value) return false;
+  return onlineSessionStatus.value === 'disconnected';
+});
+
+const isOpponentDisconnectedModalOpen = computed(() => {
+  return gameMode.value === 'online' && isOnlineDisconnected.value && currentRouteName.value === 'battle';
+});
 
 function destroyOnlineSession(): void {
   if (onlineSession.value) {
@@ -443,6 +469,8 @@ function destroyOnlineSession(): void {
     onlineSession.value = null;
   }
   isOnlineActive.value = false;
+  onlineSessionStatus.value = 'idle';
+  onlineRematchRequests.value = new Set();
 }
 
 function openOnlinePvPModal(): void {
@@ -453,12 +481,19 @@ function openOnlinePvPModal(): void {
   onlineSession.value = session;
 
   session.onStatusChange((status) => {
+    onlineSessionStatus.value = status;
+    onlineRematchRequests.value = new Set(session.rematchRequests);
     if (status === 'playing') {
       isOnlineActive.value = true;
       isOnlineModalOpen.value = false;
+      gameResult.value = null;
       audioManager.playMusic('gameplay');
       pushRoute('battle', { online: '1' });
     }
+  });
+
+  session.onRematchRequested(() => {
+    onlineRematchRequests.value = new Set(session.rematchRequests);
   });
 
   isOnlineModalOpen.value = true;
@@ -717,11 +752,19 @@ function doReset(): void {
 
 function doTogglePause(): void {
   audioManager.playSfx('uiClick');
-  controller?.togglePause();
+  if (gameMode.value === 'online' && onlineSession.value) {
+    onlineSession.value.togglePause();
+  } else {
+    controller?.togglePause();
+  }
 }
 
 async function doReplay(): Promise<void> {
   audioManager.playSfx('uiClick');
+  if (gameMode.value === 'online' && onlineSession.value) {
+    onlineSession.value.requestRematch();
+    return;
+  }
   audioManager.restartMusic('gameplay');
   currentClientMatchId = crypto.randomUUID();
   saveStatus.value = 'idle';
@@ -1092,7 +1135,7 @@ function openDevTools(): void {
                     :on-state-update="onStateUpdate"
                     @controller-ready="onControllerReady"
                   />
-                  <PauseShutter :status="gameState.status" />
+                  <PauseShutter :status="gameState.status" :can-resume="gameState.canResume ?? true" />
                 </div>
                 <div class="board-exhaust-vent" aria-hidden="true">
                   <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
@@ -1138,13 +1181,14 @@ function openDevTools(): void {
               <button
                 type="button"
                 class="rf-btn-tactical rf-btn-sm"
-                :disabled="gameState.status === 'gameOver'"
+                :disabled="gameState.status === 'gameOver' || (gameState.status === 'paused' && gameState.canResume === false)"
                 data-testid="pause-toggle"
                 @click="doTogglePause"
               >
-                {{ gameState.status === 'paused' ? 'Reanudar' : 'Pausar' }}
+                {{ gameState.status === 'paused' ? (gameState.canResume === false ? 'Pausado por rival' : 'Reanudar') : 'Pausar' }}
               </button>
               <button
+                v-if="gameMode !== 'online'"
                 type="button"
                 class="rf-btn-tactical rf-btn-destructive rf-btn-sm"
                 data-testid="reset-button"
@@ -1320,9 +1364,18 @@ function openDevTools(): void {
           :result="gameResult"
           :save-status="saveStatus"
           :player-tag="currentOperatorTag"
+          :rematch-pending="isOnlineRematchPending"
+          :opponent-requested-rematch="isOnlineOpponentRematchRequested"
+          :is-disconnected="isOnlineDisconnected"
           @replay="doReplay"
           @main-menu="goToMenu"
           @confirm-save="confirmAndSaveMatchResult"
+        />
+
+        <!-- Modal bloqueante de Desconexión del Rival durante partida PvP Online -->
+        <OpponentDisconnectedModal
+          v-if="isOpponentDisconnectedModalOpen"
+          @main-menu="goToMenu"
         />
       </div>
 

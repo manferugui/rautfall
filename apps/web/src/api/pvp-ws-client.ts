@@ -7,6 +7,7 @@ import type {
   BattleStartedServerMessage,
   GameStateServerMessage,
   BattleEndedServerMessage,
+  RematchRequestedServerMessage,
   PlayerDisconnectedServerMessage,
   ErrorServerMessage,
   WsStepInput,
@@ -31,6 +32,7 @@ export class OnlinePvPClient {
   private battleStartedListeners: Set<EventListener<BattleStartedServerMessage>> = new Set();
   private gameStateListeners: Set<EventListener<GameStateServerMessage>> = new Set();
   private battleEndedListeners: Set<EventListener<BattleEndedServerMessage>> = new Set();
+  private rematchRequestedListeners: Set<EventListener<RematchRequestedServerMessage>> = new Set();
   private playerDisconnectedListeners: Set<EventListener<PlayerDisconnectedServerMessage>> = new Set();
   private errorListeners: Set<EventListener<ErrorServerMessage>> = new Set();
   private closeListeners: Set<EventListener<CloseEvent | Event>> = new Set();
@@ -135,6 +137,14 @@ export class OnlinePvPClient {
     this.send({ type: 'player_input', input });
   }
 
+  public togglePause(): void {
+    this.send({ type: 'toggle_pause' });
+  }
+
+  public requestRematch(): void {
+    this.send({ type: 'request_rematch' });
+  }
+
   private send(msg: ClientWsMessage): void {
     if (!this.socket || this.socket.readyState !== this.WebSocketClass.OPEN) {
       return;
@@ -184,6 +194,9 @@ export class OnlinePvPClient {
       case 'battle_ended':
         this.battleEndedListeners.forEach((cb) => cb(msg as BattleEndedServerMessage));
         break;
+      case 'rematch_requested':
+        this.rematchRequestedListeners.forEach((cb) => cb(msg as RematchRequestedServerMessage));
+        break;
       case 'player_disconnected':
         this.playerDisconnectedListeners.forEach((cb) => cb(msg as PlayerDisconnectedServerMessage));
         break;
@@ -230,6 +243,11 @@ export class OnlinePvPClient {
   public onBattleEnded(cb: EventListener<BattleEndedServerMessage>): () => void {
     this.battleEndedListeners.add(cb);
     return () => this.battleEndedListeners.delete(cb);
+  }
+
+  public onRematchRequested(cb: EventListener<RematchRequestedServerMessage>): () => void {
+    this.rematchRequestedListeners.add(cb);
+    return () => this.rematchRequestedListeners.delete(cb);
   }
 
   public onPlayerDisconnected(cb: EventListener<PlayerDisconnectedServerMessage>): () => void {

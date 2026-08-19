@@ -198,4 +198,148 @@ describe('Rutas WebSocket para gameplay PvP autoritativo (/ws/rooms)', () => {
 
     p2.client.close();
   });
+
+  it('permite alternar la pausa mediante mensajes toggle_pause transmitiendo game_state con status paused a ambos jugadores', async () => {
+    const p1 = await connectWs();
+    p1.client.send(JSON.stringify({ type: 'create_room' }));
+    const createMsg = await p1.nextMessage();
+    const code = (createMsg as Extract<ServerWsMessage, { type: 'room_created' }>).code;
+
+    const p2 = await connectWs();
+    p2.client.send(JSON.stringify({ type: 'join_room', code }));
+
+    await p2.nextMessage(); // room_joined
+    await p1.nextMessage(); // room_ready
+    await p2.nextMessage(); // room_ready
+    await p1.nextMessage(); // battle_started
+    await p2.nextMessage(); // battle_started
+
+    // P1 envía solicitud de pausa
+    p1.client.send(JSON.stringify({ type: 'toggle_pause' }));
+
+    let p1Msg = await p1.nextMessage();
+    while (p1Msg.type === 'game_state' && p1Msg.status === 'running') {
+      p1Msg = await p1.nextMessage();
+    }
+    expect(p1Msg.type).toBe('game_state');
+    if (p1Msg.type === 'game_state') {
+      expect(p1Msg.status).toBe('paused');
+    }
+
+    let p2Msg = await p2.nextMessage();
+    while (p2Msg.type === 'game_state' && p2Msg.status === 'running') {
+      p2Msg = await p2.nextMessage();
+    }
+    expect(p2Msg.type).toBe('game_state');
+    if (p2Msg.type === 'game_state') {
+      expect(p2Msg.status).toBe('paused');
+    }
+
+    // P2 envía solicitud de reanudación (debe ser ignorada por el servidor porque P1 pausó)
+    p2.client.send(JSON.stringify({ type: 'toggle_pause' }));
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const runtime = gameRuntimeRegistry.get(code);
+    expect(runtime?.getIsPaused()).toBe(true);
+    expect(runtime?.getPausedBy()).toBe('playerOne');
+
+    // P1 envía solicitud de reanudación (debe reanudar con éxito)
+    p1.client.send(JSON.stringify({ type: 'toggle_pause' }));
+
+    let p1ResumeMsg = await p1.nextMessage();
+    while (p1ResumeMsg.type === 'game_state' && p1ResumeMsg.status === 'paused') {
+      p1ResumeMsg = await p1.nextMessage();
+    }
+    expect(p1ResumeMsg.type).toBe('game_state');
+    if (p1ResumeMsg.type === 'game_state') {
+      expect(p1ResumeMsg.status).toBe('running');
+    }
+
+    p1.client.close();
+    p2.client.close();
+  });
+
+  it('gestiona la solicitud de revancha de forma explícita e idempotente al finalizar la partida', async () => {
+    const p1 = await connectWs();
+    p1.client.send(JSON.stringify({ type: 'create_room' }));
+    const createMsg = await p1.nextMessage();
+    const code = (createMsg as Extract<ServerWsMessage, { type: 'room_created' }>).code;
+
+    const p2 = await connectWs();
+    p2.client.send(JSON.stringify({ type: 'join_room', code }));
+
+    await p2.nextMessage(); // room_joined
+    await p1.nextMessage(); // room_ready
+    await p2.nextMessage(); // room_ready
+    await p1.nextMessage(); // battle_started
+    await p2.nextMessage(); // battle_started
+
+    // Detener runtime simulando fin de partida para poder solicitar revancha
+    const runtime = gameRuntimeRegistry.get(code);
+    expect(runtime).toBeDefined();
+    runtime?.stop();
+    gameRuntimeRegistry.stopAndRemove(code);
+
+    // P1 solicita revancha por primera vez
+    p1.client.send(JSON.stringify({ type: 'request_rematch' }));
+
+    let p1RematchMsg1: ServerWsMessage | undefined;
+    while (!p1RematchMsg1 || p1RematchMsg1.type !== 'rematch_requested') {
+      p1RematchMsg1 = await p1.nextMessage();
+    }
+    expect(p1RematchMsg1).toEqual({
+      type: 'rematch_requested',
+      requestedBy: 'playerOne',
+    });
+
+    let p2RematchMsg1: ServerWsMessage | undefined;
+    while (!p2RematchMsg1 || p2RematchMsg1.type !== 'rematch_requested') {
+      p2RematchMsg1 = await p2.nextMessage();
+    }
+    expect(p2RematchMsg1).toEqual({
+      type: 'rematch_requested',
+      requestedBy: 'playerOne',
+    });
+
+    // P1 solicita revancha por segunda vez (solicitud duplicada idempotente)
+    p1.client.send(JSON.stringify({ type: 'request_rematch' }));
+
+    let p1RematchMsg2: ServerWsMessage | undefined;
+    while (!p1RematchMsg2 || p1RematchMsg2.type !== 'rematch_requested') {
+      p1RematchMsg2 = await p1.nextMessage();
+    }
+    expect(p1RematchMsg2).toEqual({
+      type: 'rematch_requested',
+      requestedBy: 'playerOne',
+    });
+
+    // P2 solicita revancha (segundo jugador acepta)
+    p2.client.send(JSON.stringify({ type: 'request_rematch' }));
+
+    let p1StartedMsg: ServerWsMessage | undefined;
+    while (!p1StartedMsg || p1StartedMsg.type !== 'battle_started') {
+      p1StartedMsg = await p1.nextMessage();
+    }
+    expect(p1StartedMsg).toEqual({
+      type: 'battle_started',
+      role: 'playerOne',
+    });
+
+    let p2StartedMsg: ServerWsMessage | undefined;
+    while (!p2StartedMsg || p2StartedMsg.type !== 'battle_started') {
+      p2StartedMsg = await p2.nextMessage();
+    }
+    expect(p2StartedMsg).toEqual({
+      type: 'battle_started',
+      role: 'playerTwo',
+    });
+
+    const newRuntime = gameRuntimeRegistry.get(code);
+    expect(newRuntime).toBeDefined();
+    expect(newRuntime?.getIsRunning()).toBe(true);
+
+    newRuntime?.stop();
+    p1.client.close();
+    p2.client.close();
+  });
 });

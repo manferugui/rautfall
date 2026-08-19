@@ -28,12 +28,12 @@ describe('Cliente API HTTP (client.ts)', () => {
 
   it('resuelve correctamente la URL base según la variable de entorno o fallback seguro', () => {
     const url = getApiBaseUrl();
-    expect(url).toBe('http://localhost:3000');
+    expect(url).toBe('http://127.0.0.1:3000');
   });
 
-  it('resuelve correctamente la URL base de WebSocket con getWsApiUrl()', () => {
-    const wsUrl = getWsApiUrl();
-    expect(wsUrl).toBe('ws://localhost:3000/ws/rooms');
+  it('resuelve correctamente la URL base de WebSocket con getWsApiUrl() en DEV sin VITE_WS_BASE_URL', () => {
+    vi.stubEnv('VITE_WS_BASE_URL', '');
+    expect(getWsApiUrl()).toBe('ws://127.0.0.1:3000/ws/rooms');
   });
 
   it('getWsApiUrl maneja VITE_WS_BASE_URL con o sin slash final y con o sin /ws/rooms', () => {
@@ -50,8 +50,9 @@ describe('Cliente API HTTP (client.ts)', () => {
     expect(getWsApiUrl()).toBe('wss://api.rautfall.com/ws/rooms');
   });
 
-  it('getWsApiUrl deriva la URL de WebSocket a partir de VITE_API_BASE_URL (HTTP/HTTPS y slashes)', () => {
+  it('getWsApiUrl deriva la URL de WebSocket a partir de VITE_API_BASE_URL en entornos no-DEV (PROD/remoto)', () => {
     vi.stubEnv('VITE_WS_BASE_URL', '');
+    vi.stubEnv('DEV', false);
 
     vi.stubEnv('VITE_API_BASE_URL', 'http://api.rautfall.com');
     expect(getWsApiUrl()).toBe('ws://api.rautfall.com/ws/rooms');
@@ -74,7 +75,7 @@ describe('Cliente API HTTP (client.ts)', () => {
     const res = await submitMatch(validMatchInput);
     expect(res).toEqual(mockRecord);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:3000/api/matches',
+      'http://127.0.0.1:3000/api/matches',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify(validMatchInput),
@@ -90,7 +91,7 @@ describe('Cliente API HTTP (client.ts)', () => {
 
     await getMatchHistory('11111111-1111-4111-8111-111111111111', 10);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:3000/api/matches?playerId=11111111-1111-4111-8111-111111111111&limit=10',
+      'http://127.0.0.1:3000/api/matches?playerId=11111111-1111-4111-8111-111111111111&limit=10',
       expect.objectContaining({ method: 'GET' }),
     );
   });
@@ -103,7 +104,7 @@ describe('Cliente API HTTP (client.ts)', () => {
 
     await getRanking('battle', 20);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:3000/api/ranking?mode=battle&limit=20',
+      'http://127.0.0.1:3000/api/ranking?mode=battle&limit=20',
       expect.objectContaining({ method: 'GET' }),
     );
   });

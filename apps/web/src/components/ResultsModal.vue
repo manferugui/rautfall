@@ -19,6 +19,9 @@ const props = defineProps<{
   result: GameResultSummary;
   saveStatus?: 'idle' | 'awaitingTag' | 'readyToSave' | 'saving' | 'saved' | 'failed' | 'error';
   playerTag?: string | null;
+  rematchPending?: boolean;
+  opponentRequestedRematch?: boolean;
+  isDisconnected?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -273,10 +276,13 @@ onUnmounted(() => {
             type="button"
             class="rf-btn-tactical rf-btn-secondary action-btn"
             data-testid="replay-button"
-            :disabled="saveStatus === 'saving'"
+            :disabled="saveStatus === 'saving' || rematchPending || isDisconnected"
             @click="emit('replay')"
           >
-            VOLVER A JUGAR
+            <span v-if="isDisconnected">EL RIVAL HA ABANDONADO</span>
+            <span v-else-if="rematchPending">ESPERANDO AL RIVAL...</span>
+            <span v-else-if="opponentRequestedRematch">ACEPTAR REVANCHA</span>
+            <span v-else>VOLVER A JUGAR</span>
           </button>
 
           <button

@@ -9,6 +9,7 @@ export {
 } from './room-manager.js';
 export {
   RoomGameRuntime,
+  STATE_BROADCAST_INTERVAL_MS,
   consumeNextStepInput,
   filterEventsForParticipant,
   type HeldState,

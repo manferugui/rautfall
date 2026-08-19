@@ -39,12 +39,17 @@ describe('Board Bezel Sabotage Warnings (Fase 1: 750 ms Pre-aviso)', () => {
       },
     });
 
-    const battleBtn = wrapper.find('[data-testid="start-battle-button"]');
-    if (battleBtn.exists()) {
-      await battleBtn.trigger('click');
-      await wrapper.vm.$nextTick();
-      await flushPromises();
-    }
+      const battleBtn = wrapper.find('[data-testid="start-battle-button"]');
+      if (battleBtn.exists()) {
+        await battleBtn.trigger('click');
+        await wrapper.vm.$nextTick();
+        const operatorBtn = wrapper.find('[data-testid="bot-profile-operator"]');
+        if (operatorBtn.exists()) {
+          await operatorBtn.trigger('click');
+          await wrapper.vm.$nextTick();
+        }
+        await flushPromises();
+      }
 
     const stateUpdateCallback = mockCreatePhaserGame.mock.calls[0]![0].onStateUpdate as (state: GamePresentationState) => void;
 
@@ -1023,6 +1028,11 @@ describe('Board Bezel Sabotage Warnings (Fase 1: 750 ms Pre-aviso)', () => {
       if (battleBtn.exists()) {
         await battleBtn.trigger('click');
         await wrapper.vm.$nextTick();
+        const operatorBtn = wrapper.find('[data-testid="bot-profile-operator"]');
+        if (operatorBtn.exists()) {
+          await operatorBtn.trigger('click');
+          await wrapper.vm.$nextTick();
+        }
         await flushPromises();
       }
 
