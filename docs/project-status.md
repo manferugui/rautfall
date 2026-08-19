@@ -948,7 +948,23 @@ Ver [Informe de implementación](implementation/0038-integracion-continua-github
 
 Ver [Informe de implementación](implementation/0039-despliegue-vercel-neon.md).
 
+## Task [0040 — Modelo base de salas privadas PvP](tasks/0040-modelo-base-salas-privadas-pvp.md)
 
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-19 |
+| **Resultado** | Capa de aplicación en memoria creada en `apps/api` para representar y gestionar salas privadas PvP efímeras de 2 jugadores (`RoomManager`). Algoritmo de generación de códigos aleatorios cortos de 5 caracteres con alfabeto inequívoco (`23456789ABCDEFGHJKLMNPQRSTUVWXYZ`) y reintentos ante colisiones, gestión in-memory desacoplada de transportes de red (WebSockets), estados mínimos `'waiting_for_player'` y `'ready'`, eliminación física en `closeRoom()`, inyección e instanciación de `BattleSession` al unirse Player 2 y guardas atómicas sin mutaciones parciales. 832 tests Vitest en verde, lint, typecheck, build y git diff --check limpios. |
 
+### Resumen
 
+- Módulo in-memory en `apps/api/src/rooms/` que gestiona el ciclo de vida de las salas privadas PvP.
+- `PvPRoomStatus`: `'waiting_for_player' | 'ready'`. Sin estado `closed` residual ni `createdAt` especulativos.
+- `generateRoomCode`: códigos cortos de 5 caracteres con alfabeto de 29 símbolos sin ambigüedad tipográfica (`23456789ABCDEFGHJKLMNPQRSTUVWXYZ`) y reintentos atómicos ante colisiones.
+- `RoomManager`: encapsula `Map<string, PvPRoom>`. Operaciones `createRoom`, `getRoom`, `joinRoom`, `closeRoom`.
+- Inyección de factoría de batalla `BattleSessionFactory`: `createRoom()` no crea `BattleSession`, `joinRoom()` válido la crea e integra atómicamente, y `joinRoom()` fallido no la instancia.
+- `closeRoom()` elimina físicamente la sala devolviendo `undefined` en llamadas posteriores a `getRoom()`.
+- 16 pruebas unitarias específicas en `apps/api/test/rooms/room-manager.test.ts`. 832 pruebas totales en el monorepo.
+- `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
 
+Ver [Informe de implementación](implementation/0040-modelo-base-salas-privadas-pvp.md).

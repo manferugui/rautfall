@@ -15,7 +15,9 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@fastify/type-provider-typebox": "^5.1.0",
+    "@rautfall/battle-engine": "workspace:*",
     "@rautfall/contracts": "workspace:*",
+    "@rautfall/game-config": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.3",

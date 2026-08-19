@@ -53,9 +53,15 @@ importers:
       '@fastify/type-provider-typebox':
         specifier: ^5.1.0
         version: 5.2.0(@sinclair/typebox@0.34.52)
+      '@rautfall/battle-engine':
+        specifier: workspace:*
+        version: link:../../packages/battle-engine
       '@rautfall/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@rautfall/game-config':
+        specifier: workspace:*
+        version: link:../../packages/game-config
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
