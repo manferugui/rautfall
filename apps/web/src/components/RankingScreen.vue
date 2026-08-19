@@ -9,7 +9,7 @@
  * - Estética Industrial Dramatic.
  */
 
-import { ref, onMounted } from 'vue';
+import { ref, watch } from 'vue';
 import type { RankingEntry, GameModeContract } from '@rautfall/contracts';
 import { getRanking } from '../api/client';
 import { getAudioManager } from '../audio';
@@ -51,9 +51,13 @@ async function loadRanking(mode: GameModeContract): Promise<void> {
   }
 }
 
-onMounted(() => {
-  void loadRanking(props.initialMode || 'battle');
-});
+watch(
+  () => props.initialMode,
+  (newMode) => {
+    void loadRanking(newMode || 'battle');
+  },
+  { immediate: true }
+);
 
 function onSelectMode(mode: GameModeContract): void {
   audioManager.playSfx('uiClick');
