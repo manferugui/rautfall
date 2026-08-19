@@ -3,7 +3,7 @@ import type { WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 import { Value } from '@sinclair/typebox/value';
 import { ClientWsMessageSchema, type ServerWsMessage } from '@rautfall/contracts';
-import { RoomError, type RoomManager } from '../rooms/index.js';
+import { RoomError, type RoomManager, type GameRuntimeRegistry } from '../rooms/index.js';
 
 interface SessionState {
   socket: WebSocket;
@@ -20,7 +20,11 @@ interface RoomSessions {
 /**
  * Registra la ruta WebSocket para salas privadas PvP (/ws/rooms).
  */
-export function registerRoomsWsRoutes(fastify: FastifyInstance, roomManager: RoomManager): void {
+export function registerRoomsWsRoutes(
+  fastify: FastifyInstance,
+  roomManager: RoomManager,
+  runtimeRegistry: GameRuntimeRegistry,
+): void {
   const roomSessionsMap = new Map<string, RoomSessions>();
 
   function sendWsMessage(socket: WebSocket, msg: ServerWsMessage): void {
@@ -40,6 +44,9 @@ export function registerRoomsWsRoutes(fastify: FastifyInstance, roomManager: Roo
       if (!code) return;
 
       const role = session.role;
+
+      // Detener y eliminar el runtime de juego si existía
+      runtimeRegistry.stopAndRemove(code);
 
       // Limpieza idempotente de la propia sesión
       session.roomCode = undefined;
@@ -174,6 +181,32 @@ export function registerRoomsWsRoutes(fastify: FastifyInstance, roomManager: Roo
             sendWsMessage(existingSessions.playerOneSession.socket, readyMsg);
           }
           sendWsMessage(socket, readyMsg);
+
+          // Crear e iniciar runtime autoritativo de juego
+          if (room.battleSession) {
+            const runtime = runtimeRegistry.create(room.code, room.battleSession, (recipient, serverMsg) => {
+              const sessions = roomSessionsMap.get(room.code);
+              const targetSession =
+                recipient === 'playerOne' ? sessions?.playerOneSession : sessions?.playerTwoSession;
+              if (targetSession) {
+                sendWsMessage(targetSession.socket, serverMsg);
+              }
+            });
+
+            if (existingSessions.playerOneSession) {
+              sendWsMessage(existingSessions.playerOneSession.socket, {
+                type: 'battle_started',
+                role: 'playerOne',
+              });
+            }
+
+            sendWsMessage(socket, {
+              type: 'battle_started',
+              role: 'playerTwo',
+            });
+
+            runtime.start();
+          }
         } catch (err) {
           if (err instanceof RoomError) {
             sendWsMessage(socket, {
@@ -188,6 +221,23 @@ export function registerRoomsWsRoutes(fastify: FastifyInstance, roomManager: Roo
               message: 'Failed to join room.',
             });
           }
+        }
+        return;
+      }
+
+      if (msg.type === 'player_input') {
+        if (!session.roomCode || !session.role) {
+          sendWsMessage(socket, {
+            type: 'error',
+            code: 'NOT_IN_ROOM',
+            message: 'Cannot process input because connection is not in an active room.',
+          });
+          return;
+        }
+
+        const runtime = runtimeRegistry.get(session.roomCode);
+        if (runtime && runtime.getIsRunning()) {
+          runtime.enqueueInput(session.role, msg.input);
         }
         return;
       }

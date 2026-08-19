@@ -65,6 +65,9 @@ importers:
       '@rautfall/game-config':
         specifier: workspace:*
         version: link:../../packages/game-config
+      '@rautfall/game-engine':
+        specifier: workspace:*
+        version: link:../../packages/game-engine
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52

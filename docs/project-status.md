@@ -990,3 +990,25 @@ Ver [Informe de implementación](implementation/0040-modelo-base-salas-privadas-
 - `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
 
 Ver [Informe de implementación](implementation/0041-transporte-websocket-salas-privadas-pvp.md).
+
+## Task [0042 — Runtime autoritativo de gameplay PvP en servidor](tasks/0042-runtime-autoritativo-gameplay-pvp-servidor.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-19 |
+| **Resultado** | Capa de ejecución autoritativa de gameplay PvP implementada en servidor (`apps/api`) conectando `RoomManager` y el transporte WebSocket de `/ws/rooms` con `BattleSession`. Bucle de simulación autoritativo a 100 Hz (`fixedStepMs = 10`) con acumulador monotónico y límite de catch-up de 100 ms, procesamiento de entradas event-driven `player_input` con retención de estado sostenido `held` y cola FIFO de acciones discretas `oneshot` (garantizando `maxActionsInSingleStep <= 1` por paso de 10 ms), broadcast de snapshots autoritativos a 20 Hz (cada 50 ms), esquemas DTO TypeBox explícitos en `@rautfall/contracts` sin ningún `Type.Any()`, filtrado autoritativo de eventos visuales del rival durante `interferencia`, desacoplamiento mediante `GameRuntimeRegistry` y detención idempotente del runtime ante desconexiones. 1025 tests en verde en el monorepo, lint, typecheck, build y git diff --check limpios. |
+
+### Resumen
+
+- Implementado `RoomGameRuntime` en `apps/api/src/rooms/room-game-runtime.ts` para ejecutar la `BattleSession` autoritativa en servidor.
+- Bucle monotónico de 100 Hz con acumulador `performance.now()` y tope de catch-up de 100 ms por iteración para evitar la *spiral of death*.
+- Manejo de entradas event-driven con estado sostenido `held` (`leftHeld`, `rightHeld`, `softDropHeld`) y cola FIFO de acciones discretas `oneshot` (`consumeNextStepInput`).
+- Invariante estricta mantenida: **máximo 1 acción discreta consumida por jugador por paso de 10 ms**, coincidiendo con la semántica del motor local. Multiplicidad conservada en steps de 10 ms consecutivos.
+- Difusión periódica de snapshots de juego (`game_state`) a 20 Hz (50 ms).
+- Filtrado autoritativo de eventos del rival (`filterEventsForParticipant`) cuando un participante está interferido.
+- Desacoplamiento mediante `GameRuntimeRegistry` en `apps/api/src/rooms/game-runtime-registry.ts` sin alterar el modelo pasivo de `PvPRoom`.
+- DTOs TypeBox de red completamente explícitos en `packages/contracts/src/pvp-ws.ts` sin `Type.Any()`.
+- 9 nuevas pruebas unitarias y de integración en `apps/api/test/rooms/room-game-runtime.test.ts` y `apps/api/test/routes/rooms-ws-gameplay.test.ts`.
+- Validaciones raíz `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde (1025 pruebas pasadas).
+Ver [Informe de implementación](implementation/0042-runtime-autoritativo-gameplay-pvp-servidor.md).

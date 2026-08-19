@@ -7,3 +7,15 @@ export {
   type RoomManager,
   type RoomManagerOptions,
 } from './room-manager.js';
+export {
+  RoomGameRuntime,
+  consumeNextStepInput,
+  filterEventsForParticipant,
+  type HeldState,
+  type OneshotAction,
+  type BroadcastCallback,
+} from './room-game-runtime.js';
+export {
+  createGameRuntimeRegistry,
+  type GameRuntimeRegistry,
+} from './game-runtime-registry.js';

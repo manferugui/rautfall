@@ -19,6 +19,7 @@
     "@rautfall/battle-engine": "workspace:*",
     "@rautfall/contracts": "workspace:*",
     "@rautfall/game-config": "workspace:*",
+    "@rautfall/game-engine": "workspace:*",
     "@sinclair/typebox": "^0.34.52",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.39.3",

@@ -4,7 +4,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import { getAppEnv, type ApiEnv } from './config/env.js';
 import { createDatabaseConnection, type AppDatabase } from './db/index.js';
 import { createMatchesRepository, type MatchesRepository } from './repositories/matches-repository.js';
-import { createRoomManager, type RoomManager } from './rooms/index.js';
+import { createRoomManager, createGameRuntimeRegistry, type RoomManager, type GameRuntimeRegistry } from './rooms/index.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMatchesRoutes } from './routes/matches.js';
 import { registerRankingRoutes } from './routes/ranking.js';
@@ -16,6 +16,7 @@ export interface AppOptions {
   db?: AppDatabase;
   matchesRepository?: MatchesRepository;
   roomManager?: RoomManager;
+  gameRuntimeRegistry?: GameRuntimeRegistry;
 }
 
 export function buildApp(options: AppOptions = {}): {
@@ -24,6 +25,7 @@ export function buildApp(options: AppOptions = {}): {
   db: AppDatabase;
   matchesRepository: MatchesRepository;
   roomManager: RoomManager;
+  gameRuntimeRegistry: GameRuntimeRegistry;
   close: () => Promise<void>;
 } {
   const env = options.env || getAppEnv();
@@ -39,6 +41,7 @@ export function buildApp(options: AppOptions = {}): {
 
   const matchesRepository = options.matchesRepository || createMatchesRepository(db);
   const roomManager = options.roomManager || createRoomManager();
+  const gameRuntimeRegistry = options.gameRuntimeRegistry || createGameRuntimeRegistry();
 
   const fastify = Fastify({
     logger: env.NODE_ENV === 'test' ? false : { level: 'info' },
@@ -66,7 +69,7 @@ export function buildApp(options: AppOptions = {}): {
   registerRankingRoutes(fastify, matchesRepository);
 
   void fastify.register(async (wsScope) => {
-    registerRoomsWsRoutes(wsScope, roomManager);
+    registerRoomsWsRoutes(wsScope, roomManager, gameRuntimeRegistry);
   });
 
   async function close(): Promise<void> {
@@ -82,6 +85,7 @@ export function buildApp(options: AppOptions = {}): {
     db,
     matchesRepository,
     roomManager,
+    gameRuntimeRegistry,
     close,
   };
 }

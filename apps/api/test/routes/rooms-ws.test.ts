@@ -275,11 +275,16 @@ describe('Rutas WebSocket para salas privadas PvP (/ws/rooms)', () => {
     await p2.nextMessage(); // room_joined
     await p1.nextMessage(); // room_ready
     await p2.nextMessage(); // room_ready
+    await p1.nextMessage(); // battle_started
+    await p2.nextMessage(); // battle_started
 
     // P1 se desconecta
     p1.client.close();
 
-    const disconnectMsg = await p2.nextMessage();
+    let disconnectMsg = await p2.nextMessage();
+    while (disconnectMsg.type === 'game_state') {
+      disconnectMsg = await p2.nextMessage();
+    }
     expect(disconnectMsg).toEqual({
       type: 'player_disconnected',
       reason: 'opponent_left',
@@ -303,10 +308,19 @@ describe('Rutas WebSocket para salas privadas PvP (/ws/rooms)', () => {
     await p2.nextMessage(); // room_joined
     await p1.nextMessage(); // room_ready
     await p2.nextMessage(); // room_ready
+    await p1.nextMessage(); // battle_started
+    await p2.nextMessage(); // battle_started
 
     // P1 se desconecta
     p1.client.close();
-    await p2.nextMessage(); // player_disconnected
+    let disconnectMsg = await p2.nextMessage();
+    while (disconnectMsg.type === 'game_state') {
+      disconnectMsg = await p2.nextMessage();
+    }
+    expect(disconnectMsg).toEqual({
+      type: 'player_disconnected',
+      reason: 'opponent_left',
+    });
 
     // P2 debe estar liberado y poder crear una nueva sala en su misma conexión WebSocket
     p2.client.send(JSON.stringify({ type: 'create_room' }));
@@ -333,10 +347,19 @@ describe('Rutas WebSocket para salas privadas PvP (/ws/rooms)', () => {
     await p2.nextMessage(); // room_joined
     await p1.nextMessage(); // room_ready
     await p2.nextMessage(); // room_ready
+    await p1.nextMessage(); // battle_started
+    await p2.nextMessage(); // battle_started
 
     // P2 se desconecta
     p2.client.close();
-    await p1.nextMessage(); // player_disconnected
+    let disconnectMsg = await p1.nextMessage();
+    while (disconnectMsg.type === 'game_state') {
+      disconnectMsg = await p1.nextMessage();
+    }
+    expect(disconnectMsg).toEqual({
+      type: 'player_disconnected',
+      reason: 'opponent_left',
+    });
 
     // P1 debe estar liberado y poder crear una nueva sala en su misma conexión WebSocket
     p1.client.send(JSON.stringify({ type: 'create_room' }));
