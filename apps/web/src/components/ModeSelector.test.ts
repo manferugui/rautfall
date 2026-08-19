@@ -34,11 +34,11 @@ describe('ModeSelector.vue', () => {
     wrapper.unmount();
   });
 
-  it('emite el evento openOnlinePvP al pulsar el botón CONTRA JUGADOR', async () => {
+  it('emite el evento openOnlinePvp al pulsar el botón CONTRA JUGADOR', async () => {
     const wrapper = mount(ModeSelector);
     await wrapper.find('[data-testid="start-online-pvp-button"]').trigger('click');
 
-    expect(wrapper.emitted('openOnlinePvP')).toBeTruthy();
+    expect(wrapper.emitted('openOnlinePvp')).toBeTruthy();
     wrapper.unmount();
   });
 

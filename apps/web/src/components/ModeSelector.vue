@@ -46,7 +46,7 @@ const emit = defineEmits<{
   (e: 'openHistory'): void;
   (e: 'openRanking'): void;
   (e: 'openDevTools'): void;
-  (e: 'openOnlinePvP'): void;
+  (e: 'openOnlinePvp'): void;
 }>();
 
 const audioManager = getAudioManager();
@@ -85,7 +85,7 @@ function onSelectMode(mode: GameMode): void {
 function onOpenOnlinePvP(): void {
   void audioManager.unlock();
   audioManager.playSfx('uiClick');
-  emit('openOnlinePvP');
+  emit('openOnlinePvp');
 }
 
 function onOpenSettings(): void {

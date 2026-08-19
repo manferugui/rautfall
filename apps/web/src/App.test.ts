@@ -782,4 +782,42 @@ describe('App.vue — flujo web de modos, resultados, firma arcade unificada e i
       });
     });
   });
+
+  describe('Integración del flujo Online PvP en App.vue (regresión Tarea 0043)', () => {
+    it('al pulsar CONTRA JUGADOR abre OnlineRoomModal, muestra opciones y al cancelar limpia la sesión sin abrir WebSocket', async () => {
+      const { wrapper, router } = mountApp('/');
+      await router.isReady();
+
+      // 1. Comprobar que en el Menú Principal no está abierto el modal de salas online
+      expect(wrapper.find('[data-testid="online-room-modal"]').exists()).toBe(false);
+
+      // 2. Hacer clic en CONTRA JUGADOR (start-online-pvp-button)
+      const pvpBtn = wrapper.find('[data-testid="start-online-pvp-button"]');
+      expect(pvpBtn.exists()).toBe(true);
+      await pvpBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      // 3. Demostrar que la cadena completa ModeSelector -> App.vue abre OnlineRoomModal
+      const modal = wrapper.find('[data-testid="online-room-modal"]');
+      expect(modal.exists()).toBe(true);
+
+      // 4. Verificar que dentro del modal están visibles las opciones de CREAR PARTIDA y UNIRSE A PARTIDA
+      expect(wrapper.find('[data-testid="create-room-button"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="join-room-button"]').exists()).toBe(true);
+
+      // 5. Pulsar cancelar/cerrar modal sin iniciar operación
+      const cancelBtn = wrapper.find('[data-testid="cancel-online-room-button"]');
+      expect(cancelBtn.exists()).toBe(true);
+      await cancelBtn.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      // 6. Verificar que el modal se destruye y la sesión online queda limpia sin sockets huérfanos
+      expect(wrapper.find('[data-testid="online-room-modal"]').exists()).toBe(false);
+
+      const vm = wrapper.vm as unknown as { onlineSession: unknown };
+      expect(vm.onlineSession).toBeNull();
+
+      wrapper.unmount();
+    });
+  });
 });
