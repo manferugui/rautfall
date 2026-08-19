@@ -4,21 +4,21 @@
 
 Se ha desarrollado e integrado la capa de ejecución autoritativa de gameplay PvP en servidor (`apps/api`), conectando el modelo de salas privadas efímeras (`RoomManager`, Tarea 0040) y el transporte WebSocket (`/ws/rooms`, Tarea 0041) con el motor de batalla determinista (`@rautfall/battle-engine`).
 
-La arquitectura implementada garantiza que el servidor sea la única fuente de verdad sobre el estado de la partida, procesando entradas `player_input` en un bucle temporal monotónico de 100 Hz y difundiendo periódicamente (20 Hz, cada 50 ms) snapshots de estado personalizados a cada jugador.
+La arquitectura implementada garantiza que el servidor sea la única fuente de verdad sobre el estado de la partida, procesando entradas `player_input` en un bucle temporal monotónico de 100 Hz y difundiendo periódicamente (~60 Hz, cada 16 ms / `STATE_BROADCAST_INTERVAL_MS = 16`) snapshots de estado personalizados a cada jugador.
 
 ## Archivos creados y modificados
 
 ### Creados
 - `docs/tasks/0042-runtime-autoritativo-gameplay-pvp-servidor.md`: especificación inmutable de la tarea.
 - `docs/implementation/0042-runtime-autoritativo-gameplay-pvp-servidor.md`: este informe de implementación.
-- `apps/api/src/rooms/room-game-runtime.ts`: runtime de simulación autoritativa (100 Hz, acumulador monotónico, límite catch-up de 100 ms, buffer de inputs sostenidos `held`, cola FIFO de acciones `oneshot`, consumo de máximo 1 oneshot por paso de 10 ms y filtrado de eventos de interferencia).
+- `apps/api/src/rooms/room-game-runtime.ts`: runtime de simulación autoritativa (100 Hz, acumulador monotónico, límite catch-up de 100 ms, buffer de inputs sostenidos `held`, cola FIFO de acciones `oneshot`, consumo de máximo 1 oneshot por paso de 10 ms, broadcast a ~60 Hz / 16 ms y filtrado de eventos de interferencia).
 - `apps/api/src/rooms/game-runtime-registry.ts`: registro desacoplado de runtimes activos (`GameRuntimeRegistry`).
 - `apps/api/test/rooms/room-game-runtime.test.ts`: 7 pruebas unitarias para el runtime, el consumo de oneshots, la invariante `maxActionsInSingleStep <= 1` y el filtrado por perspectiva.
 - `apps/api/test/routes/rooms-ws-gameplay.test.ts`: 2 pruebas de integración en tiempo real sobre WebSockets probando `room_ready`, `battle_started`, `player_input`, `game_state` y desconexiones.
 
 ### Modificados
 - `packages/contracts/src/pvp-ws.ts`: DTOs TypeBox explícitos (`WsStepInputSchema`, `PlayerInputClientMessageSchema`, `BattleStartedServerMessageSchema`, `WsEngineSnapshotSchema`, `WsParticipantStateSchema`, `GameStateServerMessageSchema`, `BattleEndedServerMessageSchema`, `WsBattleEventSchema`) sin `Type.Any()`.
-- `apps/api/src/rooms/index.ts`: exportación pública de `RoomGameRuntime`, `GameRuntimeRegistry`, `consumeNextStepInput` y `filterEventsForParticipant`.
+- `apps/api/src/rooms/index.ts`: exportación pública de `RoomGameRuntime`, `STATE_BROADCAST_INTERVAL_MS`, `GameRuntimeRegistry`, `consumeNextStepInput` y `filterEventsForParticipant`.
 - `apps/api/src/routes/rooms-ws.ts`: integración de `GameRuntimeRegistry`, emisión de `battle_started` al completar `join_room`, manejo de `player_input` y detención idempotente del runtime ante desconexión.
 - `apps/api/src/app.ts`: instanciación e inyección de `GameRuntimeRegistry` en `buildApp`.
 - `docs/project-status.md`: actualización del estado del proyecto con la Tarea 0042 completada.
@@ -29,7 +29,7 @@ La arquitectura implementada garantiza que el servidor sea la única fuente de v
 2. **DTOs de Red Explícitos en TypeBox**: Se eliminaron completamente todos los usos de `Type.Any()`. Todos los eventos y estructuras de snapshot expuestos por WebSocket cuentan con validación y tipado estricto en `@rautfall/contracts`.
 3. **Consumo de Oneshots (Invariante Local = Online)**: `RoomGameRuntime` aplica la función `consumeNextStepInput`, la cual mantiene el estado `held` persistente y desencola **como máximo 1 acción discreta por jugador por paso de 10 ms**. Esto mantiene la invariante `maxActionsInSingleStep <= 1` coherente con el gameplay local (`input-buffer`).
 4. **Acumulador Monotónico y Límite de Catch-Up**: El runtime realiza el tick lógico a 100 Hz (`fixedStepMs = 10`) acumulando `performance.now()`. Se impone un límite de catch-up de 100 ms por iteración para evitar la *spiral of death* en situaciones de congelación del event loop.
-5. **Broadcast de Snapshots a 20 Hz**: Se emiten snapshots a 50 ms de intervalo. Los clientes renderizan el último snapshot recibido sin prediction, rollback ni interpolación en la v1.
+5. **Broadcast de Snapshots a ~60 Hz (`STATE_BROADCAST_INTERVAL_MS = 16`)**: Tras evaluación experimental de fluidez y latencia, el intervalo de broadcast de snapshots se fijó definitivamente en `16 ms` (~60 Hz). Esto sincroniza 1:1 el refresco del estado autoritativo con los monitores de 60 Hz/FPS, reduciendo la latencia percibida de respuesta a ~18 ms y eliminando saltos discretos sin requerir predicción local ni interpolación en el cliente.
 6. **Filtrado Autoritativo por Interferencia**: Si un participante está interferido (`isInterfered === true`), la función `filterEventsForParticipant` excluye los eventos internos de movimiento y spawn del rival de la lista de `events` transmitidos por red.
 
 ## API pública producida

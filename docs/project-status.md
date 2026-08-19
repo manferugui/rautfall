@@ -997,7 +997,7 @@ Ver [Informe de implementación](implementation/0041-transporte-websocket-salas-
 |-------|-------|
 | **Estado** | ✅ Completada |
 | **Fecha de actualización** | 2026-08-19 |
-| **Resultado** | Capa de ejecución autoritativa de gameplay PvP implementada en servidor (`apps/api`) conectando `RoomManager` y el transporte WebSocket de `/ws/rooms` con `BattleSession`. Bucle de simulación autoritativo a 100 Hz (`fixedStepMs = 10`) con acumulador monotónico y límite de catch-up de 100 ms, procesamiento de entradas event-driven `player_input` con retención de estado sostenido `held` y cola FIFO de acciones discretas `oneshot` (garantizando `maxActionsInSingleStep <= 1` por paso de 10 ms), broadcast de snapshots autoritativos a 20 Hz (cada 50 ms), esquemas DTO TypeBox explícitos en `@rautfall/contracts` sin ningún `Type.Any()`, filtrado autoritativo de eventos visuales del rival durante `interferencia`, desacoplamiento mediante `GameRuntimeRegistry` y detención idempotente del runtime ante desconexiones. 1025 tests en verde en el monorepo, lint, typecheck, build y git diff --check limpios. |
+| **Resultado** | Capa de ejecución autoritativa de gameplay PvP implementada en servidor (`apps/api`) conectando `RoomManager` y el transporte WebSocket de `/ws/rooms` con `BattleSession`. Bucle de simulación autoritativo a 100 Hz (`fixedStepMs = 10`) con acumulador monotónico y límite de catch-up de 100 ms, procesamiento de entradas event-driven `player_input` con retención de estado sostenido `held` y cola FIFO de acciones discretas `oneshot` (garantizando `maxActionsInSingleStep <= 1` por paso de 10 ms), broadcast de snapshots autoritativos a ~60 Hz (`STATE_BROADCAST_INTERVAL_MS = 16`), esquemas DTO TypeBox explícitos en `@rautfall/contracts` sin ningún `Type.Any()`, filtrado autoritativo de eventos visuales del rival durante `interferencia`, desacoplamiento mediante `GameRuntimeRegistry` y detención idempotente del runtime ante desconexiones. 1025 tests en verde en el monorepo, lint, typecheck, build y git diff --check limpios. |
 
 ### Resumen
 
@@ -1005,7 +1005,7 @@ Ver [Informe de implementación](implementation/0041-transporte-websocket-salas-
 - Bucle monotónico de 100 Hz con acumulador `performance.now()` y tope de catch-up de 100 ms por iteración para evitar la *spiral of death*.
 - Manejo de entradas event-driven con estado sostenido `held` (`leftHeld`, `rightHeld`, `softDropHeld`) y cola FIFO de acciones discretas `oneshot` (`consumeNextStepInput`).
 - Invariante estricta mantenida: **máximo 1 acción discreta consumida por jugador por paso de 10 ms**, coincidiendo con la semántica del motor local. Multiplicidad conservada en steps de 10 ms consecutivos.
-- Difusión periódica de snapshots de juego (`game_state`) a 20 Hz (50 ms).
+- Difusión periódica de snapshots de juego (`game_state`) a ~60 Hz (`STATE_BROADCAST_INTERVAL_MS = 16`).
 - Filtrado autoritativo de eventos del rival (`filterEventsForParticipant`) cuando un participante está interferido.
 - Desacoplamiento mediante `GameRuntimeRegistry` en `apps/api/src/rooms/game-runtime-registry.ts` sin alterar el modelo pasivo de `PvPRoom`.
 - DTOs TypeBox de red completamente explícitos en `packages/contracts/src/pvp-ws.ts` sin `Type.Any()`.
@@ -1019,7 +1019,7 @@ Ver [Informe de implementación](implementation/0042-runtime-autoritativo-gamepl
 |-------|-------|
 | **Estado** | ✅ Completada |
 | **Fecha de actualización** | 2026-08-19 |
-| **Resultado** | Cliente web PvP online implementado en `apps/web` integrando el runtime autoritativo del servidor (Tarea 0042) mediante protocolo WebSocket tipado. Capa de red desacoplada (`OnlinePvPClient`), capa de sesión y traducción de entrada event-driven (`OnlineGameSession`), interfaz gráfica modal Industrial Dramatic para crear y unirse a salas con código de 5 caracteres (`OnlineRoomModal.vue`), cero ejecución de motor/bot local en modo `'online'`, renderizado autoritativo continuo a 20 Hz con actualización de `OpponentMonitor.vue`, integración de resultados sin persistencia HTTP (`ResultsModal.vue` reutilizado) y desconexión limpia. 1032 tests en verde en el monorepo, lint, typecheck, build y `git diff --check` limpios. |
+| **Resultado** | Cliente web PvP online implementado en `apps/web` integrando el runtime autoritativo del servidor (Tarea 0042) mediante protocolo WebSocket tipado. Capa de red desacoplada (`OnlinePvPClient`), capa de sesión y traducción de entrada event-driven (`OnlineGameSession`), interfaz gráfica modal Industrial Dramatic para crear y unirse a salas con código de 5 caracteres (`OnlineRoomModal.vue`), cero ejecución de motor/bot local en modo `'online'`, renderizado autoritativo continuo a ~60 Hz con actualización de `OpponentMonitor.vue`, integración de resultados sin persistencia HTTP (`ResultsModal.vue` reutilizado) y desconexión limpia. 1032 tests en verde en el monorepo, lint, typecheck, build y `git diff --check` limpios. |
 
 ### Resumen
 
@@ -1027,10 +1027,30 @@ Ver [Informe de implementación](implementation/0042-runtime-autoritativo-gamepl
 - `OnlinePvPClient` (`apps/web/src/api/pvp-ws-client.ts`): capa pura de red sin Phaser ni DOM.
 - `OnlineGameSession` (`apps/web/src/api/online-game-session.ts`): capa de sesión/presentación que mantiene `heldState` y emite snapshots completos `WsStepInput` exclusivamente por eventos de teclado (`keydown`, `keyup`, `blur`). Cero polling de entrada desde `update()`.
 - `OnlineRoomModal.vue` (`apps/web/src/components/OnlineRoomModal.vue`): modal de UI Industrial Dramatic con pestañas CREAR / UNIRSE, visualización de código de 5 caracteres, estado de espera y banner de error contractual.
-- `GameScene.ts` en modo `'online'`: desactiva el motor local, bot local y acumulador temporal. Escucha teclado directo y renderiza a partir de `latestGameState` difundido a 20 Hz por el servidor.
+- `GameScene.ts` en modo `'online'`: desactiva el motor local, bot local y acumulador temporal. Escucha teclado directo y renderiza a partir de `latestGameState` difundido a ~60 Hz por el servidor.
 - `OpponentMonitor.vue`: visualización en tiempo real del tablero del oponente a partir del snapshot autoritativo recibido del servidor.
 - `ResultsModal.vue`: reutilizado en partidas online para mostrar el resultado (Victoria / Derrota / Empate) ocultando la firma de operador y omitiendo la llamada a `POST /api/matches`.
 - Pruebas unitarias de red, sesión, componente modal y escena Phaser en `apps/web/src/api/` y `apps/web/src/components/`.
 - Validaciones raíz `pnpm test` (1032 tests), `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
 
 Ver [Informe de implementación](implementation/0043-cliente-web-pvp-online.md).
+
+## Task [0044 — Auditoría E2E del modo PvP Online y correcciones de integración](tasks/0044-auditoria-e2e-modo-online-pvp.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-19 |
+| **Resultado** | Suite de pruebas E2E con Playwright realizada con dos contextos de navegador independientes (`online-pvp.spec.ts`) contra el servidor API/WebSocket real. Corrección de la reactividad de Vue para sincronización determinista de revancha y estados P1/P2 en la UI (`App.vue`), revancha autoritativa idempotente en la misma sala conservando roles y sockets con nueva semilla uint32, gestión de desconexión del rival durante el combate (`OpponentDisconnectedModal.vue`), ocultación del botón `REINICIAR` en modo online y migración de la selección de dificultad de bot a un modal táctico (`BotDifficultyModal.vue`). 1057 tests unitarios/integración y 23 tests E2E en verde en el monorepo, lint, typecheck, build y `git diff --check` limpios. |
+
+### Resumen
+
+- Implementación de `apps/web/e2e/online-pvp.spec.ts` probando PvP real con 2 navegadores independientes (creación de sala, unión por código, avance de ticks, pausa autoritativa P1/P2 y abandono de partida).
+- Solución de la reactividad de Vue en `App.vue` mediante referencias reactivas explícitas (`onlineSessionStatus`, `onlineRematchRequests`) eliminando la asimetría P1/P2 al negociar revanchas.
+- Revancha autoritativa en la misma sala (`RoomManager.resetRoomBattleSession`) con reinicio autoritativo e idempotente del servidor.
+- `OpponentDisconnectedModal.vue`: modal bloqueante compacto para notificación de abandono de rival.
+- `BotDifficultyModal.vue`: modal de selección de dificultad para Batalla Táctica desmantelando el bloque estático del menú.
+- Ocultación del botón `REINICIAR` en partidas PvP online (`gameMode !== 'online'`).
+- Validaciones globales `pnpm test` (1057 tests), `pnpm test:e2e` (23 tests), `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
+
+Ver [Informe de implementación](implementation/0044-auditoria-e2e-modo-online-pvp.md).
