@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @rautfall/contracts build && pnpm --filter @rautfall/web build",
+  "buildCommand": "pnpm --filter @rautfall/web^... build && pnpm --filter @rautfall/web build",
   "outputDirectory": "apps/web/dist",
   "functions": {
     "api/[...path].ts": {

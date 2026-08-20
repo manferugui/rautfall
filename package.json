@@ -28,7 +28,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "pnpm --recursive typecheck",
-    "build": "pnpm --filter @rautfall/contracts build && pnpm --filter @rautfall/web build",
+    "build": "pnpm --filter @rautfall/web^... build && pnpm --filter @rautfall/web build",
     "test:e2e": "pnpm --filter @rautfall/web test:e2e",
     "playwright:install": "pnpm --filter @rautfall/web playwright:install"
   }
