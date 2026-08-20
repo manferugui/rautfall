@@ -22,32 +22,32 @@ export {
   BOT_HARD_DROP_DELAY_STEPS,
   type DeterministicBot,
   type DeterministicBotDiagnostic,
-} from './bot/deterministic-bot';
+} from './bot/deterministic-bot.js';
 export {
   DEFAULT_BOT_HEURISTIC_WEIGHTS,
   type BoardMetrics,
   evaluateBoardMetrics,
   scoreBoardMetrics,
-} from './bot/board-evaluator';
+} from './bot/board-evaluator.js';
 export {
   searchPlacements,
   BOT_MAX_SEARCH_NODES,
   type SearchMetrics,
   type SearchResult,
-} from './bot/placement-search';
+} from './bot/placement-search.js';
 export {
   evaluateSabotageDecision,
   getOpponentMaxHeight,
   getOpponentPieceWallDistance,
   isOpponentPieceFullyVisible,
   normalizeBotSabotageConfig,
-} from './bot/sabotage-policy';
+} from './bot/sabotage-policy.js';
 export {
   DEFAULT_BOT_PROFILE_ID,
   BOT_PROFILES,
   normalizeBotProfileId,
   getBotProfileConfig,
-} from './bot/profiles';
+} from './bot/profiles.js';
 export {
   DEFAULT_BOT_SABOTAGE_CONFIG,
   type BotAction,
@@ -62,7 +62,7 @@ export {
   type SabotageDecision,
   type SabotageDecisionReason,
   type SabotagePolicyInput,
-} from './bot/types';
+} from './bot/types.js';
 
 export const WARNING_DURATION_MS = 750;
 export const IMMUNITY_DURATION_MS = 4000;

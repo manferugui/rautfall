@@ -5,15 +5,15 @@ import {
   type SabotageType,
   type StepInput,
 } from '@rautfall/game-engine';
-import type { BattleStatus } from '../index';
+import type { BattleStatus } from '../index.js';
 import {
   computeBoardFingerprint,
   searchPlacements,
-} from './placement-search';
+} from './placement-search.js';
 import {
   evaluateSabotageDecision,
   normalizeBotSabotageConfig,
-} from './sabotage-policy';
+} from './sabotage-policy.js';
 import {
   type BotAction,
   type BotConfig,
@@ -22,7 +22,7 @@ import {
   type BotPlanDiagnostic,
   type PlacementCandidate,
   type SabotageDecision,
-} from './types';
+} from './types.js';
 
 export const BOT_REACTION_DELAY_STEPS = 20;
 export const BOT_ACTION_INTERVAL_STEPS = 4;
@@ -85,10 +85,10 @@ export function isActivePieceFullyVisible(engine: GameEngine): boolean {
   return active.cells.every((cell) => cell.y >= 4);
 }
 
-import { BOT_PROFILES } from './profiles';
+import { BOT_PROFILES } from './profiles.js';
 import {
   type SearchResult,
-} from './placement-search';
+} from './placement-search.js';
 
 function createDefaultPrng(seed = 12345): () => number {
   let s = seed >>> 0;

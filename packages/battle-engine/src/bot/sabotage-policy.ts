@@ -1,11 +1,11 @@
 import type { ActiveEffectSnapshot, ActivePieceSnapshot, EngineSnapshot, SabotageType } from '@rautfall/game-engine';
-import { computeColumnHeights, computeHiddenRowOccupancy, computeTopOutRisk } from './board-evaluator';
+import { computeColumnHeights, computeHiddenRowOccupancy, computeTopOutRisk } from './board-evaluator.js';
 import {
   DEFAULT_BOT_SABOTAGE_CONFIG,
   type BotSabotageConfig,
   type SabotageDecision,
   type SabotagePolicyInput,
-} from './types';
+} from './types.js';
 
 export function normalizeBotSabotageConfig(config?: Partial<BotSabotageConfig>): BotSabotageConfig {
   const decisionIntervalSteps = config?.decisionIntervalSteps ?? DEFAULT_BOT_SABOTAGE_CONFIG.decisionIntervalSteps;

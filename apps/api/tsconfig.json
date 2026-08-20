@@ -3,8 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "."
+    "rootDir": "./src",
+    "noEmit": false
   },
-  "include": ["src/**/*.ts", "drizzle.config.ts"]
+  "include": ["src/**/*.ts"]
 }
-

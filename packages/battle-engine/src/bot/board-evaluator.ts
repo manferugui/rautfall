@@ -1,5 +1,5 @@
 import type { PieceType } from '@rautfall/game-engine';
-import type { BotHeuristicWeights } from './types';
+import type { BotHeuristicWeights } from './types.js';
 
 export const DEFAULT_BOT_HEURISTIC_WEIGHTS: BotHeuristicWeights = Object.freeze({
   linesClearedWeight: 120,

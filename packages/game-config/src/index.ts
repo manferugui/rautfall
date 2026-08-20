@@ -34,10 +34,12 @@ export type GameConfigValidationIssue = {
 
 export class GameConfigValidationError extends Error {
   readonly code = 'INVALID_GAME_CONFIG';
+  readonly issues: readonly GameConfigValidationIssue[];
 
-  constructor(readonly issues: readonly GameConfigValidationIssue[]) {
+  constructor(issues: readonly GameConfigValidationIssue[]) {
     super('Game configuration is invalid');
     this.name = 'GameConfigValidationError';
+    this.issues = issues;
   }
 }
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc",
+    "build": "pnpm --filter @rautfall/game-config build && pnpm --filter @rautfall/game-engine build && pnpm --filter @rautfall/battle-engine build && tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",

@@ -1,5 +1,5 @@
-import { DEFAULT_BOT_HEURISTIC_WEIGHTS } from './board-evaluator';
-import type { BotConfig, BotProfileId } from './types';
+import { DEFAULT_BOT_HEURISTIC_WEIGHTS } from './board-evaluator.js';
+import type { BotConfig, BotProfileId } from './types.js';
 
 export const DEFAULT_BOT_PROFILE_ID: BotProfileId = 'battleOperator';
 

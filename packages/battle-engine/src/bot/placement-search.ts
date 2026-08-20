@@ -9,12 +9,12 @@ import {
   computeHoles,
   computeColumnHeights,
   type BoardCell,
-} from './board-evaluator';
+} from './board-evaluator.js';
 import type {
   BotAction,
   BotConfig,
   PlacementCandidate,
-} from './types';
+} from './types.js';
 
 export const BOT_MAX_SEARCH_NODES = 500;
 
