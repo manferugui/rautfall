@@ -1054,3 +1054,25 @@ Ver [Informe de implementación](implementation/0043-cliente-web-pvp-online.md).
 - Validaciones globales `pnpm test` (1057 tests), `pnpm test:e2e` (23 tests), `pnpm lint`, `pnpm typecheck`, `pnpm build` y `git diff --check` en verde.
 
 Ver [Informe de implementación](implementation/0044-auditoria-e2e-modo-online-pvp.md).
+
+## Task [0045 — Reacciones vocales automáticas del operador en combate](tasks/0045-reacciones-vocales-operador-combate.md)
+
+| Campo | Valor |
+|-------|-------|
+| **Estado** | ✅ Completada |
+| **Fecha de actualización** | 2026-08-20 |
+| **Resultado** | Reacciones vocales automáticas del operador implementadas para los modos de combate **Battle vs Bot Local** y **PvP Online** en `apps/web`. Precarga y reproducción de las 13 muestras WAV aprobadas mediante el `AudioContext` singleton y el bus `sfxGain` de `AudioManager`, selector puro `CombatReactionSelector` con entrada desacoplada `CombatEvaluationInput`, evaluación atómica por ciclo de juego, priorización estricta (`terminal` > `critical` > `garbageApplied` > `sabotageReceived` > `attackBlocked` / `defenseSuccess` > `attackLaunched`), función pura `isCriticalBoard` (evaluando `y <= 8` en cuadrículas locales y remotas), cooldown global de 5.000 ms, probabilidades e inyección determinista de `random`/`now` para tests, no repetición inmediata y victorias/derrotas terminales (una sola vez, ignorando cooldown, empate silencioso). Integración aislada en `GameScene.ts` cuando `mode === 'online'` o `mode === 'battle'` (evaluando exclusivamente al humano `playerOne`, bot silencioso y Training excluido) sin modificar motores, WebSocket protocol, backend ni persistencia. Pruebas unitarias completas en verde. |
+
+
+### Resumen
+
+- Módulo `operator-reactions.ts` con tipos `OperatorReactionType`, mapa de activos y definición de pools.
+- `AudioManager` extendido con precarga, almacenamiento en memoria y reproducción de las 13 muestras WAV de reacciones vocales en el bus `sfxGain`.
+- `CombatReactionSelector`: selector puro desacoplado con evaluación atómica de cada actualización de juego, derivando como máximo UNA única reacción por ciclo y descartando ráfagas sonoras.
+- Jerarquía de prioridades estricta y regla de ataque propio basada exclusivamente en el hecho contractual `sabotageRouted` (`source === role`).
+- Helper puro `isCriticalBoard`: evalúa celdas ocupadas en `y <= 8` dentro de las 24 filas del tablero local o remoto.
+- Cooldown global de 5.000 ms, probabilística inyectable, evitación de repetición inmediata de la última frase usada y victorias/derrotas terminales de un único disparo.
+- `GameScene.ts` integrado en `mode === 'online'` y `mode === 'battle'` con evaluación exclusiva para el jugador humano `playerOne` y reseteo completo de selector en cada inicio/desmontaje. Modo Training excluido.
+- Pruebas unitarias exhaustivas en `combat-reaction-selector.test.ts`, `GameScene.test.ts` y `audio-manager.test.ts`.
+
+Ver [Informe de implementación](implementation/0045-reacciones-vocales-operador-combate.md).

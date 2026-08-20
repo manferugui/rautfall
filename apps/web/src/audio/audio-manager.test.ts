@@ -1265,4 +1265,61 @@ describe('AudioManager', () => {
       expect(mockAudioContext.createOscillator).not.toHaveBeenCalled();
     });
   });
+
+  describe('Reacciones vocales del operador', () => {
+    it('registra e identifica correctamente muestras de reacciones vocales cargadas', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      const mockBuffer = {
+        length: 48000,
+        sampleRate: 48000,
+        duration: 1.0,
+        getChannelData: () => new Float32Array(48000),
+      } as unknown as AudioBuffer;
+
+      expect(manager.isReactionLoaded('cabron')).toBe(false);
+      manager.registerReactionBuffer('cabron', mockBuffer);
+      expect(manager.isReactionLoaded('cabron')).toBe(true);
+    });
+
+    it('reproduce la reacción vocal si sfxEnabled y audio desbloqueado', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      const mockBuffer = {
+        length: 48000,
+        sampleRate: 48000,
+        duration: 1.0,
+        getChannelData: () => new Float32Array(48000),
+      } as unknown as AudioBuffer;
+
+      manager.registerReactionBuffer('cabron', mockBuffer);
+      mockAudioContext.createBufferSource.mockClear();
+
+      manager.playOperatorReaction('cabron');
+      expect(mockAudioContext.createBufferSource).toHaveBeenCalledTimes(1);
+    });
+
+    it('respeta el estado de silencio (mute y sfxEnabled = false) sin reproducir la reacción vocal', async () => {
+      const manager = AudioManager.getInstance();
+      await manager.unlock();
+
+      const mockBuffer = {
+        length: 48000,
+        sampleRate: 48000,
+        duration: 1.0,
+        getChannelData: () => new Float32Array(48000),
+      } as unknown as AudioBuffer;
+
+      manager.registerReactionBuffer('toma', mockBuffer);
+
+      // Desactivar SFX
+      manager.setSfxEnabled(false);
+      mockAudioContext.createBufferSource.mockClear();
+
+      manager.playOperatorReaction('toma');
+      expect(mockAudioContext.createBufferSource).not.toHaveBeenCalled();
+    });
+  });
 });

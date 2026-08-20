@@ -63,8 +63,10 @@ import {
   isRowVisible,
 } from '../coordinates';
 import { mapEngineToOpponentPresentation } from '../opponent-mapper';
-import { getAudioManager } from '../../audio';
+import { getAudioManager, CombatReactionSelector } from '../../audio';
 import { loadUserSettings } from '../../settings/settings-storage';
+
+
 import { getActionByCode, type ControlAction, type ControlBindings } from '../../settings/control-bindings';
 import { shadeColor } from '../piece-shading';
 import { generateMatchSeed } from '../seed';
@@ -100,7 +102,10 @@ export class GameScene extends Phaser.Scene {
   private onlineSession: OnlineGameSession | null = null;
   private unbindOnlineSessionFns: Array<() => void> = [];
   private windowBlurCleaner: (() => void) | null = null;
+  private combatReactionSelector = new CombatReactionSelector();
   private engine!: GameEngine;
+
+
   private battleSession: BattleSession | null = null;
   private playerTwoBot: DeterministicBot | null = null;
   private lastSabotageRouted: string | null = null;
@@ -228,6 +233,8 @@ export class GameScene extends Phaser.Scene {
     this.pendingPressedActions.clear();
     this.pendingHorizontal = null;
 
+    this.combatReactionSelector.reset();
+
     if (this.mode !== 'online') {
       this.resetEngine();
     }
@@ -306,9 +313,25 @@ export class GameScene extends Phaser.Scene {
               this.triggerGarbageImpact(event.event.linesCount);
             }
           }
+
+          if (this.onlineSession?.role) {
+            const reaction = this.combatReactionSelector.evaluateCombatState({
+              status: msg.status,
+              winner: msg.winner,
+              selfSnapshot: msg.self,
+              events: msg.events,
+              role: this.onlineSession.role,
+            });
+            if (reaction) {
+              getAudioManager().playOperatorReaction(reaction);
+            }
+          }
+
           this.renderFrame();
           this.notifyState();
         });
+
+
 
         const unbindEnded = this.onlineSession.onBattleEnded(() => {
           this.notifyState();
@@ -422,6 +445,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.unbindOnlineSessionFns.forEach((fn) => fn());
     this.unbindOnlineSessionFns = [];
+    this.combatReactionSelector.reset();
+
+
 
     this.physicallyHeldCodes.clear();
     this.pendingPressedActions.clear();
@@ -630,6 +656,20 @@ export class GameScene extends Phaser.Scene {
           });
         } else if (event.type === 'participantEvent' && event.participant === 'playerOne' && event.event.type === 'garbageApplied') {
           this.triggerGarbageImpact(event.event.linesCount);
+        }
+      }
+
+      if (this.playerTwoBot) {
+        const bSnap = this.battleSession.getSnapshot();
+        const reaction = this.combatReactionSelector.evaluateCombatState({
+          status: bSnap.status,
+          winner: bSnap.winner,
+          selfSnapshot: bSnap.playerOne,
+          events: battleEvents,
+          role: 'playerOne',
+        });
+        if (reaction) {
+          getAudioManager().playOperatorReaction(reaction);
         }
       }
     } else {

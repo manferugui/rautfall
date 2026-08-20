@@ -44,6 +44,24 @@ export interface AudioPreferences {
 }
 
 /**
+ * Identificadores de las 13 reacciones vocales del operador para PvP online.
+ */
+export type OperatorReactionType =
+  | 'cabron'
+  | 'no_me_jodas'
+  | 'pero_que_coño'
+  | 'hijo_puta'
+  | 'me_cago_en_todo'
+  | 'joder'
+  | 'mierda'
+  | 'eso_es_todo'
+  | 'toma'
+  | 'no_no_no'
+  | 'hostia_hostia'
+  | 'jooooder'
+  | 'a_tomar_por_culo';
+
+/**
  * Contrato público del servicio de audio de Rautfall.
  */
 export interface AudioService {
@@ -71,6 +89,8 @@ export interface AudioService {
   setMuted(muted: boolean): void;
   /** Reproduce un efecto de sonido (muestra o fallback sintético). */
   playSfx(type: AudioSfxType, options?: { forceSynthetic?: boolean }): void;
+  /** Reproduce una reacción vocal del operador en PvP online. */
+  playOperatorReaction(type: OperatorReactionType): void;
   /** Procesa un evento de motor de juego e invoca el SFX correspondiente. */
   handleEngineEvent(event: EngineEvent): void;
   /** Procesa un evento de motor de batalla e invoca el SFX correspondiente. */

@@ -710,4 +710,59 @@ describe('GameScene — Entrada física (KeyboardEvent.code), lateralidad, DAS/A
       expect(stateCall.battleState?.playerTwo).toBeDefined();
     });
   });
+
+  describe('Reacciones vocales del operador en combate (Battle vs Bot & Training)', () => {
+    it('Battle vs Bot activa la reacción del operador para acontecimientos del humano (playerOne)', () => {
+      const scene = new GameScene();
+      scene.init({ callbacks: { onStateUpdate: vi.fn() }, mode: 'battle', botProfile: 'battleOperator' });
+      scene.create();
+
+      const playSpy = vi.spyOn(getAudioManager(), 'playOperatorReaction').mockImplementation(() => {});
+      const evalSpy = vi.spyOn((scene as unknown as { combatReactionSelector: { evaluateCombatState: (...args: unknown[]) => unknown } }).combatReactionSelector, 'evaluateCombatState').mockReturnValue('toma');
+
+      scene.update(1000, 16);
+
+      expect(evalSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'playerOne',
+        }),
+      );
+      expect(playSpy).toHaveBeenCalledWith('toma');
+    });
+
+
+    it('eventos atribuibles exclusivamente al bot (playerTwo) NO producen voz del operador', () => {
+      const scene = new GameScene();
+      scene.init({ callbacks: { onStateUpdate: vi.fn() }, mode: 'battle', botProfile: 'battleOperator' });
+      scene.create();
+
+      const playSpy = vi.spyOn(getAudioManager(), 'playOperatorReaction').mockImplementation(() => {});
+
+      const mockBattleSession = (scene as unknown as { battleSession: BattleSession }).battleSession;
+      if (mockBattleSession) {
+        vi.spyOn(mockBattleSession, 'drainEvents').mockReturnValue([
+          {
+            type: 'participantEvent',
+            step: 10,
+            participant: 'playerTwo',
+            event: { type: 'garbageApplied', step: 10, linesCount: 2 },
+          },
+        ]);
+      }
+
+      scene.update(1000, 16);
+      expect(playSpy).not.toHaveBeenCalled();
+    });
+
+    it('modo Training NO activa reacciones vocales del operador', () => {
+      const scene = new GameScene();
+      scene.init({ callbacks: { onStateUpdate: vi.fn() }, mode: 'training' });
+      scene.create();
+
+      const playSpy = vi.spyOn(getAudioManager(), 'playOperatorReaction').mockImplementation(() => {});
+
+      scene.update(1000, 16);
+      expect(playSpy).not.toHaveBeenCalled();
+    });
+  });
 });

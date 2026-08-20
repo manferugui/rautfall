@@ -1,7 +1,8 @@
 import type { EngineEvent } from '@rautfall/game-engine';
 import type { BattleEvent } from '@rautfall/battle-engine';
-import type { AudioService, AudioSfxPriority, AudioSfxType, MusicTrack } from './types';
+import type { AudioService, AudioSfxPriority, AudioSfxType, MusicTrack, OperatorReactionType } from './types';
 import { getSfxMetadata, renderSyntheticSfx } from './sfx-synth';
+import { OPERATOR_REACTION_ASSET_URL_MAP } from './operator-reactions';
 
 const MUSIC_STORAGE_KEY = 'rautfall_audio_music_enabled';
 const SFX_STORAGE_KEY = 'rautfall_audio_sfx_enabled';
@@ -67,8 +68,15 @@ export class AudioManager implements AudioService {
   private currentMusicSource: AudioBufferSourceNode | null = null;
   private currentTrackGainNode: GainNode | null = null;
 
+  // Muestras de reacciones vocales procesadas cargadas en memoria, promesas en vuelo y registro de fallos
+  private reactionAudioBufferMap = new Map<OperatorReactionType, AudioBuffer>();
+  private reactionLoadingPromises = new Map<OperatorReactionType, Promise<AudioBuffer | null>>();
+  private failedReactionAssetSet = new Set<OperatorReactionType>();
+  private activePlayingReactions = new Set<OperatorReactionType>();
+
   // Guarda de reproducción activa para evitar superposiciones concurrentes del mismo SFX
   private activePlayingTypes = new Set<AudioSfxType>();
+
 
   // Política de Ducking composable multi-solicitud
   private activeDuckingRequests = new Map<string, ActiveDuckingRequest>();
@@ -287,7 +295,7 @@ export class AudioManager implements AudioService {
 
 
   /**
-   * Precarga de forma asíncrona todos los activos binarios de SFX y BGM registrados.
+   * Precarga de forma asíncrona todos los activos binarios de SFX, BGM y reacciones vocales registrados.
    */
   public async preloadAssets(): Promise<void> {
     const sfxPromises = (Object.keys(SFX_ASSET_URL_MAP) as AudioSfxType[]).map((type) =>
@@ -296,8 +304,12 @@ export class AudioManager implements AudioService {
     const musicPromises = (Object.keys(MUSIC_ASSET_URL_MAP) as MusicTrack[]).map((track) =>
       this.loadMusicBufferAsset(track)
     );
-    await Promise.allSettled([...sfxPromises, ...musicPromises]);
+    const reactionPromises = (Object.keys(OPERATOR_REACTION_ASSET_URL_MAP) as OperatorReactionType[]).map((type) =>
+      this.loadReactionBufferAsset(type)
+    );
+    await Promise.allSettled([...sfxPromises, ...musicPromises, ...reactionPromises]);
   }
+
 
   /**
    * Carga y decodifica una muestra binaria WAV para un tipo de SFX.
@@ -395,12 +407,64 @@ export class AudioManager implements AudioService {
     return promise;
   }
 
+  /**
+   * Carga y decodifica una muestra binaria WAV para una reacción vocal del operador.
+   */
+  public async loadReactionBufferAsset(type: OperatorReactionType): Promise<AudioBuffer | null> {
+    if (this.reactionAudioBufferMap.has(type)) {
+      return this.reactionAudioBufferMap.get(type) ?? null;
+    }
+    if (this.failedReactionAssetSet.has(type)) {
+      return null;
+    }
+    if (this.reactionLoadingPromises.has(type)) {
+      return this.reactionLoadingPromises.get(type) ?? null;
+    }
+
+    const url = OPERATOR_REACTION_ASSET_URL_MAP[type];
+    if (!url || typeof fetch === 'undefined') return null;
+
+    const promise = (async () => {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          this.failedReactionAssetSet.add(type);
+          return null;
+        }
+        const arrayBuffer = await response.arrayBuffer();
+
+        if (!this.ctx) {
+          this.initAudioContext();
+        }
+        if (!this.ctx) {
+          return null;
+        }
+
+        const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+        this.reactionAudioBufferMap.set(type, audioBuffer);
+        return audioBuffer;
+      } catch {
+        this.failedReactionAssetSet.add(type);
+        return null;
+      } finally {
+        this.reactionLoadingPromises.delete(type);
+      }
+    })();
+
+    this.reactionLoadingPromises.set(type, promise);
+    return promise;
+  }
+
   public isAssetLoaded(type: AudioSfxType): boolean {
     return this.sfxAudioBufferMap.has(type);
   }
 
   public isMusicLoaded(track: MusicTrack): boolean {
     return this.musicAudioBufferMap.has(track);
+  }
+
+  public isReactionLoaded(type: OperatorReactionType): boolean {
+    return this.reactionAudioBufferMap.has(type);
   }
 
   public registerAudioBuffer(type: AudioSfxType, buffer: AudioBuffer): void {
@@ -410,6 +474,69 @@ export class AudioManager implements AudioService {
   public registerMusicBuffer(track: MusicTrack, buffer: AudioBuffer): void {
     this.musicAudioBufferMap.set(track, buffer);
   }
+
+  public registerReactionBuffer(type: OperatorReactionType, buffer: AudioBuffer): void {
+    this.reactionAudioBufferMap.set(type, buffer);
+  }
+
+  public playOperatorReaction(type: OperatorReactionType): void {
+    if (!this.sfxEnabled || !this.ctx || this.ctx.state !== 'running' || this.isMuted()) return;
+
+    if (this.activePlayingReactions.has(type)) {
+      return;
+    }
+
+    this.activePlayingReactions.add(type);
+    const audioBuffer = this.reactionAudioBufferMap.get(type);
+
+    if (audioBuffer) {
+      try {
+        const now = this.ctx.currentTime;
+        const source = this.ctx.createBufferSource();
+        source.buffer = audioBuffer;
+
+        const gainNode = this.ctx.createGain();
+        gainNode.gain.setValueAtTime(1.0, now);
+
+        source.connect(gainNode);
+        if (this.sfxGain) {
+          gainNode.connect(this.sfxGain);
+        } else if (this.masterGain) {
+          gainNode.connect(this.masterGain);
+        } else {
+          gainNode.connect(this.ctx.destination);
+        }
+
+        source.start(now);
+
+        const durationMs = Math.ceil(audioBuffer.duration * 1000) + 50;
+        window.setTimeout(() => {
+          this.activePlayingReactions.delete(type);
+          try {
+            gainNode.disconnect();
+          } catch {
+            // Ignorar
+          }
+        }, durationMs);
+      } catch {
+        this.activePlayingReactions.delete(type);
+      }
+    } else {
+      if (!this.failedReactionAssetSet.has(type)) {
+        void this.loadReactionBufferAsset(type).then((loaded) => {
+          if (loaded) {
+            this.activePlayingReactions.delete(type);
+            this.playOperatorReaction(type);
+          } else {
+            this.activePlayingReactions.delete(type);
+          }
+        });
+      } else {
+        this.activePlayingReactions.delete(type);
+      }
+    }
+  }
+
 
   /**
    * Ejecuta la política de Ducking composable atenuando temporalmente el canal musical ante eventos prioritarios.
@@ -1062,17 +1189,22 @@ export class AudioManager implements AudioService {
     this.lastSfxTimeMap.clear();
     this.sfxAudioBufferMap.clear();
     this.musicAudioBufferMap.clear();
+    this.reactionAudioBufferMap.clear();
     this.assetLoadingPromises.clear();
     this.musicLoadingPromises.clear();
+    this.reactionLoadingPromises.clear();
     this.failedAssetSet.clear();
     this.failedMusicAssetSet.clear();
+    this.failedReactionAssetSet.clear();
     this.activePlayingTypes.clear();
+    this.activePlayingReactions.clear();
     this.currentMusicTrack = null;
     this.musicStartedAtContextTime = 0;
     this.musicPlaybackOffsetSeconds = 0;
     this.isMusicPausedState = false;
     this.pausedMusicTrack = null;
   }
+
 
 }
 
